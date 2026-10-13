@@ -20,21 +20,19 @@ void main() {
     if (sdk == null) {
       throw StateError('Set FIVE_MORE_FLUTTER_SDK to your Flutter SDK.');
     }
-    for (final family in ['Roboto', 'Ahem']) {
-      final loader = FontLoader(family);
-      for (final file in [
-        'Roboto-Regular.ttf',
-        'Roboto-Light.ttf',
-        'Roboto-Bold.ttf',
-      ]) {
-        loader.addFont(
-          File('$sdk/bin/cache/artifacts/material_fonts/$file')
-              .readAsBytes()
-              .then((data) => ByteData.sublistView(data)),
-        );
-      }
-      await loader.load();
+    final loader = FontLoader('Roboto');
+    for (final file in [
+      'Roboto-Regular.ttf',
+      'Roboto-Light.ttf',
+      'Roboto-Bold.ttf',
+    ]) {
+      loader.addFont(
+        File('$sdk/bin/cache/artifacts/material_fonts/$file')
+            .readAsBytes()
+            .then((data) => ByteData.sublistView(data)),
+      );
     }
+    await loader.load();
     final icons = FontLoader('MaterialIcons');
     icons.addFont(
       File('$sdk/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf')
@@ -72,6 +70,18 @@ void main() {
 
     Future<void> capture(String name) async {
       expect(tester.takeException(), isNull);
+      // The test engine uses Ahem for a null fontFamily, unlike the mobile
+      // engine's device font. Button-local TextStyles can deliberately have a
+      // null family even when the app theme specifies Roboto. Replace only
+      // that test fallback at the render boundary; leave production widgets,
+      // layout rules, text content and explicit icon fonts unchanged.
+      for (final paragraph in tester.renderObjectList<RenderParagraph>(
+        find.byType(RichText),
+      )) {
+        paragraph.text = _withDeviceFontFallback(paragraph.text);
+      }
+      await tester.pump();
+      expect(tester.takeException(), isNull);
       final render =
           boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       await tester.runAsync(() async {
@@ -93,4 +103,26 @@ void main() {
     await capture('03-math');
     await tester.pumpWidget(const SizedBox.shrink());
   });
+}
+
+InlineSpan _withDeviceFontFallback(InlineSpan span, {String? inheritedFamily}) {
+  if (span is! TextSpan) return span;
+  final family = span.style?.fontFamily ?? inheritedFamily;
+  final resolved = family == null || family == 'Ahem' ? 'Roboto' : family;
+  return TextSpan(
+    text: span.text,
+    style: (span.style ?? const TextStyle()).copyWith(fontFamily: resolved),
+    children: span.children
+        ?.map(
+          (child) => _withDeviceFontFallback(child, inheritedFamily: resolved),
+        )
+        .toList(),
+    recognizer: span.recognizer,
+    mouseCursor: span.mouseCursor,
+    onEnter: span.onEnter,
+    onExit: span.onExit,
+    semanticsLabel: span.semanticsLabel,
+    locale: span.locale,
+    spellOut: span.spellOut,
+  );
 }

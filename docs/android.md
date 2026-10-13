@@ -10,6 +10,7 @@ Android 8 / API 26 is the minimum. Flutter draws the screens and verifies wake-u
 - Boot, package replacement and wall-clock/timezone changes restore the schedules. Boot receivers **only reschedule system alarms** and do not start a media playback service directly. A recent missed occurrence is retried; one more than 15 minutes late is marked missed. Snoozed occurrences retain their budget after reboot.
 - Weekday recurrence uses local calendar days, not fixed 24-hour intervals. Nonexistent spring DST times normalize forward using Android's Calendar; repeated autumn times use Calendar's selected occurrence once. A timezone change recalculates scheduled alarms in local time, while an existing snooze keeps its absolute deadline.
 - Unanswered ringing has a 15-minute safety timeout and records `timed_out`. It then schedules the next recurring date or disables a one-shot alarm. An explicit in-app emergency exit records `emergency_dismissed`.
+- If emergency/timeout persistence fails, an independent path silences the current sound and prevents restarting it within this process. It reports `emergency_state_not_saved`, without claiming that dismissal or the next schedule was durably saved. Other queued alarms may continue if their stored state is readable. The user must check storage and the schedule before relying on a later occurrence.
 - Multiple due alarms retain separate budgets. The service presents the oldest ringing occurrence; resolving it reveals the next. This does not mix multiple simultaneous audio streams.
 
 ## Permissions and limits

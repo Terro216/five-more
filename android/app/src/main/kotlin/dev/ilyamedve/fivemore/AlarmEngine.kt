@@ -16,7 +16,7 @@ class AlarmEngine(private val context: Context) {
     private val store = AlarmStore(context)
     private val manager = context.getSystemService(AlarmManager::class.java)
 
-    fun status(): Map<String, Any> = mapOf(
+    fun status(): Map<String, Any?> = mapOf(
         "platform" to "android",
         "supported" to true,
         "exactAlarms" to canSchedule(),
@@ -24,6 +24,7 @@ class AlarmEngine(private val context: Context) {
         "fullScreenIntent" to fullScreenAvailable(),
         "scheduledCount" to store.alarms().count { it.optBoolean("enabled") },
         "alarms" to store.alarms().map { it.toMap() },
+        "error" to safetyError,
     )
 
     fun canSchedule(): Boolean = Build.VERSION.SDK_INT < 31 || manager.canScheduleExactAlarms()
@@ -82,6 +83,7 @@ class AlarmEngine(private val context: Context) {
             }
             return fail("schedule_failed", error.message)
         }
+        silencedAlarmIds.remove(id)
         return success(alarm)
     }
 
@@ -118,6 +120,17 @@ class AlarmEngine(private val context: Context) {
     }
 
     fun dismiss(id: String, emergency: Boolean = false, timedOut: Boolean = false): Map<String, Any?> {
+        if (emergency || timedOut) {
+            return AlarmSafety.resolveOrSilence(
+                operation = { dismissPersisted(id, emergency, timedOut) },
+                silenceWithoutPersistence = { silenceAfterPersistenceFailure(id) },
+                failure = { fail("emergency_state_not_saved", it.message) },
+            )
+        }
+        return dismissPersisted(id, emergency = false, timedOut = false)
+    }
+
+    private fun dismissPersisted(id: String, emergency: Boolean, timedOut: Boolean): Map<String, Any?> {
         val alarm = store.get(id) ?: return fail("not_found")
         if (alarm.optString("state") !in listOf("ringing", "snoozed")) return fail("not_ringing")
         cancelPending(id)
@@ -125,6 +138,16 @@ class AlarmEngine(private val context: Context) {
         resolve(alarm)
         refreshService()
         return success(alarm)
+    }
+
+    private fun silenceAfterPersistenceFailure(id: String) {
+        // Process-local only: we cannot claim a saved dismissal when storage failed.
+        // Suppression prevents the UI's resume/poll path restarting this same sound.
+        silencedAlarmIds.add(id)
+        safetyError = "emergency_state_not_saved"
+        context.stopService(Intent(context, AlarmRingingService::class.java))
+        // A different queued alarm can continue if its state remains readable.
+        try { refreshService() } catch (_: Exception) { }
     }
 
     /** Receivers verify occurrence and due time so stale broadcasts cannot reset a budget. */
@@ -141,7 +164,7 @@ class AlarmEngine(private val context: Context) {
         return true
     }
 
-    fun ringing(): JSONObject? = store.alarms().filter { it.optString("state") == "ringing" }
+    fun ringing(): JSONObject? = store.alarms().filter { it.optString("state") == "ringing" && it.optString("id") !in silencedAlarmIds }
         .minByOrNull { it.optLong("ringingSince") }
 
     fun getRingingAlarm(): Map<String, Any?>? = ringing()?.toMap()
@@ -224,6 +247,7 @@ class AlarmEngine(private val context: Context) {
                 .put("nextAt", nextOccurrence(alarm))
         }
         store.put(alarm)
+        silencedAlarmIds.remove(alarm.getString("id"))
         if (alarm.optBoolean("enabled") && canSchedule()) {
             try {
                 arm(alarm)
@@ -276,6 +300,8 @@ class AlarmEngine(private val context: Context) {
         const val ACTION_FIRE = "dev.ilyamedve.fivemore.FIRE"
         const val ACTION_SNOOZE = "dev.ilyamedve.fivemore.SNOOZE"
         const val MAX_RING_MS = 15 * 60_000L
+        private val silencedAlarmIds = mutableSetOf<String>()
+        private var safetyError: String? = null
 
         fun fail(error: String, message: String? = null): Map<String, Any?> = mapOf("ok" to false, "error" to error, "message" to message)
 
