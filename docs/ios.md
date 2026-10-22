@@ -23,8 +23,22 @@ build phase and provide `NSAlarmKitUsageDescription` in Info.plist.
   action guards are cleaned during status reads; missing transient instances
   get a one-day grace period for delayed system intents before being pruned.
 - A test alarm gets a separate `preview:<UUID>` logical identifier and system
-  UUID. It fires in ten seconds and never edits the original configuration.
+  UUID. `testAlarm` accepts an optional integer `delaySeconds` from 5 through 60
+  (default 5), and returns the preview `alarm.id` and exact `nextAt`. It never
+  edits the original configuration. An existing registered test, including a
+  snoozed test, rejects another start with `test_alarm_active`.
+- `cancelTestAlarm` accepts only the returned nonempty `preview:` identifier.
+  It cancels a pending test or stops a ringing test with an emergency-dismissal
+  event, then removes its configuration and occurrences. An already removed
+  preview succeeds without changes; an ordinary ID returns `invalid_test_id`.
 - The system default sound is used. There is no server or network requirement.
+
+`requestPermissions` accepts optional `target: notifications` or `exactAlarms`;
+both represent AlarmKit authorization on iOS. When access has been denied, the
+action opens this app's Settings page. Other explicit targets return
+`ok:false,error:settings_unavailable`; no Android battery or volume diagnostics
+are fabricated on iOS. Returning from Settings triggers a fresh status check;
+opening it is not proof of authorization.
 
 ## Intentional platform differences
 
@@ -54,6 +68,8 @@ sound start time. It is not a complete delivery audit when the app never runs.
 4. Snooze to the configured limit; kill and reopen the app between snoozes.
    Verify the next ordinary weekly occurrence is still present.
 5. Test an existing alarm and verify its original schedule is unchanged.
+   Also cancel a delayed test before it sounds, then cancel one while ringing;
+   reopening the app must not create an additional test or restore a cancelled one.
 6. Verify restart, daylight-saving changes, timezone changes, overlapping
    alarms, and locked-device App Intent behavior on the target iOS release.
 
@@ -62,4 +78,5 @@ reliability. Signing/distribution and device testing are separate release work.
 
 References: [AlarmKit scheduling](https://developer.apple.com/documentation/alarmkit/scheduling-an-alarm-with-alarmkit),
 [AlarmManager](https://developer.apple.com/documentation/alarmkit/alarmmanager),
+[app Settings URL](https://developer.apple.com/documentation/uikit/uiapplication/opensettingsurlstring),
 [WWDC25 AlarmKit session](https://developer.apple.com/videos/play/wwdc2025/230/).

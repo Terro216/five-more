@@ -36,7 +36,7 @@ jobs:
           retention-days: 14
 
   android:
-    name: Android APK
+    name: Android pilot APK
     needs: flutter
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -51,14 +51,14 @@ jobs:
           bash scripts/bootstrap_flutter.sh "$RUNNER_TEMP/five-more-flutter"
           echo "$RUNNER_TEMP/five-more-flutter/bin" >> "$GITHUB_PATH"
       - run: flutter pub get --enforce-lockfile
-      - run: flutter build apk --debug --target-platform android-arm64
+      - run: flutter build apk --release --target-platform android-arm64
       - name: Native alarm rules tests
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest --no-daemon
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: five-more-android-debug
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: five-more-android-pilot
+          path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14
 
   ios:

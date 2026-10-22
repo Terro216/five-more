@@ -28,11 +28,21 @@ class _RingingScreenState extends State<RingingScreen> {
   bool _finishing = false;
   double _hold = 0;
   Timer? _holdTimer;
+  Timer? _clockTimer;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && !_challenge && !_emergency) setState(() {});
+    });
+  }
 
   @override
   void dispose() {
     _holdTimer?.cancel();
+    _clockTimer?.cancel();
     super.dispose();
   }
 
@@ -118,6 +128,21 @@ class _RingingScreenState extends State<RingingScreen> {
         if (_emergency) return _emergencyScreen();
         return Scaffold(
           backgroundColor: ink,
+          bottomNavigationBar: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: TextButton(
+                onPressed: _finishing
+                    ? null
+                    : () => setState(() => _emergency = true),
+                child: const Text(
+                  'Аварийное отключение',
+                  style: TextStyle(color: muted),
+                ),
+              ),
+            ),
+          ),
           body: SafeArea(
             child: Center(
               child: ConstrainedBox(
@@ -141,13 +166,13 @@ class _RingingScreenState extends State<RingingScreen> {
                             const SizedBox(height: 22),
                             Text(
                               ringing.alarm.id.startsWith('preview:')
-                                  ? 'ПРОВЕРКА БУДИЛЬНИКА'
-                                  : 'ДОБРОЕ УТРО',
+                                  ? 'Проверка будильника'
+                                  : 'Доброе утро',
+                              textAlign: TextAlign.center,
                               style: const TextStyle(
                                 color: morning,
-                                fontSize: 11,
-                                letterSpacing: 2.4,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -229,7 +254,10 @@ class _RingingScreenState extends State<RingingScreen> {
                                     ? null
                                     : () => setState(() => _challenge = true),
                                 icon: const Icon(Icons.arrow_forward_rounded),
-                                label: const Text('Я встаю · пройти задание'),
+                                label: const Text(
+                                  'Я встаю · пройти задание',
+                                  textAlign: TextAlign.center,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -249,10 +277,22 @@ class _RingingScreenState extends State<RingingScreen> {
                               ),
                               const SizedBox(height: 10),
                               Text(
-                                'Осталось переносов: ${ringing.snoozesRemaining} из ${ringing.alarm.maxSnoozes}',
+                                'Осталось переносов: ${ringing.snoozesRemaining} из ${ringing.alarm.maxSnoozes}'
+                                ' · ${ringing.snoozesRemaining * ringing.alarm.snoozeMinutes} мин',
+                                textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: muted,
                                   fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _snoozeTiming(ringing),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: morning,
+                                  fontSize: 12,
+                                  height: 1.5,
                                 ),
                               ),
                             ] else
@@ -265,16 +305,6 @@ class _RingingScreenState extends State<RingingScreen> {
                                   height: 1.5,
                                 ),
                               ),
-                            const SizedBox(height: 26),
-                            TextButton(
-                              onPressed: _finishing
-                                  ? null
-                                  : () => setState(() => _emergency = true),
-                              child: const Text(
-                                'Аварийное отключение',
-                                style: TextStyle(color: muted, fontSize: 12),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -288,6 +318,18 @@ class _RingingScreenState extends State<RingingScreen> {
       },
     ),
   );
+
+  String _snoozeTiming(RingingAlarm ringing) {
+    final now = widget.controller.now;
+    final next = now.add(Duration(minutes: ringing.alarm.snoozeMinutes));
+    final last = now.add(
+      Duration(minutes: ringing.alarm.snoozeMinutes * ringing.snoozesRemaining),
+    );
+    String clock(DateTime value) =>
+        '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+    return 'Если нажать сейчас, снова зазвонит в ${clock(next)}. '
+        'Если каждый раз переносить сразу, последний звонок — в ${clock(last)}.';
+  }
 
   Widget _emergencyScreen() => Scaffold(
     backgroundColor: ink,

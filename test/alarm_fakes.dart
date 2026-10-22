@@ -21,6 +21,7 @@ class MemoryAlarmStorage implements AlarmStorage {
     snapshot = AlarmSnapshot(
       alarms: [...value.alarms],
       events: [...value.events],
+      deviceCheck: value.deviceCheck,
     );
   }
 }
@@ -50,7 +51,7 @@ class FakeAlarmGateway implements AlarmGateway {
   );
 
   @override
-  Future<void> requestPermissions() async {}
+  Future<void> requestPermissions({String? target}) async {}
 
   @override
   Future<AlarmResult> schedule(Alarm alarm) async {
@@ -94,7 +95,12 @@ class FakeAlarmGateway implements AlarmGateway {
   }
 
   @override
-  Future<AlarmResult> testAlarm(String id) async => const AlarmResult(ok: true);
+  Future<AlarmResult> testAlarm(String id, {int delaySeconds = 5}) async =>
+      const AlarmResult(ok: true);
+
+  @override
+  Future<AlarmResult> cancelTestAlarm(String id) async =>
+      const AlarmResult(ok: true);
 
   @override
   Future<RingingAlarm?> getRingingAlarm() async => ringing;

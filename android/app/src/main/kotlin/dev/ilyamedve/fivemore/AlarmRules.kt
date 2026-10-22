@@ -7,6 +7,20 @@ import java.util.TimeZone
 object AlarmRules {
     data class Snooze(val used: Int, val nextAt: Long)
 
+    /** MethodChannel integers may arrive as Int or Long; never truncate a fractional delay. */
+    fun testDelaySeconds(value: Any?): Int? {
+        val seconds = when (value) {
+            null -> 5L
+            is Int -> value.toLong()
+            is Long -> value
+            else -> return null
+        }
+        return seconds.takeIf { it in 5L..60L }?.toInt()
+    }
+
+    /** A test cancellation must never accept an ordinary alarm identifier. */
+    fun isPreviewId(id: String): Boolean = id.startsWith("preview:") && id.length > 8
+
     fun nextSnooze(now: Long, used: Int, minutes: Int, limit: Int): Snooze? {
         if (used < 0 || minutes !in 1..30 || limit !in 0..10 || used >= limit) return null
         return Snooze(used + 1, now + minutes * 60_000L)

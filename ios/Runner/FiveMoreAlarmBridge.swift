@@ -1,5 +1,7 @@
 import Flutter
 import Foundation
+import CoreFoundation
+import UIKit
 
 #if canImport(AlarmKit) && !targetEnvironment(macCatalyst)
 import AlarmKit
@@ -300,14 +302,13 @@ private final class FiveMoreAlarmEngine {
       switch call.method {
       case "status": result(try status())
       case "requestPermissions":
-        _ = try await manager.requestAuthorization()
-        result(try status())
+        result(try await requestPermission(args["target"] as? String))
       case "getRingingAlarm": result(try ringingAlarm())
       case "drainEvents": result(FiveMoreAlarmStore.drainEvents())
       case "ackEvents":
         FiveMoreAlarmStore.acknowledgeEvents(args["eventIds"] as? [String] ?? [])
         result(["ok": true])
-      case "schedule", "cancel", "snooze", "dismiss", "testAlarm":
+      case "schedule", "cancel", "snooze", "dismiss", "testAlarm", "cancelTestAlarm":
         guard !mutationInProgress else {
           result(["ok": false, "error": "Подожди завершения предыдущего действия."])
           return
@@ -319,6 +320,7 @@ private final class FiveMoreAlarmEngine {
         case "cancel": result(try cancel(args))
         case "snooze": result(try await snooze(args))
         case "dismiss": result(try dismiss(args))
+        case "cancelTestAlarm": result(try cancelTestAlarm(args))
         default: result(try await testAlarm(args))
         }
       default: result(FlutterMethodNotImplemented)
@@ -326,6 +328,29 @@ private final class FiveMoreAlarmEngine {
     } catch {
       result(["ok": false, "error": error.localizedDescription])
     }
+  }
+
+  private func requestPermission(_ target: String?) async throws -> [String: Any] {
+    guard target == nil || target == "notifications" || target == "exactAlarms" else {
+      var response = try status()
+      response["ok"] = false
+      response["error"] = "settings_unavailable"
+      response["message"] = "Эта настройка недоступна через приложение на iOS."
+      return response
+    }
+    if manager.authorizationState == .denied {
+      guard let url = URL(string: UIApplication.openSettingsURLString),
+        await UIApplication.shared.open(url, options: [:]) else {
+        var response = try status()
+        response["ok"] = false
+        response["error"] = "settings_unavailable"
+        return response
+      }
+    } else {
+      _ = try await manager.requestAuthorization()
+    }
+    // Opening Settings is not proof that authorization was granted. Dart rechecks on resume.
+    return try status()
   }
 
   private func status() throws -> [String: Any] {
@@ -356,12 +381,26 @@ private final class FiveMoreAlarmEngine {
       config["scheduled"] = !liveRecords.isEmpty
       return config
     }
-    return [
+    var response: [String: Any] = [
       "platform": "ios", "supported": true, "exactAlarms": authorized,
       "notifications": authorized, "fullScreenIntent": authorized,
       "challengeEnforced": false, "scheduledCount": alarms.count,
       "alarms": configs,
     ]
+    for (key, record) in instances where activeSystemIDs.contains(key) {
+      guard let id = record["id"] as? String, id.hasPrefix("preview:"), id.count > 8,
+        ["scheduled", "ringing", "snoozed"].contains(record["state"] as? String ?? ""),
+        let config = FiveMoreAlarmStore.configurations[id], config["enabled"] as? Bool == true,
+        let source = config["testSourceId"] as? String, !source.isEmpty, !source.hasPrefix("preview:"),
+        let started = (config["testStartedAt"] as? NSNumber)?.int64Value,
+        let due = (config["testDueAt"] as? NSNumber)?.int64Value,
+        started > 0, due >= started else { continue }
+      response["activeTest"] = [
+        "sourceAlarmId": source, "previewAlarmId": id, "startedAt": started, "dueAt": due,
+      ]
+      break
+    }
+    return response
   }
 
   private func observe(_ alarms: [Alarm]) {
@@ -570,7 +609,11 @@ private final class FiveMoreAlarmEngine {
   }
 
   private func testAlarm(_ args: [String: Any]) async throws -> [String: Any] {
+    guard let delay = testDelaySeconds(args["delaySeconds"]) else {
+      return ["ok": false, "error": "invalid_test_delay"]
+    }
     guard let id = args["id"] as? String,
+      !id.hasPrefix("preview:"),
       var config = FiveMoreAlarmStore.configurations[id] else {
       throw failure("Сначала сохрани будильник.")
     }
@@ -578,26 +621,94 @@ private final class FiveMoreAlarmEngine {
     guard manager.authorizationState == .authorized else {
       throw failure("Разреши будильники в настройках iOS.")
     }
+    let registered = try manager.alarms
+    if registered.contains(where: {
+      (FiveMoreAlarmStore.instances[$0.id.uuidString]?["id"] as? String)?.hasPrefix("preview:") == true
+    }) {
+      return ["ok": false, "error": "test_alarm_active"]
+    }
     let previewID = "preview:\(UUID().uuidString)"
     config["id"] = previewID
     config["weekdays"] = [Int]()
     config["enabled"] = true
     config["title"] = "Пробный подъём"
-    let next = Date().addingTimeInterval(10)
+    let startedAt = FiveMoreAlarmStore.now()
+    let next = Date(timeIntervalSince1970: Double(startedAt) / 1000).addingTimeInterval(TimeInterval(delay))
     let nextAt = Int64(next.timeIntervalSince1970 * 1000)
     config["nextAt"] = nextAt
+    config["testSourceId"] = id
+    config["testStartedAt"] = startedAt
+    config["testDueAt"] = nextAt
     let uuid = UUID()
-    _ = try await manager.schedule(id: uuid, configuration: configuration(config, systemID: uuid, schedule: .fixed(next)))
     var configs = FiveMoreAlarmStore.configurations
     configs[previewID] = config
-    FiveMoreAlarmStore.configurations = configs
     var instances = FiveMoreAlarmStore.instances
     instances[uuid.uuidString] = [
       "id": previewID, "kind": "preview", "state": "scheduled", "snoozesUsed": 0,
       "nextAt": nextAt,
     ]
-    FiveMoreAlarmStore.instances = instances
+    // Save both pieces together before suspension: a process exit after AlarmKit
+    // accepts the schedule must still leave the preview identity recoverable.
+    var root = FiveMoreAlarmStore.data
+    root["configurations"] = configs
+    root["instances"] = instances
+    FiveMoreAlarmStore.data = root
+    do {
+      _ = try await manager.schedule(id: uuid, configuration: configuration(config, systemID: uuid, schedule: .fixed(next)))
+    } catch {
+      var rollback = FiveMoreAlarmStore.data
+      var savedConfigs = FiveMoreAlarmStore.configurations
+      var savedInstances = FiveMoreAlarmStore.instances
+      savedConfigs.removeValue(forKey: previewID)
+      savedInstances.removeValue(forKey: uuid.uuidString)
+      rollback["configurations"] = savedConfigs
+      rollback["instances"] = savedInstances
+      FiveMoreAlarmStore.data = rollback
+      throw error
+    }
     return ["ok": true, "alarm": config, "nextAt": nextAt]
+  }
+
+  private func testDelaySeconds(_ value: Any?) -> Int? {
+    guard let value else { return 5 }
+    guard let number = value as? NSNumber,
+      CFGetTypeID(number) != CFBooleanGetTypeID(),
+      !["f", "d"].contains(String(cString: number.objCType)) else { return nil }
+    let seconds = number.int64Value
+    guard (5...60).contains(seconds), number.doubleValue == Double(seconds) else { return nil }
+    return Int(seconds)
+  }
+
+  /// Preview-only and idempotent. No ordinary configuration is disabled or rewritten.
+  private func cancelTestAlarm(_ args: [String: Any]) throws -> [String: Any] {
+    guard let id = args["id"] as? String, id.hasPrefix("preview:"), id.count > 8 else {
+      return ["ok": false, "error": "invalid_test_id"]
+    }
+    let existing = try manager.alarms
+    observe(existing)
+    let selected = FiveMoreAlarmStore.instances.filter { $0.value["id"] as? String == id }
+    for (key, _) in selected {
+      guard let uuid = UUID(uuidString: key),
+        let alarm = existing.first(where: { $0.id == uuid }) else { continue }
+      if alarm.state == .alerting {
+        FiveMoreAlarmStore.suppressSystemStop(key, until: FiveMoreAlarmStore.now() + 15_000)
+        do { try manager.stop(id: uuid) }
+        catch {
+          FiveMoreAlarmStore.suppressSystemStop(key, until: nil)
+          throw error
+        }
+        FiveMoreAlarmStore.finish(systemID: key, type: "emergency_dismissed")
+      } else {
+        try manager.cancel(id: uuid)
+      }
+    }
+    var instances = FiveMoreAlarmStore.instances
+    for key in selected.keys { instances.removeValue(forKey: key) }
+    FiveMoreAlarmStore.instances = instances
+    var configs = FiveMoreAlarmStore.configurations
+    configs.removeValue(forKey: id)
+    FiveMoreAlarmStore.configurations = configs
+    return ["ok": true]
   }
 
   private func failure(_ message: String) -> NSError {

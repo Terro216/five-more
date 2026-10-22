@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import '../models/alarm.dart';
+import '../models/device_alarm_check.dart';
 
 class AlarmDeviceStatus {
   const AlarmDeviceStatus({
@@ -13,6 +14,10 @@ class AlarmDeviceStatus {
     this.scheduledCount = 0,
     this.error,
     this.alarms = const [],
+    this.batteryOptimized,
+    this.alarmVolume,
+    this.alarmMaxVolume,
+    this.activeTest,
   });
 
   final String platform;
@@ -24,9 +29,18 @@ class AlarmDeviceStatus {
   final int scheduledCount;
   final String? error;
   final List<Alarm> alarms;
+  final bool? batteryOptimized;
+  final int? alarmVolume;
+  final int? alarmMaxVolume;
+  final DeviceAlarmCheck? activeTest;
   bool get canSchedule => supported && exactAlarms && notifications;
   bool get needsAttention =>
-      supported && (!exactAlarms || !notifications || !fullScreenIntent);
+      supported &&
+      (!exactAlarms ||
+          !notifications ||
+          !fullScreenIntent ||
+          alarmVolume == 0 ||
+          error != null);
 
   factory AlarmDeviceStatus.fromJson(Map<String, dynamic> json) =>
       AlarmDeviceStatus(
@@ -37,6 +51,16 @@ class AlarmDeviceStatus {
         fullScreenIntent: json['fullScreenIntent'] == true,
         challengeEnforced: json['challengeEnforced'] != false,
         scheduledCount: intValue(json['scheduledCount'], 0),
+        activeTest: DeviceAlarmCheck.tryFromJson(json['activeTest']),
+        batteryOptimized: json['batteryOptimized'] is bool
+            ? json['batteryOptimized'] as bool
+            : null,
+        alarmVolume: json['alarmVolume'] is num
+            ? (json['alarmVolume'] as num).toInt()
+            : null,
+        alarmMaxVolume: json['alarmMaxVolume'] is num
+            ? (json['alarmMaxVolume'] as num).toInt()
+            : null,
         error: alarmErrorMessage(json['error'] as String?),
         alarms: (json['alarms'] as List? ?? const [])
             .whereType<Map>()
@@ -53,6 +77,14 @@ String? alarmErrorMessage(String? error) => switch (error) {
   'snooze_limit' => 'Переносы закончились. Пора пройти задание.',
   'not_found' => 'Будильник не найден. Обнови список и попробуй ещё раз.',
   'not_ringing' => 'Этот будильник уже не звонит.',
+  'test_alarm_active' => 'Сначала заверши или отмени текущую проверку звонка.',
+  'invalid_test_id' =>
+    'Этим действием можно отменить только проверочный звонок.',
+  'invalid_test_delay' =>
+    'Не удалось назначить время проверки. Попробуй ещё раз.',
+  'unsupported_permission' => 'Эта настройка недоступна на данном устройстве.',
+  'settings_unavailable' =>
+    'Не удалось открыть настройку. Открой её вручную в настройках телефона.',
   'invalid_id' ||
   'invalid_hour' ||
   'invalid_minute' ||
@@ -94,12 +126,13 @@ class AlarmResult {
 
 abstract class AlarmGateway {
   Future<AlarmDeviceStatus> status();
-  Future<void> requestPermissions();
+  Future<void> requestPermissions({String? target});
   Future<AlarmResult> schedule(Alarm alarm);
   Future<AlarmResult> cancel(String id);
   Future<AlarmResult> snooze(String id);
   Future<AlarmResult> dismiss(String id, {bool emergency = false});
-  Future<AlarmResult> testAlarm(String id);
+  Future<AlarmResult> testAlarm(String id, {int delaySeconds = 5});
+  Future<AlarmResult> cancelTestAlarm(String id);
   Future<RingingAlarm?> getRingingAlarm();
   Future<List<AlarmEvent>> drainEvents();
   Future<void> ackEvents(List<String> eventIds);
@@ -131,8 +164,14 @@ class NativeAlarmGateway implements AlarmGateway {
   }
 
   @override
-  Future<void> requestPermissions() async {
-    await _channel.invokeMethod<Object?>('requestPermissions');
+  Future<void> requestPermissions({String? target}) async {
+    final result = await _map('requestPermissions', {'target': ?target});
+    if (result['ok'] == false) {
+      throw PlatformException(
+        code: 'permission_settings',
+        message: alarmErrorMessage(result['error'] as String?),
+      );
+    }
   }
 
   Future<AlarmResult> _action(String method, Map<String, Object?> args) async {
@@ -159,7 +198,12 @@ class NativeAlarmGateway implements AlarmGateway {
   Future<AlarmResult> dismiss(String id, {bool emergency = false}) =>
       _action('dismiss', {'id': id, 'emergency': emergency});
   @override
-  Future<AlarmResult> testAlarm(String id) => _action('testAlarm', {'id': id});
+  Future<AlarmResult> testAlarm(String id, {int delaySeconds = 5}) =>
+      _action('testAlarm', {'id': id, 'delaySeconds': delaySeconds});
+
+  @override
+  Future<AlarmResult> cancelTestAlarm(String id) =>
+      _action('cancelTestAlarm', {'id': id});
 
   @override
   Future<RingingAlarm?> getRingingAlarm() async {

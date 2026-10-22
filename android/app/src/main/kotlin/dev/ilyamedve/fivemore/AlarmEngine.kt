@@ -6,7 +6,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.media.AudioManager
 import android.os.Build
+import android.os.PowerManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -15,17 +17,35 @@ import java.util.UUID
 class AlarmEngine(private val context: Context) {
     private val store = AlarmStore(context)
     private val manager = context.getSystemService(AlarmManager::class.java)
+    private data class TestMetadata(val sourceId: String, val startedAt: Long, val dueAt: Long)
 
-    fun status(): Map<String, Any?> = mapOf(
-        "platform" to "android",
-        "supported" to true,
-        "exactAlarms" to canSchedule(),
-        "notifications" to notificationsEnabled(),
-        "fullScreenIntent" to fullScreenAvailable(),
-        "scheduledCount" to store.alarms().count { it.optBoolean("enabled") },
-        "alarms" to store.alarms().map { it.toMap() },
-        "error" to safetyError,
-    )
+    fun status(): Map<String, Any?> {
+        val alarms = store.alarms()
+        val result = mutableMapOf<String, Any?>(
+            "platform" to "android",
+            "supported" to true,
+            "exactAlarms" to canSchedule(),
+            "notifications" to notificationsEnabled(),
+            "fullScreenIntent" to fullScreenAvailable(),
+            "batteryOptimized" to !context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName),
+            "alarmVolume" to context.getSystemService(AudioManager::class.java).getStreamVolume(AudioManager.STREAM_ALARM),
+            "alarmMaxVolume" to context.getSystemService(AudioManager::class.java).getStreamMaxVolume(AudioManager.STREAM_ALARM),
+            "scheduledCount" to alarms.count { it.optBoolean("enabled") },
+            "alarms" to alarms.map { it.toMap() },
+            "error" to safetyError,
+        )
+        alarms.firstNotNullOfOrNull { alarm ->
+            val id = alarm.optString("id")
+            val source = alarm.optString("testSourceId")
+            val started = alarm.optLong("testStartedAt")
+            val due = alarm.optLong("testDueAt")
+            if (!AlarmRules.isPreviewId(id) || !alarm.optBoolean("enabled") ||
+                alarm.optString("state") !in listOf("scheduled", "ringing", "snoozed") ||
+                source.isBlank() || source.startsWith("preview:") || started <= 0 || due < started) null
+            else mapOf("sourceAlarmId" to source, "previewAlarmId" to id, "startedAt" to started, "dueAt" to due)
+        }?.let { result["activeTest"] = it }
+        return result
+    }
 
     fun canSchedule(): Boolean = Build.VERSION.SDK_INT < 31 || manager.canScheduleExactAlarms()
 
@@ -42,9 +62,12 @@ class AlarmEngine(private val context: Context) {
             (channel == null || channel.importance >= NotificationManager.IMPORTANCE_HIGH)
     }
 
-    fun schedule(arguments: Map<*, *>, previewAt: Long? = null): Map<String, Any?> {
+    fun schedule(arguments: Map<*, *>): Map<String, Any?> = scheduleInternal(arguments)
+
+    private fun scheduleInternal(arguments: Map<*, *>, test: TestMetadata? = null): Map<String, Any?> {
         val id = arguments["id"] as? String ?: return fail("invalid_id")
         if (id.isBlank() || id.length > 128) return fail("invalid_id")
+        if (test != null && (!AlarmRules.isPreviewId(id) || test.dueAt <= System.currentTimeMillis())) return fail("invalid_test_delay")
         val old = store.get(id)
         if (old != null && old.optString("state") in listOf("ringing", "snoozed")) return fail("alarm_active")
         val hour = (arguments["hour"] as? Number)?.toInt() ?: return fail("invalid_hour")
@@ -64,9 +87,14 @@ class AlarmEngine(private val context: Context) {
             .put("snoozesUsed", 0).put("occurrenceId", UUID.randomUUID().toString())
             .put("state", if (enabled) "scheduled" else "disabled")
         val nextAt = if (enabled) {
-            if (previewAt != null && id.startsWith("preview:") && previewAt > System.currentTimeMillis()) previewAt else nextOccurrence(alarm)
+            test?.dueAt ?: nextOccurrence(alarm)
         } else 0L
         alarm.put("nextAt", nextAt)
+        if (test != null) {
+            alarm.put("testSourceId", test.sourceId)
+                .put("testStartedAt", test.startedAt)
+                .put("testDueAt", test.dueAt)
+        }
         store.put(alarm)
         try {
             if (enabled) arm(alarm) else cancelPending(id)
@@ -169,17 +197,45 @@ class AlarmEngine(private val context: Context) {
 
     fun getRingingAlarm(): Map<String, Any?>? = ringing()?.toMap()
 
-    /** A real five-second native alarm exercises the background/lock-screen delivery path. */
-    fun testAlarm(id: String): Map<String, Any?> {
+    /** A separate native occurrence exercises delivery without changing the user's schedule. */
+    fun testAlarm(id: String, delayValue: Any? = null): Map<String, Any?> {
+        val delaySeconds = AlarmRules.testDelaySeconds(delayValue) ?: return fail("invalid_test_delay")
+        if (AlarmRules.isPreviewId(id)) return fail("invalid_id")
         val alarm = store.get(id) ?: return fail("not_found")
         if (alarm.optString("state") in listOf("ringing", "snoozed")) return fail("alarm_active")
+        if (store.alarms().any {
+            AlarmRules.isPreviewId(it.optString("id")) && it.optBoolean("enabled") &&
+                it.optString("state") in listOf("scheduled", "ringing", "snoozed")
+        }) return fail("test_alarm_active")
         // A dedicated occurrence preserves the user's real schedule.
-        val testId = "preview:$id"
+        val testId = "preview:${UUID.randomUUID()}"
         val args = alarm.toMap().toMutableMap()
         args["id"] = testId
         args["enabled"] = true
+        args["title"] = "Пробный подъём"
         args["weekdays"] = emptyList<Int>()
-        return schedule(args, previewAt = System.currentTimeMillis() + 5_000L)
+        val startedAt = System.currentTimeMillis()
+        return scheduleInternal(args, TestMetadata(id, startedAt, startedAt + delaySeconds * 1_000L))
+    }
+
+    /** Idempotent preview cleanup. A ringing test uses the same emergency-silence safety path. */
+    fun cancelTestAlarm(id: String): Map<String, Any?> {
+        if (!AlarmRules.isPreviewId(id)) return fail("invalid_test_id")
+        return AlarmSafety.resolveOrSilence(
+            operation = {
+                val alarm = store.get(id) ?: return@resolveOrSilence mapOf("ok" to true)
+                cancelPending(id)
+                if (alarm.optString("state") == "ringing") {
+                    dismissPersisted(id, emergency = true, timedOut = false)
+                }
+                store.remove(id)
+                silencedAlarmIds.remove(id)
+                refreshService()
+                mapOf("ok" to true)
+            },
+            silenceWithoutPersistence = { silenceAfterPersistenceFailure(id) },
+            failure = { fail("emergency_state_not_saved", it.message) },
+        )
     }
 
     /** Boot/time changes only schedule AlarmManager work; never start media playback from boot. */
@@ -215,7 +271,7 @@ class AlarmEngine(private val context: Context) {
                         arm(alarm)
                     }
                     "scheduled" -> {
-                        if (clockChanged) {
+                        if (clockChanged && !AlarmRules.isPreviewId(alarm.optString("id"))) {
                             alarm.put("nextAt", nextOccurrence(alarm))
                         } else if (alarm.optLong("nextAt") <= now) {
                             if (now - alarm.optLong("nextAt") <= MAX_RING_MS) {
@@ -246,7 +302,11 @@ class AlarmEngine(private val context: Context) {
                 .put("firedAt", 0L).put("ringingSince", 0L)
                 .put("nextAt", nextOccurrence(alarm))
         }
-        store.put(alarm)
+        if (AlarmRules.isPreviewId(alarm.getString("id")) && !alarm.optBoolean("enabled")) {
+            store.remove(alarm.getString("id"))
+        } else {
+            store.put(alarm)
+        }
         silencedAlarmIds.remove(alarm.getString("id"))
         if (alarm.optBoolean("enabled") && canSchedule()) {
             try {

@@ -10,7 +10,9 @@ challenge preview, never an actual background alarm.
 - iOS AlarmKit has a system stop control: do not claim mandatory captchas on iOS.
 - Emergency dismissal is always available and recorded separately.
 - Scheduling failures must reach the user; never show an unscheduled alarm as active.
-- No analytics, accounts, voice uploads, or external API calls in v0.1.
+- No analytics, accounts, voice uploads, or external API calls in this pilot.
+- Device-check success is an explicit user report, never inferred from a native event.
+- Test occurrences have preview-only IDs; cancellation must not change real schedules.
 - Keep SDK version pinned in `.flutter-version` and CI. Commit `pubspec.lock`.
 - Run `dart format --output=none --set-exit-if-changed lib test`,
   `flutter analyze`, `flutter test`, and build Android APK after native changes.

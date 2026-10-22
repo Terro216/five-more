@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:five_more/app/alarm_controller.dart';
 import 'package:five_more/app/five_more_app.dart';
+import 'package:five_more/features/alarms/device_check_screen.dart';
 import 'package:five_more/features/challenges/challenge_models.dart';
 import 'package:five_more/models/alarm.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../test/alarm_fakes.dart';
+import '../test/device_check_controller_test.dart' show DeviceCheckGateway;
 
 void main() {
   setUpAll(() async {
@@ -52,11 +54,12 @@ void main() {
       challengeKind: ChallengeKind.mixed,
       difficulty: ChallengeDifficulty.medium,
     );
-    final gateway = FakeAlarmGateway();
+    final gateway = DeviceCheckGateway()..currentTime = DateTime.now();
     gateway.nativeAlarms[alarm.id] = alarm;
     final controller = AlarmController(
       gateway: gateway,
       storage: MemoryAlarmStorage(),
+      now: () => gateway.currentTime,
     );
     await controller.initialize(startPolling: false);
     final boundary = GlobalKey();
@@ -101,6 +104,42 @@ void main() {
     await tester.tap(find.text('Счёт'));
     await tester.pumpAndSettle();
     await capture('03-math');
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Подъём'));
+    await tester.pumpAndSettle();
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            DeviceCheckScreen(controller: controller, sourceAlarmId: alarm.id),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await capture('04-device-check');
+    final start = find.byKey(const ValueKey('device-check-start'));
+    await tester.scrollUntilVisible(start, 200);
+    await tester.pumpAndSettle();
+    await tester.tap(start);
+    await tester.pumpAndSettle();
+    await capture('05-lock-phone');
+    gateway.currentTime = gateway.currentTime.add(const Duration(seconds: 21));
+    await tester.pump(const Duration(seconds: 1));
+    await capture('06-check-feedback');
+    await controller.finishDeviceCheck(heard: true);
+    await tester.pumpAndSettle();
+    navigator.pop();
+    await tester.pumpAndSettle();
+    await capture('07-home-checked');
+    gateway.ringing = RingingAlarm(
+      alarm: alarm,
+      occurrenceId: 'capture-morning',
+      firedAt: gateway.currentTime,
+      snoozesUsed: 2,
+    );
+    await controller.poll();
+    await tester.pumpAndSettle();
+    await capture('08-ringing');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

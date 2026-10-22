@@ -6,6 +6,7 @@ import '../../models/alarm.dart';
 import '../challenges/challenge_models.dart';
 import '../challenges/challenge_screen.dart';
 import 'alarm_editor.dart';
+import 'device_check_screen.dart';
 
 class AlarmHome extends StatefulWidget {
   const AlarmHome({super.key, required this.controller});
@@ -75,36 +76,13 @@ class _AlarmHomeState extends State<AlarmHome> {
     }
   }
 
-  Future<void> _test(Alarm alarm) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Проверить будильник?'),
-        content: const Text(
-          'Сейчас запустится короткая проверка с настоящим звуком '
-          'и выбранным заданием. Основное расписание сохранится.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Проверить'),
-          ),
-        ],
+  void _checkDevice([Alarm? alarm]) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            DeviceCheckScreen(controller: controller, sourceAlarmId: alarm?.id),
       ),
     );
-    if (confirmed != true) return;
-    final result = await controller.testAlarm(alarm.id);
-    if (mounted) {
-      _message(
-        result.ok
-            ? 'Проверочный будильник сработает через 5 секунд.'
-            : result.error ?? 'Не удалось запустить проверку',
-      );
-    }
   }
 
   void _practice(ChallengeKind kind) {
@@ -130,12 +108,16 @@ class _AlarmHomeState extends State<AlarmHome> {
           children: [
             _SunMark(size: 30),
             SizedBox(width: 12),
-            Text(
-              'ещё пять',
-              style: TextStyle(
-                fontSize: 23,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -.8,
+            Expanded(
+              child: Text(
+                'ещё пять',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -.8,
+                ),
               ),
             ),
           ],
@@ -408,41 +390,53 @@ class _AlarmHomeState extends State<AlarmHome> {
 
   Widget _deviceCard() {
     final device = controller.device;
-    if (!device.supported) {
-      return _InfoCard(
-        icon: Icons.visibility_outlined,
-        title: 'Режим знакомства',
-        text:
-            device.error ??
-            'Можно настроить черновик и попробовать задания. '
-                'Настоящие будильники на этой платформе недоступны.',
-      );
-    }
-    if (device.needsAttention) {
-      final missing = [
-        if (!device.notifications) 'уведомления',
-        if (!device.exactAlarms) 'точное срабатывание',
-        if (!device.fullScreenIntent) 'экран поверх блокировки',
-      ];
-      return _InfoCard(
-        icon: Icons.notifications_active_outlined,
-        title: device.canSchedule
-            ? 'Проверь экран будильника'
-            : 'Разреши будильнику срабатывать',
-        text:
-            'Нужно включить: ${missing.join(', ')}. '
-            'Система может запросить разрешения по очереди.',
-        action: TextButton(
-          onPressed: controller.requestPermissions,
-          child: const Text('Открыть разрешения'),
+    final check = controller.deviceCheck;
+    final missingPermission =
+        !device.notifications ||
+        !device.exactAlarms ||
+        !device.fullScreenIntent;
+    final title = !device.supported
+        ? 'Режим знакомства'
+        : missingPermission
+        ? 'Проверь разрешения телефона'
+        : device.alarmVolume == 0
+        ? 'Звук будильника выключен'
+        : device.error != null
+        ? 'Не удалось проверить телефон'
+        : check?.pending == true
+        ? 'Проверка срабатывания начата'
+        : check?.heard == true
+        ? 'Ты подтвердил звук при проверке'
+        : check?.heard == false
+        ? 'При проверке звук не прозвучал'
+        : 'Телефон ещё не проверен';
+    final text = !device.supported
+        ? 'Здесь можно настроить черновик и попробовать задания.'
+        : missingPermission
+        ? 'Часть разрешений выключена. Проверь их перед следующим утром.'
+        : device.alarmVolume == 0
+        ? 'Подними громкость будильника и повтори проверку.'
+        : device.error != null
+        ? device.error!
+        : check?.pending == true
+        ? 'Вернись к проверке и отметь, прозвучал ли будильник.'
+        : check?.heard == true
+        ? 'Это результат твоей проверки. После изменения настроек повтори её.'
+        : check?.heard == false
+        ? 'Посмотри настройки звука и разрешения, затем попробуй ещё раз.'
+        : 'Проверь звук с заблокированным экраном. Это займёт около минуты.';
+    return _InfoCard(
+      icon: !device.supported
+          ? Icons.visibility_outlined
+          : Icons.phonelink_ring_rounded,
+      title: title,
+      text: text,
+      action: TextButton(
+        onPressed: () => _checkDevice(),
+        child: Text(
+          device.supported ? 'Проверка телефона' : 'Что доступно здесь',
         ),
-      );
-    }
-    return const _InfoCard(
-      icon: Icons.check_circle_outline_rounded,
-      title: 'Системные разрешения включены',
-      text: 'Звук и расписание хранятся на телефоне. Интернет для подъёма не нужен.',
-      color: Color(0xFFADCCA4),
+      ),
     );
   }
 
@@ -462,13 +456,17 @@ class _AlarmHomeState extends State<AlarmHome> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      alarm.timeLabel,
-                      style: TextStyle(
-                        fontSize: 38,
-                        fontWeight: FontWeight.w400,
-                        letterSpacing: -1,
-                        color: alarm.enabled ? Colors.white : muted,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        alarm.timeLabel,
+                        style: TextStyle(
+                          fontSize: 38,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: -1,
+                          color: alarm.enabled ? Colors.white : muted,
+                        ),
                       ),
                     ),
                   ),
@@ -487,7 +485,7 @@ class _AlarmHomeState extends State<AlarmHome> {
                     enabled: !controller.busy,
                     onSelected: (action) {
                       if (action == 'edit') _edit(alarm);
-                      if (action == 'test') _test(alarm);
+                      if (action == 'test') _checkDevice(alarm);
                       if (action == 'delete') _delete(alarm);
                     },
                     itemBuilder: (_) => [
@@ -760,7 +758,7 @@ class _AlarmHomeState extends State<AlarmHome> {
     builder: (context) => AlertDialog(
       title: const Text('Ещё пять'),
       content: const Text(
-        'Первая версия · 0.1.0\n\n'
+        'Версия · 0.2.0\n\n'
         'Простой будильник, ограниченные переносы и задания для пробуждения.\n\n'
         'Без регистрации, рекламы и трекинга сна. Настройки и история остаются на телефоне.\n\n'
         'Перед первым утром проверь срабатывание на своём телефоне. '

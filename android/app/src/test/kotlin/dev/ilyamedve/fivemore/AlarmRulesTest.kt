@@ -1,6 +1,7 @@
 package dev.ilyamedve.fivemore
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -11,6 +12,26 @@ import java.util.TimeZone
 class AlarmRulesTest {
     private fun at(value: String): Long = Instant.parse(value).toEpochMilli()
     private val utc = TimeZone.getTimeZone("UTC")
+
+    @Test fun testDelayAcceptsDefaultAndInclusiveIntegerBounds() {
+        assertEquals(5, AlarmRules.testDelaySeconds(null))
+        assertEquals(5, AlarmRules.testDelaySeconds(5))
+        assertEquals(30, AlarmRules.testDelaySeconds(30L))
+        assertEquals(60, AlarmRules.testDelaySeconds(60))
+    }
+
+    @Test fun testDelayRejectsOutOfRangeOrCoercedValues() {
+        for (value in listOf(0, 4, 61, -5, Long.MAX_VALUE, 5.0, 5.9, "30", true)) {
+            assertNull(AlarmRules.testDelaySeconds(value))
+        }
+    }
+
+    @Test fun previewCancellationGuardRejectsRealOrEmptyIdentifiers() {
+        assertTrue(AlarmRules.isPreviewId("preview:temporary-id"))
+        for (id in listOf("", "preview:", "ordinary-id", "not-preview:temporary-id", " preview:temporary-id")) {
+            assertFalse(AlarmRules.isPreviewId(id))
+        }
+    }
 
     @Test fun oneShotBeforeSelectedTimeUsesToday() {
         assertEquals(at("2026-10-13T07:30:00Z"), AlarmRules.nextOccurrence(7, 30, emptySet(), at("2026-10-13T07:29:59Z"), utc))

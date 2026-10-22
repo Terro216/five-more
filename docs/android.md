@@ -19,6 +19,8 @@ Android 8 / API 26 is the minimum. Flutter draws the screens and verifies wake-u
 
 The service respects the user's alarm stream volume and Do Not Disturb configuration; it does not silently modify global settings. Its own ten-second volume ramp and delayed vibration are independent of global volume. Full-screen presentation depends on OS permission and state; an unlocked phone may show a heads-up notification instead. Before first unlock after a reboot, native sound/notification can work while the Flutter task screen may require unlocking.
 
+The device checklist reads the current alarm stream volume and its maximum, plus whether standard Android battery optimization applies to this app. These are diagnostics, not a guarantee of delivery: battery optimization being enabled does not by itself mean an exact alarm will fail, and the flag cannot describe every manufacturer's background restriction. Explicit checklist actions open only the selected permission/setting. Battery settings use the general optimization list, with an app-details fallback; the app does not request a privileged battery-exemption permission or change volume automatically.
+
 Force-stop, a powered-off phone, system/OEM restrictions, unavailable permissions, a zero alarm stream volume, hardware faults and user removal of the app can prevent waking. No emulator/build result establishes reliability on a person's handset. Keep an independent alarm during the initial device trial.
 
 ## Flutter method channel
@@ -31,14 +33,15 @@ Channel: `five_more/alarm`.
 | `cancel` | `id` | Disable inactive schedule; active alarms return `alarm_active` |
 | `snooze` | Ringing `id` | Native budget checked; returns `snooze_limit` without stopping sound when exhausted |
 | `dismiss` | Ringing `id`, optional `emergency` | Resolve after Flutter task verification, or emergency exit |
-| `status` | — | Permission flags and complete native `alarms` snapshots, including disabled configurations |
-| `requestPermissions` | — | Opens next missing permission step; returns current status |
+| `status` | — | Permission flags, `batteryOptimized`, `alarmVolume`, `alarmMaxVolume` and complete native `alarms` snapshots, including disabled configurations |
+| `requestPermissions` | Optional `target`: `notifications`, `exactAlarms`, `fullScreenIntent`, `battery`, `alarmVolume` | Opens only that setting/request; omitted target opens the next missing permission step. Returns current status; recheck on resume. Unavailable settings return `ok:false,error:settings_unavailable` |
 | `getRingingAlarm` | — | Flattened configuration with `occurrenceId,firedAt,ringingSince,snoozesUsed,state`, or null |
 | `drainEvents` | — | Pending event list; repeated reads return the same IDs until acknowledged |
 | `ackEvents` | `eventIds` | Removes only those IDs after Flutter durably saved them |
-| `testAlarm` | Existing `id` | Creates a separate one-shot `preview:<id>` due in five seconds; preserves the real schedule |
+| `testAlarm` | Existing `id`, optional integer `delaySeconds` (5–60, default 5) | Creates a separate one-shot `preview:<UUID>` and returns its `alarm.id` and `nextAt`; preserves the real schedule. Rejects an existing pending, ringing or snoozed preview with `test_alarm_active` |
+| `cancelTestAlarm` | Returned preview `id` only | Cancels a pending/snoozed test or emergency-dismisses a ringing test, then removes its state. Idempotent for a missing preview. Ordinary IDs return `invalid_test_id` without changes |
 
-ISO weekdays are Monday=1 through Sunday=7. Empty weekdays means a one-shot next occurrence. Native scheduling always recomputes the next occurrence from hour/minute/weekdays; any stale `nextAt` in a Flutter snapshot is ignored. Only the internal preview helper supplies an explicit five-second deadline. `nextAt=0` means no future occurrence. Delivery to Flutter is at-least-once within the bounded journal; Flutter deduplicates by event ID and acknowledges after persistence. Event types are `fired`, `snoozed`, `dismissed`, `emergency_dismissed`, `timed_out`, `missed`, and `schedule_failed`. Each event has a stable UUID, alarm ID, occurrence ID, epoch-millisecond timestamp and snooze count. Flutter merges native enabled/nextAt state without deleting local drafts and excludes `preview:` configurations from its regular alarm list.
+ISO weekdays are Monday=1 through Sunday=7. Empty weekdays means a one-shot next occurrence. Native scheduling always recomputes the next occurrence from hour/minute/weekdays; any stale `nextAt` in a Flutter snapshot is ignored. Only the internal preview helper supplies an explicit short deadline. Preview deadlines remain absolute across timezone changes, and resolved test configurations are removed. `nextAt=0` means no future occurrence. Delivery to Flutter is at-least-once within the bounded journal; Flutter deduplicates by event ID and acknowledges after persistence. Event types are `fired`, `snoozed`, `dismissed`, `emergency_dismissed`, `timed_out`, `missed`, and `schedule_failed`. Each event has a stable UUID, alarm ID, occurrence ID, epoch-millisecond timestamp and snooze count. Flutter merges native enabled/nextAt state without deleting local drafts and excludes `preview:` configurations from its regular alarm list.
 
 ## Required physical-device checks
 
@@ -51,6 +54,7 @@ These remain manual release gates, not claims of completed testing:
 5. Disable notification/full-screen/exact access separately and verify the app exposes the missing access.
 6. Test two due alarms, one-shot auto-disable, weekday recurrence, timezone changes and a DST transition.
 7. Verify emergency exit, timeout and sound fallback. Test alarm volume zero and Bluetooth routing explicitly.
+8. Start a delayed test, lock the screen, cancel before delivery, and cancel once already ringing. Repeat after reopening the app; test cancellation must leave ordinary alarms unchanged. Verify the selected checklist row opens its matching Android panel and status refreshes on return.
 
 ## Primary API references
 
@@ -59,3 +63,5 @@ These remain manual release gates, not claims of completed testing:
 - [Android 15 foreground service boot restrictions](https://developer.android.com/about/versions/15/changes/foreground-service-types)
 - [Foreground service background-start exemptions](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)
 - [Direct boot](https://developer.android.com/privacy-and-security/direct-boot)
+- [Battery optimization status](https://developer.android.com/reference/android/os/PowerManager#isIgnoringBatteryOptimizations(java.lang.String))
+- [Android settings panels](https://developer.android.com/reference/android/provider/Settings)

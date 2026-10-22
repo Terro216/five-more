@@ -3,13 +3,21 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/alarm.dart';
+import '../models/device_alarm_check.dart';
 import '../services/alarm_gateway.dart';
 import '../services/alarm_storage.dart';
 
 class AlarmController extends ChangeNotifier {
-  AlarmController({required this.gateway, required this.storage});
+  AlarmController({
+    required this.gateway,
+    required this.storage,
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now;
   final AlarmGateway gateway;
   final AlarmStorage storage;
+  final DateTime Function() _now;
+  DateTime get now => _now();
+  DeviceAlarmCheck? deviceCheck;
 
   List<Alarm> _alarms = [];
   List<AlarmEvent> _events = [];
@@ -31,6 +39,7 @@ class AlarmController extends ChangeNotifier {
       final snapshot = await storage.load();
       _alarms = [...snapshot.alarms];
       _events = [...snapshot.events];
+      deviceCheck = snapshot.deviceCheck;
     } catch (_) {
       storageHealthy = false;
       error =
@@ -39,6 +48,7 @@ class AlarmController extends ChangeNotifier {
     }
     try {
       device = await gateway.status();
+      await _recoverNativeCheck();
       if (device.supported) {
         await _refreshNative();
         if (storageHealthy) await _mergeNativeConfigs();
@@ -103,8 +113,26 @@ class AlarmController extends ChangeNotifier {
     }
   }, mutation: true);
 
-  Future<void> _persist() =>
-      storage.save(AlarmSnapshot(alarms: _alarms, events: _events));
+  Future<void> _persist() => storage.save(
+    AlarmSnapshot(alarms: _alarms, events: _events, deviceCheck: deviceCheck),
+  );
+
+  Future<void> _recoverNativeCheck() async {
+    final native = device.activeTest;
+    if (native == null ||
+        native.previewAlarmId == deviceCheck?.previewAlarmId) {
+      return;
+    }
+    // Native scheduling may survive process death before Dart saved its record.
+    // Recover only an unconfirmed check, never an inferred successful delivery.
+    deviceCheck = native;
+    if (!storageHealthy) return;
+    try {
+      await _persist();
+    } catch (_) {
+      error = 'Проверка телефона восстановлена, но запись не сохранена. Её можно отменить на экране проверки.';
+    }
+  }
 
   Future<AlarmResult> saveAlarm(
     Alarm alarm, {
@@ -209,16 +237,170 @@ class AlarmController extends ChangeNotifier {
     }, requiresStorage: false);
   }
 
-  Future<AlarmResult> testAlarm(String id) => _mutate(() async {
-    final result = await gateway.testAlarm(id);
-    if (result.ok) await _refreshNative();
+  Future<AlarmResult> testAlarm(String id) => startDeviceCheck(id);
+
+  Future<AlarmResult> startDeviceCheck(
+    String sourceAlarmId,
+  ) => _mutate(() async {
+    if (deviceCheck?.pending == true) {
+      return const AlarmResult(
+        ok: false,
+        error: 'Сначала заверши или отмени текущую проверку звонка.',
+      );
+    }
+    device = await gateway.status();
+    await _recoverNativeCheck();
+    if (deviceCheck?.pending == true) {
+      return const AlarmResult(
+        ok: false,
+        error: 'На телефоне уже ожидается проверочный звонок. Заверши или отмени его.',
+      );
+    }
+    if (!device.supported) {
+      return const AlarmResult(
+        ok: false,
+        error: 'В режиме знакомства доступна тренировка. Проверять звонок нужно на телефоне.',
+      );
+    }
+    if (!device.canSchedule) {
+      return const AlarmResult(
+        ok: false,
+        error: 'Сначала разреши уведомления и точное срабатывание.',
+      );
+    }
+    if (sourceAlarmId.startsWith('preview:') ||
+        !_alarms.any((alarm) => alarm.id == sourceAlarmId)) {
+      return const AlarmResult(
+        ok: false,
+        error: 'Сначала сохрани будильник для проверки.',
+      );
+    }
+    ringing = await gateway.getRingingAlarm();
+    if (ringing != null) {
+      return const AlarmResult(
+        ok: false,
+        error: 'Сначала заверши текущий подъём.',
+      );
+    }
+    final startedAt = now;
+    final result = await gateway.testAlarm(sourceAlarmId, delaySeconds: 20);
+    if (!result.ok) return result;
+    final previewId = result.alarm?.id;
+    final dueAt = result.nextAt;
+    if (previewId == null ||
+        !previewId.startsWith('preview:') ||
+        dueAt == null ||
+        dueAt.isBefore(startedAt)) {
+      if (previewId?.startsWith('preview:') == true) {
+        await gateway.cancelTestAlarm(previewId!);
+      }
+      return const AlarmResult(
+        ok: false,
+        error:
+            'Телефон не подтвердил время проверки. Проверь статус будильника.',
+      );
+    }
+    final previous = deviceCheck;
+    deviceCheck = DeviceAlarmCheck(
+      sourceAlarmId: sourceAlarmId,
+      previewAlarmId: previewId,
+      startedAt: startedAt,
+      dueAt: dueAt,
+    );
+    try {
+      await _persist();
+    } catch (_) {
+      var cancelled = false;
+      try {
+        cancelled = (await gateway.cancelTestAlarm(previewId)).ok;
+      } catch (_) {
+        // Keep the current preview's identity available for the emergency path.
+      }
+      if (cancelled) deviceCheck = previous;
+      return AlarmResult(
+        ok: false,
+        error: cancelled
+            ? 'Проверка отменена: не удалось сохранить её состояние. Освободи место и попробуй снова.'
+            : 'Состояние проверки не сохранено, а отмена не подтверждена. Проверочный звонок может сработать; отмени его на этом экране.',
+      );
+    }
     return result;
   });
 
-  Future<void> requestPermissions() => _enqueue(() async {
+  Future<AlarmResult> finishDeviceCheck({
+    required bool heard,
+    String? previewAlarmId,
+  }) {
+    final expectedId = previewAlarmId ?? deviceCheck?.previewAlarmId;
+    return _mutate(() async {
+      final check = deviceCheck;
+      if (check == null ||
+          !check.pending ||
+          check.previewAlarmId != expectedId) {
+        return const AlarmResult(
+          ok: false,
+          error: 'Эта проверка уже завершена или заменена новой.',
+        );
+      }
+      if (!check.canConfirm(now)) {
+        return const AlarmResult(
+          ok: false,
+          error: 'Дождись времени проверочного звонка.',
+        );
+      }
+      // Also cancels a late or snoozed preview. Never resolve the real schedule.
+      final cancelled = await gateway.cancelTestAlarm(check.previewAlarmId);
+      if (!cancelled.ok) return cancelled;
+      final confirmed = check.confirmed(heard: heard, at: now);
+      await storage.save(
+        AlarmSnapshot(alarms: _alarms, events: _events, deviceCheck: confirmed),
+      );
+      deviceCheck = confirmed;
+      ringing = await gateway.getRingingAlarm();
+      return const AlarmResult(ok: true);
+    });
+  }
+
+  Future<AlarmResult> cancelDeviceCheck({String? previewAlarmId}) {
+    final expectedId = previewAlarmId ?? deviceCheck?.previewAlarmId;
+    return _mutate(() async {
+      final check = deviceCheck;
+      if (check == null ||
+          !check.pending ||
+          check.previewAlarmId != expectedId) {
+        return const AlarmResult(
+          ok: false,
+          error: 'Эта проверка уже завершена или заменена новой.',
+        );
+      }
+      final result = await gateway.cancelTestAlarm(check.previewAlarmId);
+      if (!result.ok) return result;
+      // Silence/cancellation succeeds even when saving the UI record does not.
+      deviceCheck = null;
+      ringing = await gateway.getRingingAlarm();
+      if (!storageHealthy) {
+        return const AlarmResult(
+          ok: false,
+          error: 'Проверочный звонок отменён. Хранилище недоступно; прежние данные не перезаписаны.',
+        );
+      }
+      try {
+        await _persist();
+      } catch (_) {
+        return const AlarmResult(
+          ok: false,
+          error: 'Проверочный звонок отменён, но запись об отмене не сохранена. Проверь свободное место.',
+        );
+      }
+      return result;
+    }, requiresStorage: false);
+  }
+
+  Future<void> requestPermissions({String? target}) => _enqueue(() async {
     try {
-      await gateway.requestPermissions();
+      await gateway.requestPermissions(target: target);
       device = await gateway.status();
+      await _recoverNativeCheck();
       if (storageHealthy) await _mergeNativeConfigs();
       error = null;
     } catch (_) {
@@ -232,6 +414,7 @@ class AlarmController extends ChangeNotifier {
   Future<void> refreshStatus() => _enqueue(() async {
     try {
       device = await gateway.status();
+      await _recoverNativeCheck();
       if (device.supported) {
         await _refreshNative();
         if (storageHealthy) await _mergeNativeConfigs();

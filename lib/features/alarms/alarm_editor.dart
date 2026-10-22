@@ -179,9 +179,12 @@ class _AlarmEditorState extends State<AlarmEditor> {
                         children: [
                           Icon(Icons.edit_outlined, size: 14, color: muted),
                           SizedBox(width: 6),
-                          Text(
-                            'Изменить время',
-                            style: TextStyle(color: muted, fontSize: 12),
+                          Flexible(
+                            child: Text(
+                              'Изменить время',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: muted, fontSize: 12),
+                            ),
                           ),
                         ],
                       ),
@@ -208,7 +211,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
                 children: List.generate(7, (index) {
                   final selected = _draft.weekdays.contains(index + 1);
                   return SizedBox(
-                    width: (constraints.maxWidth - 36) / 7,
+                    width: ((constraints.maxWidth - 36) / 7).clamp(48.0, 80.0),
                     child: Semantics(
                       label: shortWeekdays[index],
                       selected: selected,
@@ -250,7 +253,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
             ),
             const _Heading('Ещё пять — сколько раз?'),
             const Text(
-              'Лимит действует на один подъём. После него останется пройти задание.',
+              'Лимит общий для одного подъёма: закрытие приложения его не сбросит.',
               style: TextStyle(color: muted, height: 1.5),
             ),
             const SizedBox(height: 14),
@@ -302,8 +305,14 @@ class _AlarmEditorState extends State<AlarmEditor> {
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: Text(
-                  'Всего до ${_draft.maxSnoozes * _draft.snoozeMinutes} минут отсрочки',
-                  style: const TextStyle(color: morning, fontSize: 12),
+                  'Бюджет переносов: ${_draft.maxSnoozes * _draft.snoozeMinutes} мин. '
+                  'Если нажимать сразу, последний звонок — в ${_lastRingLabel()}. '
+                  'Если отвечать позже, он тоже сдвинется.',
+                  style: const TextStyle(
+                    color: morning,
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
                 ),
               ),
             ],
@@ -423,6 +432,18 @@ class _AlarmEditorState extends State<AlarmEditor> {
       ),
     ),
   );
+
+  String _lastRingLabel() {
+    final total =
+        _draft.hour * 60 +
+        _draft.minute +
+        _draft.maxSnoozes * _draft.snoozeMinutes;
+    final hour = (total ~/ 60) % 24;
+    final minute = total % 60;
+    final clock =
+        '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+    return total >= 24 * 60 ? '$clock следующего дня' : clock;
+  }
 
   Widget _preset(String label, List<int> days) => ChoiceChip(
     label: Text(label),
