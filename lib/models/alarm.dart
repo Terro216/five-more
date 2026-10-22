@@ -38,6 +38,7 @@ class Alarm {
     this.maxSnoozes = 3,
     this.challengeKind = ChallengeKind.math,
     this.difficulty = ChallengeDifficulty.medium,
+    this.escalateOnSnooze = false,
     this.nextAt,
   });
 
@@ -46,6 +47,8 @@ class Alarm {
     hour: 7,
     minute: 30,
     weekdays: const [1, 2, 3, 4, 5],
+    difficulty: ChallengeDifficulty.easy,
+    escalateOnSnooze: true,
   );
 
   final String id;
@@ -58,6 +61,7 @@ class Alarm {
   final int maxSnoozes;
   final ChallengeKind challengeKind;
   final ChallengeDifficulty difficulty;
+  final bool escalateOnSnooze;
   final DateTime? nextAt;
 
   String get timeLabel =>
@@ -66,6 +70,17 @@ class Alarm {
   String get displayTitle =>
       title.trim().isEmpty ? 'Пора вставать' : title.trim();
   String get repeatLabel => alarmRepeatLabel(this);
+
+  /// Use the native occurrence's counter, so reopening Flutter cannot lower
+  /// the level. The saved difficulty always remains the first-ring baseline.
+  ChallengeDifficulty difficultyForSnoozes(int snoozesUsed) {
+    if (!escalateOnSnooze) return difficulty;
+    final level = (difficulty.index + snoozesUsed.clamp(0, 2)).clamp(
+      0,
+      ChallengeDifficulty.values.length - 1,
+    );
+    return ChallengeDifficulty.values[level];
+  }
 
   static bool _sameDays(List<int> actual, List<int> expected) =>
       actual.length == expected.length && expected.every(actual.contains);
@@ -100,6 +115,7 @@ class Alarm {
     int? maxSnoozes,
     ChallengeKind? challengeKind,
     ChallengeDifficulty? difficulty,
+    bool? escalateOnSnooze,
     DateTime? nextAt,
     bool clearNextAt = false,
   }) => Alarm(
@@ -113,6 +129,7 @@ class Alarm {
     maxSnoozes: maxSnoozes ?? this.maxSnoozes,
     challengeKind: challengeKind ?? this.challengeKind,
     difficulty: difficulty ?? this.difficulty,
+    escalateOnSnooze: escalateOnSnooze ?? this.escalateOnSnooze,
     nextAt: clearNextAt ? null : nextAt ?? this.nextAt,
   );
 
@@ -127,6 +144,7 @@ class Alarm {
     'maxSnoozes': maxSnoozes,
     'challengeKind': challengeKind.name,
     'difficulty': difficulty.name,
+    'escalateOnSnooze': escalateOnSnooze,
     if (nextAt != null) 'nextAt': nextAt!.millisecondsSinceEpoch,
   };
 
@@ -156,6 +174,8 @@ class Alarm {
         (level) => level.name == json['difficulty'],
         orElse: () => ChallengeDifficulty.medium,
       ),
+      // Pre-0.3 alarms keep the level their owner chose until explicitly opted in.
+      escalateOnSnooze: json['escalateOnSnooze'] == true,
       nextAt: parseNextTimestamp(json['nextAt']),
     );
   }
@@ -234,6 +254,8 @@ class RingingAlarm {
   final DateTime firedAt;
   final int snoozesUsed;
   int get snoozesRemaining => (alarm.maxSnoozes - snoozesUsed).clamp(0, 10);
+  ChallengeDifficulty get challengeDifficulty =>
+      alarm.difficultyForSnoozes(snoozesUsed);
 
   factory RingingAlarm.fromJson(Map<String, dynamic> json) {
     final nested = json['alarm'];

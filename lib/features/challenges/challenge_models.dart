@@ -1,13 +1,14 @@
 import 'dart:math';
 
 /// Wake-up tasks contain no network, storage, or alarm dependencies.
-enum ChallengeKind { math, memory, stroop, mixed }
+enum ChallengeKind { math, memory, stroop, sequence, mixed }
 
 extension ChallengeKindLabel on ChallengeKind {
   String get label => switch (this) {
     ChallengeKind.math => 'Счёт',
     ChallengeKind.memory => 'Память',
     ChallengeKind.stroop => 'Цвета',
+    ChallengeKind.sequence => 'Порядок',
     ChallengeKind.mixed => 'Микс',
   };
 
@@ -15,7 +16,8 @@ extension ChallengeKindLabel on ChallengeKind {
     ChallengeKind.math => 'Несколько примеров, чтобы включить голову',
     ChallengeKind.memory => 'Запомни и повтори рисунок из клеток',
     ChallengeKind.stroop => 'Выбери цвет букв, а не написанное слово',
-    ChallengeKind.mixed => 'Счёт, память и цвета в случайном порядке',
+    ChallengeKind.sequence => 'Найди числа и нажми их по порядку',
+    ChallengeKind.mixed => 'Счёт, память, цвета и порядок — по одному заданию',
   };
 }
 
@@ -133,6 +135,41 @@ MemoryPattern generateMemoryPattern(
   return MemoryPattern(side: side, cells: candidates.take(count).toSet());
 }
 
+/// An immutable permutation of 1..cellCount, displayed in [columns] columns.
+class SequenceBoard {
+  SequenceBoard._({required this.columns, required List<int> numbers})
+    : numbers = List.unmodifiable(numbers);
+
+  final int columns;
+  final List<int> numbers;
+
+  int get cellCount => numbers.length;
+
+  bool accepts(int candidate, {required int completedCount}) =>
+      completedCount >= 0 &&
+      completedCount < cellCount &&
+      candidate == completedCount + 1;
+}
+
+SequenceBoard generateSequenceBoard(
+  Random random,
+  ChallengeDifficulty difficulty,
+) {
+  final count = switch (difficulty) {
+    ChallengeDifficulty.easy => 6,
+    ChallengeDifficulty.medium => 9,
+    ChallengeDifficulty.hard => 12,
+  };
+  final numbers = List.generate(count, (index) => index + 1)..shuffle(random);
+  // Even an unlucky shuffle must leave a search task, not a sorted keypad.
+  if (numbers.indexed.every((entry) => entry.$2 == entry.$1 + 1)) {
+    final first = numbers[0];
+    numbers[0] = numbers[1];
+    numbers[1] = first;
+  }
+  return SequenceBoard._(columns: 3, numbers: numbers);
+}
+
 enum ChallengeInk { red, blue, yellow, green, purple }
 
 extension ChallengeInkLabel on ChallengeInk {
@@ -220,6 +257,7 @@ class ChallengeSession {
         ChallengeKind.math,
         ChallengeKind.memory,
         ChallengeKind.stroop,
+        ChallengeKind.sequence,
       ]..shuffle(random);
       return List.unmodifiable(rounds);
     }
@@ -227,6 +265,7 @@ class ChallengeSession {
       ChallengeKind.math => difficulty.index + 2,
       ChallengeKind.memory => difficulty == ChallengeDifficulty.hard ? 3 : 2,
       ChallengeKind.stroop => difficulty.index + 3,
+      ChallengeKind.sequence => difficulty == ChallengeDifficulty.hard ? 3 : 2,
       ChallengeKind.mixed => throw StateError('Mixed rounds are handled above'),
     };
     return List.unmodifiable(List.filled(count, kind));

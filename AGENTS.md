@@ -13,6 +13,8 @@ challenge preview, never an actual background alarm.
 - No analytics, accounts, voice uploads, or external API calls in this pilot.
 - Device-check success is an explicit user report, never inferred from a native event.
 - Test occurrences have preview-only IDs; cancellation must not change real schedules.
+- Snooze escalation uses the native occurrence counter; keep the saved base level unchanged.
+- Existing alarms never opt into escalation implicitly. Mistakes must not erase solved steps.
 - Keep SDK version pinned in `.flutter-version` and CI. Commit `pubspec.lock`.
 - Run `dart format --output=none --set-exit-if-changed lib test`,
   `flutter analyze`, `flutter test`, and build Android APK after native changes.

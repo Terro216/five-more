@@ -5,8 +5,10 @@ import 'dart:ui' as ui;
 
 import 'package:five_more/app/alarm_controller.dart';
 import 'package:five_more/app/five_more_app.dart';
+import 'package:five_more/features/alarms/alarm_editor.dart';
 import 'package:five_more/features/alarms/device_check_screen.dart';
 import 'package:five_more/features/challenges/challenge_models.dart';
+import 'package:five_more/features/challenges/challenge_screen.dart';
 import 'package:five_more/models/alarm.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -52,9 +54,10 @@ void main() {
     final alarm = Alarm.fresh().copyWith(
       title: 'Спокойное утро',
       challengeKind: ChallengeKind.mixed,
-      difficulty: ChallengeDifficulty.medium,
+      difficulty: ChallengeDifficulty.easy,
     );
-    final gateway = DeviceCheckGateway()..currentTime = DateTime.now();
+    final gateway = DeviceCheckGateway()
+      ..currentTime = DateTime(2026, 10, 22, 7, 30);
     gateway.nativeAlarms[alarm.id] = alarm;
     final controller = AlarmController(
       gateway: gateway,
@@ -107,6 +110,42 @@ void main() {
     final navigator = tester.state<NavigatorState>(find.byType(Navigator));
     navigator.pop();
     await tester.pumpAndSettle();
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChallengeScreen(
+          kind: ChallengeKind.sequence,
+          difficulty: ChallengeDifficulty.medium,
+          practice: true,
+          onComplete: navigator.pop,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await capture('09-sequence');
+    for (final number in [1, 2]) {
+      final tile = find.byKey(ValueKey('sequence-number-$number'));
+      await tester.ensureVisible(tile);
+      await tester.pumpAndSettle();
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+    }
+    await capture('10-sequence-progress');
+    navigator.pop();
+    await tester.pumpAndSettle();
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => AlarmEditor(controller: controller, alarm: alarm),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.widgetWithText(ChoiceChip, 'Легко'),
+      200,
+    );
+    await tester.pumpAndSettle();
+    await capture('11-escalation-editor');
+    navigator.pop();
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Подъём'));
     await tester.pumpAndSettle();
     navigator.push(
@@ -131,6 +170,7 @@ void main() {
     navigator.pop();
     await tester.pumpAndSettle();
     await capture('07-home-checked');
+    gateway.currentTime = DateTime(2026, 10, 22, 7, 40);
     gateway.ringing = RingingAlarm(
       alarm: alarm,
       occurrenceId: 'capture-morning',

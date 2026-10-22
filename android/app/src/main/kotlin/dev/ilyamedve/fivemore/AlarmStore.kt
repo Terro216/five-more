@@ -11,7 +11,15 @@ class AlarmStore(context: Context) {
     private val prefs = storage.getSharedPreferences("five_more_alarms", Context.MODE_PRIVATE)
 
     fun alarms(): List<JSONObject> = jsonArray(prefs.getString("alarms", null))
-        .let { array -> (0 until array.length()).map { array.getJSONObject(it) } }
+        .let { array ->
+            (0 until array.length()).map { index ->
+                array.getJSONObject(index).also { alarm ->
+                    // Reading a pre-v0.3 occurrence must not silently opt it into harder challenges.
+                    // Its next ordinary native write persists this additive default.
+                    if (!alarm.has("escalateOnSnooze")) alarm.put("escalateOnSnooze", false)
+                }
+            }
+        }
 
     fun get(id: String): JSONObject? = alarms().firstOrNull { it.optString("id") == id }
 

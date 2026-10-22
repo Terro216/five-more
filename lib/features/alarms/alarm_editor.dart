@@ -19,6 +19,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
   late Alarm _draft;
   late final TextEditingController _title;
   bool _saving = false;
+  int _practiceSnoozes = 0;
   String? _error;
 
   @override
@@ -82,7 +83,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
       MaterialPageRoute<void>(
         builder: (context) => ChallengeScreen(
           kind: _draft.challengeKind,
-          difficulty: _draft.difficulty,
+          difficulty: _draft.difficultyForSnoozes(_practiceSnoozes),
           practice: true,
           onComplete: () => Navigator.of(context).pop(),
           onEmergencyExit: () => Navigator.of(context).pop(),
@@ -103,6 +104,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
         child: FilledButton(
+          key: const ValueKey('save-alarm'),
           onPressed: _saving ? null : _save,
           child: _saving
               ? const SizedBox.square(
@@ -274,7 +276,9 @@ class _AlarmEditorState extends State<AlarmEditor> {
                       onSelected: _saving
                           ? null
                           : (_) => setState(
-                              () => _draft = _draft.copyWith(maxSnoozes: count),
+                              () => _updateDraft(
+                                _draft.copyWith(maxSnoozes: count),
+                              ),
                             ),
                     ),
                   )
@@ -394,17 +398,78 @@ class _AlarmEditorState extends State<AlarmEditor> {
                       onSelected: _saving
                           ? null
                           : (_) => setState(
-                              () => _draft = _draft.copyWith(difficulty: level),
+                              () => _updateDraft(
+                                _draft.copyWith(difficulty: level),
+                              ),
                             ),
                     ),
                   )
                   .toList(),
             ),
             const SizedBox(height: 10),
+            SwitchListTile.adaptive(
+              key: const ValueKey('escalate-on-snooze'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Сложнее после переноса'),
+              subtitle: Text(
+                _draft.maxSnoozes == 0
+                    ? 'Сейчас переносы выключены.'
+                    : 'Каждый перенос поднимает уровень, максимум — «Сложно».',
+                style: const TextStyle(color: muted, fontSize: 12, height: 1.5),
+              ),
+              value: _draft.escalateOnSnooze,
+              onChanged: _saving || _draft.maxSnoozes == 0
+                  ? null
+                  : (value) => setState(
+                      () => _updateDraft(
+                        _draft.copyWith(escalateOnSnooze: value),
+                      ),
+                    ),
+            ),
+            if (_draft.escalateOnSnooze && _draft.maxSnoozes > 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                _difficultyPlan(),
+                key: const ValueKey('escalation-plan'),
+                style: const TextStyle(
+                  color: morning,
+                  fontSize: 12,
+                  height: 1.5,
+                ),
+              ),
+              if (_practiceStages.length > 1) ...[
+                const SizedBox(height: 18),
+                DropdownButtonFormField<int>(
+                  key: ValueKey('practice-stage-$_practiceSnoozes'),
+                  initialValue: _practiceSnoozes,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Какой звонок попробовать',
+                  ),
+                  items: _practiceStages
+                      .map(
+                        (used) => DropdownMenuItem(
+                          value: used,
+                          child: Text(
+                            '${_stageLabel(used)} · ${_draft.difficultyForSnoozes(used).label}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _saving
+                      ? null
+                      : (value) =>
+                            setState(() => _practiceSnoozes = value ?? 0),
+                ),
+              ],
+            ],
+            const SizedBox(height: 10),
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
-                onPressed: _practice,
+                key: const ValueKey('practice-alarm'),
+                onPressed: _saving ? null : _practice,
                 icon: const Icon(Icons.play_arrow_rounded),
                 label: const Text('Попробовать задание'),
               ),
@@ -433,6 +498,44 @@ class _AlarmEditorState extends State<AlarmEditor> {
     ),
   );
 
+  void _updateDraft(Alarm value) {
+    _draft = value;
+    if (!_practiceStages.contains(_practiceSnoozes)) _practiceSnoozes = 0;
+  }
+
+  List<int> get _practiceStages {
+    final stages = [0];
+    if (!_draft.escalateOnSnooze) return stages;
+    for (var used = 1; used <= _draft.maxSnoozes; used++) {
+      if (_draft.difficultyForSnoozes(used) !=
+          _draft.difficultyForSnoozes(stages.last)) {
+        stages.add(used);
+      }
+    }
+    return stages;
+  }
+
+  String _stageLabel(int used) => used == 0
+      ? 'Первый звонок'
+      : used == 1
+      ? 'После 1 переноса'
+      : 'После $used переносов';
+
+  String _difficultyPlan() {
+    final stages = _practiceStages;
+    final plan = stages
+        .map((used) {
+          final label = used == 0
+              ? _stageLabel(used)
+              : _stageLabel(used).toLowerCase();
+          return '$label: ${_draft.difficultyForSnoozes(used).label}';
+        })
+        .join(' · ');
+    return stages.last < _draft.maxSnoozes
+        ? '$plan. Дальше сложность не растёт.'
+        : '$plan.';
+  }
+
   String _lastRingLabel() {
     final total =
         _draft.hour * 60 +
@@ -460,6 +563,7 @@ IconData challengeIcon(ChallengeKind kind) => switch (kind) {
   ChallengeKind.math => Icons.calculate_outlined,
   ChallengeKind.memory => Icons.grid_view_rounded,
   ChallengeKind.stroop => Icons.palette_outlined,
+  ChallengeKind.sequence => Icons.format_list_numbered_rounded,
   ChallengeKind.mixed => Icons.shuffle_rounded,
 };
 

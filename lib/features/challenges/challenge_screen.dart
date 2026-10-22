@@ -39,9 +39,14 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   MathQuestion? _math;
   MemoryPattern? _memory;
   StroopQuestion? _stroop;
+  SequenceBoard? _sequence;
+  int _sequenceCompleted = 0;
   final _selected = <int>{};
   bool _showPattern = false;
   bool _transitioning = false;
+  bool _finished = false;
+  bool _completionReady = false;
+  bool _emergencyDialogOpen = false;
   String? _feedback;
   bool _feedbackCorrect = false;
   Timer? _previewTimer;
@@ -70,6 +75,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     _feedback = null;
     _transitioning = false;
     _selected.clear();
+    _sequenceCompleted = 0;
     _activeKind = _session.currentKind;
     switch (_activeKind) {
       case ChallengeKind.math:
@@ -83,6 +89,8 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         _startPreview();
       case ChallengeKind.stroop:
         _stroop = generateStroopQuestion(_random, widget.difficulty);
+      case ChallengeKind.sequence:
+        _sequence = generateSequenceBoard(_random, widget.difficulty);
       case ChallengeKind.mixed:
         throw StateError('A mixed session contains concrete task types');
     }
@@ -98,7 +106,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   }
 
   void _answer(bool correct) {
-    if (_transitioning || _session.isComplete) return;
+    if (_finished || _transitioning || _session.isComplete) return;
     if (!correct) {
       setState(() {
         _session.submitIncorrect();
@@ -115,17 +123,47 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       _feedback = complete ? 'Готово. Доброе утро!' : 'Верно. Ещё немного.';
     });
     _nextTimer = Timer(const Duration(milliseconds: 500), () {
-      if (!mounted) return;
+      if (!mounted || _finished) return;
       if (complete) {
-        widget.onComplete();
+        _completionReady = true;
+        _deliverCompletion();
       } else {
         setState(_prepareRound);
       }
     });
   }
 
+  void _deliverCompletion() {
+    if (!_completionReady || _finished || _emergencyDialogOpen) return;
+    _finished = true;
+    widget.onComplete();
+  }
+
+  void _tapSequence(SequenceBoard board, int number) {
+    if (_finished ||
+        _transitioning ||
+        _session.isComplete ||
+        !identical(board, _sequence) ||
+        number <= _sequenceCompleted) {
+      return;
+    }
+    if (!board.accepts(number, completedCount: _sequenceCompleted)) {
+      _answer(false);
+      return;
+    }
+    setState(() {
+      _sequenceCompleted += 1;
+      _feedback = null;
+      _feedbackCorrect = false;
+    });
+    if (_sequenceCompleted == board.cellCount) _answer(true);
+  }
+
   Future<void> _confirmEmergencyExit() async {
-    if (widget.onEmergencyExit == null) return;
+    if (widget.onEmergencyExit == null || _finished || _emergencyDialogOpen) {
+      return;
+    }
+    _emergencyDialogOpen = true;
     final confirmed = await showDialog<bool>(
       context: context,
       useRootNavigator: false,
@@ -147,7 +185,16 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         ],
       ),
     );
-    if (confirmed == true && mounted) widget.onEmergencyExit?.call();
+    _emergencyDialogOpen = false;
+    if (!mounted || _finished) return;
+    if (confirmed == true) {
+      _finished = true;
+      _previewTimer?.cancel();
+      _nextTimer?.cancel();
+      widget.onEmergencyExit?.call();
+    } else {
+      _deliverCompletion();
+    }
   }
 
   @override
@@ -252,9 +299,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                       child: TextButton.icon(
-                        onPressed: _transitioning
-                            ? null
-                            : _confirmEmergencyExit,
+                        onPressed: _confirmEmergencyExit,
                         style: TextButton.styleFrom(
                           foregroundColor: _muted,
                           minimumSize: const Size(48, 48),
@@ -276,6 +321,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     ChallengeKind.math => _buildMath(),
     ChallengeKind.memory => _buildMemory(),
     ChallengeKind.stroop => _buildStroop(),
+    ChallengeKind.sequence => _buildSequence(),
     ChallengeKind.mixed => const SizedBox.shrink(),
   };
 
@@ -473,6 +519,98 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               label: choice.label,
               swatch: _inkColor(choice),
               onPressed: () => _answer(question.accepts(choice)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSequence() {
+    final board = _sequence!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _instruction(
+          'Нажимай по порядку',
+          'От 1 до ${board.cellCount}. Найди следующее число.',
+        ),
+        const SizedBox(height: 16),
+        Semantics(
+          liveRegion: true,
+          child: Text(
+            _sequenceCompleted == board.cellCount
+                ? 'Все числа найдены'
+                : 'Следующее: ${_sequenceCompleted + 1}',
+            key: const ValueKey('sequence-next'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _accent,
+              fontSize: 19,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: board.cellCount,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: board.columns,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+              ),
+              itemBuilder: (context, index) {
+                final number = board.numbers[index];
+                final completed = number <= _sequenceCompleted;
+                final enabled = !completed && !_transitioning && !_finished;
+                void tap() => _tapSequence(board, number);
+                return Semantics(
+                  key: ValueKey('sequence-number-$number'),
+                  button: true,
+                  selected: completed,
+                  enabled: enabled,
+                  label: 'Число $number',
+                  value: completed ? 'Выбрано' : 'Не выбрано',
+                  excludeSemantics: true,
+                  onTap: enabled ? tap : null,
+                  child: Material(
+                    color: completed ? _accent : _surface,
+                    borderRadius: BorderRadius.circular(16),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: enabled ? tap : null,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Text(
+                            '$number',
+                            style: TextStyle(
+                              color: completed ? _background : _text,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (completed)
+                            const Positioned(
+                              top: 6,
+                              right: 6,
+                              child: Icon(
+                                Icons.check_rounded,
+                                color: _background,
+                                size: 14,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),

@@ -6,6 +6,7 @@ Android 8 / API 26 is the minimum. Flutter draws the screens and verifies wake-u
 
 - `AlarmManager.setAlarmClock()` schedules one exact occurrence. A native broadcast receiver starts a `mediaPlayback` foreground service. A high-importance full-screen notification opens Flutter's wake-up screen. The notification's wake-up action does **not** silence the alarm.
 - App UI/process closure is not the alarm timer. Each snooze is another system alarm and carries the original occurrence ID and persisted snooze count. Updating or disabling an active occurrence through normal settings is rejected.
+- `escalateOnSnooze` is an optional opt-in saved with the base challenge difficulty. Existing configurations without it retain `false`. Snooze, process recovery, reboot and preview copies preserve the setting; native code continues to own the actual `snoozesUsed` count. Flutter uses that count to raise the challenge by one level per snooze, capped at hard, without changing the saved base difficulty. The next ordinary occurrence starts with a fresh count.
 - Configurations and the bounded 512-event journal live in device-protected SharedPreferences; critical writes use synchronous `commit()`. Audio falls back from the system alarm ringtone to the bundled WAV if the system ringtone is unavailable, including before first unlock after reboot.
 - Boot, package replacement and wall-clock/timezone changes restore the schedules. Boot receivers **only reschedule system alarms** and do not start a media playback service directly. A recent missed occurrence is retried; one more than 15 minutes late is marked missed. Snoozed occurrences retain their budget after reboot.
 - Weekday recurrence uses local calendar days, not fixed 24-hour intervals. Nonexistent spring DST times normalize forward using Android's Calendar; repeated autumn times use Calendar's selected occurrence once. A timezone change recalculates scheduled alarms in local time, while an existing snooze keeps its absolute deadline.
@@ -29,7 +30,7 @@ Channel: `five_more/alarm`.
 
 | Method | Input | Output |
 | --- | --- | --- |
-| `schedule` | `id,title,hour,minute,weekdays,enabled,snoozeMinutes,maxSnoozes,challengeKind,difficulty` | `{ok,nextAt,snoozesUsed,alarm}` or `{ok:false,error,message}` |
+| `schedule` | `id,title,hour,minute,weekdays,enabled,snoozeMinutes,maxSnoozes,challengeKind,difficulty`, optional boolean `escalateOnSnooze` (default false) | `{ok,nextAt,snoozesUsed,alarm}` or `{ok:false,error,message}` |
 | `cancel` | `id` | Disable inactive schedule; active alarms return `alarm_active` |
 | `snooze` | Ringing `id` | Native budget checked; returns `snooze_limit` without stopping sound when exhausted |
 | `dismiss` | Ringing `id`, optional `emergency` | Resolve after Flutter task verification, or emergency exit |
@@ -43,6 +44,8 @@ Channel: `five_more/alarm`.
 
 ISO weekdays are Monday=1 through Sunday=7. Empty weekdays means a one-shot next occurrence. Native scheduling always recomputes the next occurrence from hour/minute/weekdays; any stale `nextAt` in a Flutter snapshot is ignored. Only the internal preview helper supplies an explicit short deadline. Preview deadlines remain absolute across timezone changes, and resolved test configurations are removed. `nextAt=0` means no future occurrence. Delivery to Flutter is at-least-once within the bounded journal; Flutter deduplicates by event ID and acknowledges after persistence. Event types are `fired`, `snoozed`, `dismissed`, `emergency_dismissed`, `timed_out`, `missed`, and `schedule_failed`. Each event has a stable UUID, alarm ID, occurrence ID, epoch-millisecond timestamp and snooze count. Flutter merges native enabled/nextAt state without deleting local drafts and excludes `preview:` configurations from its regular alarm list.
 
+New schedule requests accept challenge kinds `math`, `memory`, `stroop`, `sequence` and `mixed`, and difficulty `easy`, `medium` or `hard`. Unknown values or a non-boolean `escalateOnSnooze` return `invalid_challenge` before changing a schedule; strings and numbers never opt the user in. Missing kind/difficulty retain the historical `math`/`medium` defaults. Preview copies of legacy configurations use the same safe fallback for unknown old kinds as Flutter.
+
 ## Required physical-device checks
 
 These remain manual release gates, not claims of completed testing:
@@ -55,6 +58,7 @@ These remain manual release gates, not claims of completed testing:
 6. Test two due alarms, one-shot auto-disable, weekday recurrence, timezone changes and a DST transition.
 7. Verify emergency exit, timeout and sound fallback. Test alarm volume zero and Bluetooth routing explicitly.
 8. Start a delayed test, lock the screen, cancel before delivery, and cancel once already ringing. Repeat after reopening the app; test cancellation must leave ordinary alarms unchanged. Verify the selected checklist row opens its matching Android panel and status refreshes on return.
+9. Enable challenge escalation on an easy alarm, snooze using both the notification and Flutter, and reopen the process between snoozes. Verify medium then hard, never beyond hard; the next recurring morning must start at easy. Existing alarms with escalation off must keep their selected difficulty.
 
 ## Primary API references
 

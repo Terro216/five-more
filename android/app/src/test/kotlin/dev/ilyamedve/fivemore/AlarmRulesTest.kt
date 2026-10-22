@@ -13,6 +13,54 @@ class AlarmRulesTest {
     private fun at(value: String): Long = Instant.parse(value).toEpochMilli()
     private val utc = TimeZone.getTimeZone("UTC")
 
+    @Test fun legacyChallengeConfigurationDoesNotOptIntoEscalation() {
+        val defaults = AlarmRules.challengeOptions(emptyMap<String, Any>())!!
+        assertEquals("math", defaults.kind)
+        assertEquals("medium", defaults.difficulty)
+        assertFalse(defaults.escalateOnSnooze)
+        val legacy = AlarmRules.challengeOptions(mapOf("challengeKind" to "memory", "difficulty" to "hard"))!!
+        assertEquals("memory", legacy.kind)
+        assertEquals("hard", legacy.difficulty)
+        assertFalse(legacy.escalateOnSnooze)
+    }
+
+    @Test fun configuredChallengeKeepsBaseDifficultyForEverySupportedKind() {
+        for (kind in listOf("math", "memory", "stroop", "sequence", "mixed")) {
+            for (escalate in listOf(false, true)) {
+                val options = AlarmRules.challengeOptions(mapOf(
+                    "challengeKind" to kind, "difficulty" to "easy", "escalateOnSnooze" to escalate,
+                ))!!
+                assertEquals(kind, options.kind)
+                assertEquals("easy", options.difficulty)
+                assertEquals(escalate, options.escalateOnSnooze)
+            }
+        }
+    }
+
+    @Test fun escalationRejectsTruthyStringsNumbersAndExplicitNull() {
+        for (value in listOf("true", "false", 1, 0, 1L, 1.0, null)) {
+            assertNull(AlarmRules.challengeOptions(mapOf("escalateOnSnooze" to value)))
+        }
+    }
+
+    @Test fun unknownOrCoercedChallengeOptionsAreRejectedBeforeScheduling() {
+        for (value in listOf("", "unknown", "Sequence", true, 1, null)) {
+            assertNull(AlarmRules.challengeOptions(mapOf("challengeKind" to value)))
+        }
+        for (value in listOf("", "expert", "Hard", true, 1, null)) {
+            assertNull(AlarmRules.challengeOptions(mapOf("difficulty" to value)))
+        }
+    }
+
+    @Test fun legacyPreviewFallbackDoesNotRejectAnExistingAlarmOrCoerceEscalation() {
+        val legacy = mapOf("challengeKind" to "old-unknown-kind", "difficulty" to "hard", "escalateOnSnooze" to "true")
+        assertNull(AlarmRules.challengeOptions(legacy))
+        val preview = AlarmRules.challengeOptions(legacy, fromStoredConfiguration = true)!!
+        assertEquals("math", preview.kind)
+        assertEquals("hard", preview.difficulty)
+        assertFalse(preview.escalateOnSnooze)
+    }
+
     @Test fun testDelayAcceptsDefaultAndInclusiveIntegerBounds() {
         assertEquals(5, AlarmRules.testDelaySeconds(null))
         assertEquals(5, AlarmRules.testDelaySeconds(5))

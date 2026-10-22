@@ -525,6 +525,11 @@ class _AlarmHomeState extends State<AlarmHome> {
                         : '${alarm.maxSnoozes} × ${alarm.snoozeMinutes} мин',
                     style: const TextStyle(color: morning, fontSize: 11),
                   ),
+                  if (alarm.escalateOnSnooze && alarm.maxSnoozes > 0)
+                    const Text(
+                      'Сложнее после переноса',
+                      style: TextStyle(color: morning, fontSize: 11),
+                    ),
                   if (!controller.device.supported)
                     const Text(
                       'Черновик',
@@ -758,7 +763,7 @@ class _AlarmHomeState extends State<AlarmHome> {
     builder: (context) => AlertDialog(
       title: const Text('Ещё пять'),
       content: const Text(
-        'Версия · 0.2.0\n\n'
+        'Версия · 0.3.0\n\n'
         'Простой будильник, ограниченные переносы и задания для пробуждения.\n\n'
         'Без регистрации, рекламы и трекинга сна. Настройки и история остаются на телефоне.\n\n'
         'Перед первым утром проверь срабатывание на своём телефоне. '

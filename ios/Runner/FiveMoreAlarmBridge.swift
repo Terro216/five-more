@@ -64,7 +64,16 @@ private enum FiveMoreAlarmStore {
   }
 
   static var configurations: [String: [String: Any]] {
-    get { data["configurations"] as? [String: [String: Any]] ?? [:] }
+    get {
+      let saved = data["configurations"] as? [String: [String: Any]] ?? [:]
+      return saved.mapValues { original in
+        var config = original
+        // Legacy occurrences keep their original difficulty until the user opts in.
+        // The next configuration write persists this additive default.
+        if config["escalateOnSnooze"] == nil { config["escalateOnSnooze"] = false }
+        return config
+      }
+    }
     set { var root = data; root["configurations"] = newValue; data = root }
   }
 
@@ -432,12 +441,26 @@ private final class FiveMoreAlarmEngine {
       let snooze = args["snoozeMinutes"] as? Int, (1...30).contains(snooze),
       let maximum = args["maxSnoozes"] as? Int, (0...10).contains(maximum)
     else { throw failure("Проверь время, дни недели и настройки переноса.") }
+    let kind = args["challengeKind"] ?? "math"
+    let difficulty = args["difficulty"] ?? "medium"
+    guard let kind = kind as? String,
+      ["math", "memory", "stroop", "sequence", "mixed"].contains(kind),
+      let difficulty = difficulty as? String,
+      ["easy", "medium", "hard"].contains(difficulty)
+    else { throw failure("Проверь вид и сложность задания.") }
+    var escalateOnSnooze = false
+    if let value = args["escalateOnSnooze"] {
+      // NSNumber can bridge 0/1 to Bool; only CFBoolean is a valid opt-in.
+      guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID()
+      else { throw failure("Проверь настройку усложнения после переноса.") }
+      escalateOnSnooze = number.boolValue
+    }
     return [
       "id": id, "title": String((args["title"] as? String ?? "").prefix(100)),
       "hour": hour, "minute": minute, "weekdays": Array(Set(days)).sorted(),
       "enabled": args["enabled"] as? Bool ?? true, "snoozeMinutes": snooze,
-      "maxSnoozes": maximum, "challengeKind": args["challengeKind"] as? String ?? "math",
-      "difficulty": args["difficulty"] as? String ?? "medium",
+      "maxSnoozes": maximum, "challengeKind": kind, "difficulty": difficulty,
+      "escalateOnSnooze": escalateOnSnooze,
     ]
   }
 

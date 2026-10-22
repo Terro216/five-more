@@ -6,6 +6,23 @@ import java.util.TimeZone
 /** Pure scheduling rules shared by the receiver/service and covered without an Android runtime. */
 object AlarmRules {
     data class Snooze(val used: Int, val nextAt: Long)
+    data class ChallengeOptions(val kind: String, val difficulty: String, val escalateOnSnooze: Boolean)
+
+    /** New requests are strict; preview copies retain the safe defaults of legacy saved data. */
+    fun challengeOptions(arguments: Map<*, *>, fromStoredConfiguration: Boolean = false): ChallengeOptions? {
+        val kind = if (arguments.containsKey("challengeKind")) arguments["challengeKind"] else "math"
+        val difficulty = if (arguments.containsKey("difficulty")) arguments["difficulty"] else "medium"
+        val escalation = if (arguments.containsKey("escalateOnSnooze")) arguments["escalateOnSnooze"] else false
+        val validKind = kind is String && kind in setOf("math", "memory", "stroop", "sequence", "mixed")
+        val validDifficulty = difficulty is String && difficulty in setOf("easy", "medium", "hard")
+        if (fromStoredConfiguration) return ChallengeOptions(
+            if (validKind) kind as String else "math",
+            if (validDifficulty) difficulty as String else "medium",
+            escalation as? Boolean ?: false,
+        )
+        if (!validKind || !validDifficulty || escalation !is Boolean) return null
+        return ChallengeOptions(kind as String, difficulty as String, escalation)
+    }
 
     /** MethodChannel integers may arrive as Int or Long; never truncate a fractional delay. */
     fun testDelaySeconds(value: Any?): Int? {

@@ -119,8 +119,11 @@ class _RingingScreenState extends State<RingingScreen> {
         final ringing = widget.controller.ringing ?? widget.ringing;
         if (_challenge) {
           return ChallengeScreen(
+            key: ValueKey(
+              '${ringing.occurrenceId}:${ringing.challengeDifficulty.name}',
+            ),
             kind: ringing.alarm.challengeKind,
-            difficulty: ringing.alarm.difficulty,
+            difficulty: ringing.challengeDifficulty,
             onComplete: () => _dismiss(),
             onEmergencyExit: () => _dismiss(emergency: true),
           );
@@ -223,7 +226,10 @@ class _RingingScreenState extends State<RingingScreen> {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          '${ringing.alarm.difficulty.label} · пройди, чтобы отключить',
+                                          _challengeLevel(ringing),
+                                          key: const ValueKey(
+                                            'ringing-challenge-level',
+                                          ),
                                           style: const TextStyle(
                                             fontSize: 12,
                                             color: muted,
@@ -271,7 +277,8 @@ class _RingingScreenState extends State<RingingScreen> {
                                       : _snooze,
                                   icon: const Icon(Icons.snooze_rounded),
                                   label: Text(
-                                    'Ещё ${ringing.alarm.snoozeMinutes} минут',
+                                    _snoozeLabel(ringing),
+                                    textAlign: TextAlign.center,
                                   ),
                                 ),
                               ),
@@ -318,6 +325,27 @@ class _RingingScreenState extends State<RingingScreen> {
       },
     ),
   );
+
+  String _challengeLevel(RingingAlarm ringing) {
+    final level = ringing.challengeDifficulty.label;
+    final used = ringing.snoozesUsed;
+    if (!ringing.alarm.escalateOnSnooze || used == 0) {
+      return '$level · пройди, чтобы отключить';
+    }
+    return used == 1
+        ? '$level · после 1 переноса'
+        : '$level · после $used переносов';
+  }
+
+  String _snoozeLabel(RingingAlarm ringing) {
+    final nextLevel = ringing.alarm.difficultyForSnoozes(
+      ringing.snoozesUsed + 1,
+    );
+    final label = 'Ещё ${ringing.alarm.snoozeMinutes} минут';
+    return nextLevel != ringing.challengeDifficulty
+        ? '$label · затем ${nextLevel.label.toLowerCase()}'
+        : label;
+  }
 
   String _snoozeTiming(RingingAlarm ringing) {
     final now = widget.controller.now;

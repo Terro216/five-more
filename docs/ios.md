@@ -14,6 +14,14 @@ build phase and provide `NSAlarmKitUsageDescription` in Info.plist.
   current occurrence does not overwrite the original recurring configuration.
   A failed snooze creation leaves the current alarm ringing. If stopping the
   current alarm fails, the new snooze is cancelled.
+- The optional boolean `escalateOnSnooze` is saved with the base challenge
+  difficulty and preserved in snooze and preview configurations. Older saved
+  alarms without it return `false`; reads do not rewrite the store. Flutter
+  computes the current challenge from the native `snoozesUsed` count, one level
+  per snooze up to hard. Native code keeps the base difficulty unchanged and
+  starts the next ordinary occurrence with a fresh count. New schedule requests
+  reject strings/numbers in this boolean and accept only `math`, `memory`,
+  `stroop`, `sequence`, `mixed` and the `easy`/`medium`/`hard` difficulty levels.
 - The system configuration, occurrence identifier, snooze budget and bounded
   event queue live in native UserDefaults, independent of the Dart process.
   `LiveActivityIntent` runs in the app process, so no App Group is required.
@@ -72,6 +80,10 @@ sound start time. It is not a complete delivery audit when the app never runs.
    reopening the app must not create an additional test or restore a cancelled one.
 6. Verify restart, daylight-saving changes, timezone changes, overlapping
    alarms, and locked-device App Intent behavior on the target iOS release.
+7. Enable escalation on an easy alarm and reopen the app between snoozes.
+   Verify medium then hard, with the next recurring morning starting at easy.
+   Alarms created before this option or with it disabled keep their selected
+   difficulty. System Stop remains available regardless of the option.
 
 Simulator compilation is useful but does not establish physical-device alarm
 reliability. Signing/distribution and device testing are separate release work.

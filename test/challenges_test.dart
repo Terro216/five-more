@@ -96,8 +96,9 @@ void main() {
         ChallengeKind.math,
         ChallengeKind.memory,
         ChallengeKind.stroop,
+        ChallengeKind.sequence,
       });
-      expect(session.rounds, hasLength(3));
+      expect(session.rounds, hasLength(4));
     });
   });
 

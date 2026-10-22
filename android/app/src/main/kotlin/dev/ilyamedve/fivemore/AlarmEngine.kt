@@ -76,14 +76,16 @@ class AlarmEngine(private val context: Context) {
         val maxSnoozes = (arguments["maxSnoozes"] as? Number)?.toInt() ?: 3
         val weekdays = (arguments["weekdays"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() } ?: emptyList()
         if (hour !in 0..23 || minute !in 0..59 || snoozeMinutes !in 1..30 || maxSnoozes !in 0..10 || weekdays.any { it !in 1..7 }) return fail("invalid_schedule")
+        val challenge = AlarmRules.challengeOptions(arguments, fromStoredConfiguration = test != null)
+            ?: return fail("invalid_challenge")
         val enabled = arguments["enabled"] as? Boolean ?: true
         if (enabled && !canSchedule()) return fail("exact_alarm_permission")
         val alarm = JSONObject()
             .put("id", id).put("title", (arguments["title"] as? String ?: "Ещё пять").take(160))
             .put("hour", hour).put("minute", minute).put("weekdays", JSONArray(weekdays.distinct()))
             .put("enabled", enabled).put("snoozeMinutes", snoozeMinutes).put("maxSnoozes", maxSnoozes)
-            .put("challengeKind", arguments["challengeKind"] as? String ?: "math")
-            .put("difficulty", arguments["difficulty"] ?: "medium")
+            .put("challengeKind", challenge.kind).put("difficulty", challenge.difficulty)
+            .put("escalateOnSnooze", challenge.escalateOnSnooze)
             .put("snoozesUsed", 0).put("occurrenceId", UUID.randomUUID().toString())
             .put("state", if (enabled) "scheduled" else "disabled")
         val nextAt = if (enabled) {
