@@ -2,9 +2,48 @@ package dev.ilyamedve.fivemore
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class AlarmSafetyTest {
+    @Test fun backgroundClockRecoveryStopsAudioAfterResolvingTheLastExpiredRing() {
+        val now = 10_000_000L
+        val recovery = AlarmRules.recoveryPlan(
+            enabled = true, state = "ringing", nextAt = 0L,
+            ringingSince = now - 16 * 60_000L, now = now,
+            maximumRingMs = 15 * 60_000L, clockChanged = true,
+        )
+        assertEquals(AlarmRules.RecoveryAction.RESOLVE, recovery.action)
+        assertEquals("timed_out", recovery.event)
+        val actions = mutableListOf<String>()
+        // Once resolve() persisted the terminal state, no ringing record remains.
+        AlarmSafety.stopRecoveredPlaybackIfIdle(
+            hasRingingAlarm = { actions.add("read-current-state"); false },
+            stopPlayback = { actions.add("stop-service") },
+        )
+        assertEquals(listOf("read-current-state", "stop-service"), actions)
+    }
+
+    @Test fun resolvingOneExpiredRingDoesNotSilenceAnotherRingingOccurrence() {
+        var stopped = false
+        AlarmSafety.stopRecoveredPlaybackIfIdle(
+            hasRingingAlarm = { true },
+            stopPlayback = { stopped = true },
+        )
+        assertFalse(stopped)
+    }
+
+    @Test fun recoveryReadFailureIsNotTreatedAsAnIdleAlarmEngine() {
+        var stopped = false
+        assertThrows(IllegalStateException::class.java) {
+            AlarmSafety.stopRecoveredPlaybackIfIdle(
+                hasRingingAlarm = { throw IllegalStateException("unreadable store") },
+                stopPlayback = { stopped = true },
+            )
+        }
+        assertFalse(stopped)
+    }
+
     @Test fun persistedDismissalDoesNotStopTheNextQueuedAlarm() {
         var fallbackCalled = false
         val result = AlarmSafety.resolveOrSilence(

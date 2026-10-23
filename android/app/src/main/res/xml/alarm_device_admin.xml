@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Enrollment alone adds Android's deactivation step before uninstall.
+         No password, screen-lock, camera, encryption, or wipe policy is requested. -->
+    <uses-policies />
+</device-admin>

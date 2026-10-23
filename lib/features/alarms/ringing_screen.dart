@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../app/alarm_controller.dart';
 import '../../app/theme.dart';
 import '../../models/alarm.dart';
+import '../../models/snooze_position.dart';
 import '../challenges/challenge_models.dart';
 import '../challenges/challenge_screen.dart';
 import 'alarm_editor.dart';
@@ -269,6 +270,16 @@ class _RingingScreenState extends State<RingingScreen> {
           textAlign: TextAlign.center,
           style: const TextStyle(color: morning, fontSize: 14, height: 1.4),
         ),
+        if (ringing.alarm.moveSnoozeButton &&
+            ringing.alarm.difficultyForSnoozes(ringing.snoozesUsed + 1) !=
+                ringing.challengeDifficulty) ...[
+          const SizedBox(height: 8),
+          Text(
+            'После переноса — ${ringing.alarm.difficultyForSnoozes(ringing.snoozesUsed + 1).label.toLowerCase()}.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: muted, fontSize: 14),
+          ),
+        ],
       ] else
         Text(
           ringing.alarm.maxSnoozes == 0
@@ -319,15 +330,61 @@ class _RingingScreenState extends State<RingingScreen> {
       ),
       if (ringing.snoozesRemaining > 0) ...[
         const SizedBox(height: 10),
-        OutlinedButton.icon(
-          key: const ValueKey('ringing-snooze'),
-          onPressed: _finishing || widget.controller.busy ? null : _snooze,
-          icon: const Icon(Icons.snooze_rounded),
-          label: Text(_snoozeLabel(ringing), textAlign: TextAlign.center),
-        ),
+        _snoozeControl(ringing),
       ],
     ],
   );
+
+  Widget _snoozeControl(RingingAlarm ringing) {
+    final onPressed = _finishing || widget.controller.busy ? null : _snooze;
+    if (!ringing.alarm.moveSnoozeButton) {
+      return OutlinedButton.icon(
+        key: const ValueKey('ringing-snooze'),
+        onPressed: onPressed,
+        icon: const Icon(Icons.snooze_rounded),
+        label: Text(_snoozeLabel(ringing), textAlign: TextAlign.center),
+      );
+    }
+    final position = snoozePositionFor(
+      ringing.occurrenceId,
+      ringing.snoozesUsed,
+    );
+    // Reserve the full area for the current ring. There is no animation,
+    // timer-driven relocation, or layout change while a press is in progress.
+    return LayoutBuilder(
+      builder: (context, constraints) => Padding(
+        key: const ValueKey('moving-snooze-area'),
+        padding: EdgeInsets.only(
+          top: position.onBottom ? 16 : 0,
+          bottom: position.onBottom ? 0 : 16,
+        ),
+        child: Align(
+          alignment: position.onRight
+              ? Alignment.centerRight
+              : Alignment.centerLeft,
+          child: SizedBox(
+            width: constraints.maxWidth * .6,
+            child: OutlinedButton(
+              key: const ValueKey('ringing-snooze'),
+              onPressed: onPressed,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(48, 50),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+              ),
+              child: Text(
+                'Ещё ${ringing.alarm.snoozeMinutes} мин',
+                semanticsLabel: _snoozeLabel(ringing),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   String _challengeLevel(RingingAlarm ringing) {
     final level = ringing.challengeDifficulty.label;

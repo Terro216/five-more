@@ -411,6 +411,31 @@ class AlarmController extends ChangeNotifier {
     _notify();
   });
 
+  Future<AlarmResult> restoreAlarms() => _mutate(() async {
+    if (!device.supported || device.bootRecoverySupported != true) {
+      return const AlarmResult(
+        ok: false,
+        error: 'Восстановление расписания здесь недоступно.',
+      );
+    }
+    final result = await gateway.restoreAlarms();
+    device = await gateway.status();
+    if (storageHealthy) await _mergeNativeConfigs();
+    if (result.ok &&
+        (!device.supported ||
+            device.error != null ||
+            device.recoveryError != null)) {
+      return AlarmResult(
+        ok: false,
+        error:
+            device.recoveryError ??
+            device.error ??
+            'Не удалось подтвердить восстановление расписания. Обнови статус.',
+      );
+    }
+    return result;
+  }, requiresStorage: false);
+
   Future<void> refreshStatus() => _enqueue(() async {
     try {
       device = await gateway.status();

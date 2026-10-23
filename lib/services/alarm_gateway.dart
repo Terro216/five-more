@@ -18,6 +18,9 @@ class AlarmDeviceStatus {
     this.alarmVolume,
     this.alarmMaxVolume,
     this.activeTest,
+    this.deviceAdminActive,
+    this.bootRecoverySupported,
+    this.recoveryError,
   });
 
   final String platform;
@@ -33,6 +36,9 @@ class AlarmDeviceStatus {
   final int? alarmVolume;
   final int? alarmMaxVolume;
   final DeviceAlarmCheck? activeTest;
+  final bool? deviceAdminActive;
+  final bool? bootRecoverySupported;
+  final String? recoveryError;
   bool get canSchedule => supported && exactAlarms && notifications;
   bool get needsAttention =>
       supported &&
@@ -40,7 +46,8 @@ class AlarmDeviceStatus {
           !notifications ||
           !fullScreenIntent ||
           alarmVolume == 0 ||
-          error != null);
+          error != null ||
+          recoveryError != null);
 
   factory AlarmDeviceStatus.fromJson(Map<String, dynamic> json) =>
       AlarmDeviceStatus(
@@ -52,6 +59,13 @@ class AlarmDeviceStatus {
         challengeEnforced: json['challengeEnforced'] != false,
         scheduledCount: intValue(json['scheduledCount'], 0),
         activeTest: DeviceAlarmCheck.tryFromJson(json['activeTest']),
+        deviceAdminActive: json['deviceAdminActive'] is bool
+            ? json['deviceAdminActive'] as bool
+            : null,
+        bootRecoverySupported: json['bootRecoverySupported'] is bool
+            ? json['bootRecoverySupported'] as bool
+            : null,
+        recoveryError: alarmErrorMessage(json['recoveryError'] as String?),
         batteryOptimized: json['batteryOptimized'] is bool
             ? json['batteryOptimized'] as bool
             : null,
@@ -128,6 +142,7 @@ class AlarmResult {
 abstract class AlarmGateway {
   Future<AlarmDeviceStatus> status();
   Future<void> requestPermissions({String? target});
+  Future<AlarmResult> restoreAlarms();
   Future<AlarmResult> schedule(Alarm alarm);
   Future<AlarmResult> cancel(String id);
   Future<AlarmResult> snooze(String id);
@@ -191,6 +206,8 @@ class NativeAlarmGateway implements AlarmGateway {
   @override
   Future<AlarmResult> schedule(Alarm alarm) =>
       _action('schedule', alarm.toJson()..remove('nextAt'));
+  @override
+  Future<AlarmResult> restoreAlarms() => _action('restoreAlarms', {});
   @override
   Future<AlarmResult> cancel(String id) => _action('cancel', {'id': id});
   @override

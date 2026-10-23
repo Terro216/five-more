@@ -17,11 +17,18 @@ class AlarmStore(context: Context) {
                     // Reading a pre-v0.3 occurrence must not silently opt it into harder challenges.
                     // Its next ordinary native write persists this additive default.
                     if (!alarm.has("escalateOnSnooze")) alarm.put("escalateOnSnooze", false)
+                    if (!alarm.has("moveSnoozeButton")) alarm.put("moveSnoozeButton", false)
                 }
             }
         }
 
     fun get(id: String): JSONObject? = alarms().firstOrNull { it.optString("id") == id }
+
+    var recoveryError: String?
+        get() = prefs.getString("recoveryError", null)
+        set(value) {
+            check(prefs.edit().putString("recoveryError", value).commit()) { "Cannot persist alarm recovery result" }
+        }
 
     fun put(alarm: JSONObject) {
         val all = alarms().filterNot { it.optString("id") == alarm.getString("id") } + alarm

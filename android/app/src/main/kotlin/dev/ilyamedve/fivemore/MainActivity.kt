@@ -2,12 +2,14 @@ package dev.ilyamedve.fivemore
 
 import android.Manifest
 import android.app.NotificationManager
+import android.app.admin.DevicePolicyManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
@@ -56,6 +58,7 @@ class MainActivity : FlutterActivity() {
                     "snooze" -> result.success(engine.snooze(id))
                     "dismiss" -> result.success(engine.dismiss(id, emergency = args["emergency"] == true))
                     "status" -> result.success(engine.status())
+                    "restoreAlarms" -> result.success(engine.restoreAlarms())
                     "getRingingAlarm" -> {
                         val ringing = engine.getRingingAlarm()
                         updateWakeScreen(ringing != null)
@@ -111,7 +114,34 @@ class MainActivity : FlutterActivity() {
                 else if (Build.VERSION.SDK_INT >= 34) openSettings(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName")))
                 else openChannelSettings()
             }
-            "battery" -> openSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            "battery" -> {
+                val power = getSystemService(PowerManager::class.java)
+                if (power.isIgnoringBatteryOptimizations(packageName)) {
+                    openSettings(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                } else {
+                    openSettings(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+                }
+            }
+            "deviceAdmin" -> when (AlarmDeviceAdminReceiver.active(this)) {
+                null -> false
+                true -> openSettings(Intent(Settings.ACTION_SECURITY_SETTINGS))
+                false -> openSettings(
+                    Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                        .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, AlarmDeviceAdminReceiver.component(this))
+                        .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, getString(R.string.alarm_admin_explanation))
+                )
+            }
+            "removeDeviceAdmin" -> {
+                if (AlarmDeviceAdminReceiver.active(this) == null) false
+                else {
+                    // Android revocation is asynchronous. Flutter rechecks actual state;
+                    // this branch never claims that removal already finished.
+                    getSystemService(DevicePolicyManager::class.java)
+                        .removeActiveAdmin(AlarmDeviceAdminReceiver.component(this))
+                    true
+                }
+            }
+            "appSettings" -> openSettings(appDetailsIntent())
             "alarmVolume" -> openSettings(Intent(Settings.ACTION_SOUND_SETTINGS))
             else -> false
         }
@@ -146,6 +176,9 @@ class MainActivity : FlutterActivity() {
         updateWakeScreen(ringing)
         if (ringing) {
             startForegroundService(Intent(this, AlarmRingingService::class.java))
+        } else {
+            // Recovery may just have resolved an expired stored occurrence.
+            stopService(Intent(this, AlarmRingingService::class.java))
         }
     }
 

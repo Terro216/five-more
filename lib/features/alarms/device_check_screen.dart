@@ -32,6 +32,9 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
   String? _sourceAlarmId;
   String? _error;
   bool _acting = false;
+  Timer? _adminTimer;
+  bool _adminRemoving = false;
+  bool _adminPollBusy = false;
 
   AlarmController get controller => widget.controller;
 
@@ -48,11 +51,15 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
   @override
   void dispose() {
     _clock.cancel();
+    _adminTimer?.cancel();
     _scroll.dispose();
     super.dispose();
   }
 
-  Future<void> _run(Future<AlarmResult> Function() action) async {
+  Future<void> _run(
+    Future<AlarmResult> Function() action, {
+    String? successMessage,
+  }) async {
     if (_acting) return;
     setState(() {
       _acting = true;
@@ -67,6 +74,10 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
           ? null
           : result.error ?? 'Не удалось завершить проверку.';
     });
+    if (result.ok && successMessage != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(successMessage)));
+    }
     if (_error != null ||
         (!wasPending && controller.deviceCheck?.pending == true)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -94,6 +105,78 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
       MaterialPageRoute(builder: (_) => AlarmEditor(controller: controller)),
     );
     if (mounted) setState(() {});
+  }
+
+  Future<void> _changeAdmin(bool enabled) async {
+    if (_acting || _adminRemoving || controller.busy) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: Text(
+          enabled ? 'Защитить от удаления?' : 'Снять защиту от удаления?',
+        ),
+        content: Text(
+          enabled
+              ? 'Android предложит сделать «Ещё пять» администратором устройства. '
+                    'Перед удалением приложения потребуется снять этот статус. '
+                    'Это дополнительный шаг против удаления в полусне. '
+                    'Защиту можно отключить здесь или в системных настройках. '
+                    'Приложение не получает права стирать данные или менять пароль телефона.'
+              : 'Приложение можно будет удалить обычным способом. '
+                    'Будильники и их настройки сохранятся.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            key: const ValueKey('device-admin-confirm'),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(enabled ? 'Открыть запрос Android' : 'Снять защиту'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await _permission(enabled ? 'deviceAdmin' : 'removeDeviceAdmin');
+      if (!enabled &&
+          mounted &&
+          controller.error == null &&
+          controller.device.deviceAdminActive == true) {
+        _watchAdminRemoval();
+      }
+    }
+  }
+
+  void _watchAdminRemoval() {
+    _adminTimer?.cancel();
+    setState(() => _adminRemoving = true);
+    var attempts = 0;
+    _adminTimer = Timer.periodic(const Duration(milliseconds: 500), (
+      timer,
+    ) async {
+      if (_adminPollBusy || !mounted) return;
+      _adminPollBusy = true;
+      attempts += 1;
+      await controller.refreshStatus();
+      _adminPollBusy = false;
+      if (!mounted) return;
+      if (controller.device.deviceAdminActive != true || attempts >= 8) {
+        timer.cancel();
+        setState(() => _adminRemoving = false);
+        if (controller.device.deviceAdminActive == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Android пока сообщает, что защита включена. Обнови статус или сними её в системных настройках.',
+              ),
+            ),
+          );
+        }
+      }
+    });
   }
 
   void _practice() {
@@ -124,7 +207,10 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
           alarms.where((alarm) => alarm.id == selectedId).firstOrNull ??
           alarms.firstOrNull;
       final blocked = _acting || controller.busy;
-      final displayError = _error ?? controller.error ?? device.error;
+      final actionError = _error ?? controller.error ?? device.error;
+      final displayError = actionError == device.recoveryError
+          ? null
+          : actionError;
       return Scaffold(
         appBar: AppBar(
           title: const Text('Проверка телефона'),
@@ -154,6 +240,33 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                       ),
                     ),
                   ),
+                if (device.recoveryError != null) ...[
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      'Расписание восстановлено не полностью. ${device.recoveryError}',
+                      key: const ValueKey('alarm-recovery-error'),
+                      style: const TextStyle(
+                        color: Color(0xFFFFB4AB),
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                  if (device.platform == 'android' &&
+                      device.bootRecoverySupported == true)
+                    TextButton.icon(
+                      key: const ValueKey('alarm-recovery-retry'),
+                      onPressed: blocked
+                          ? null
+                          : () => _run(
+                              controller.restoreAlarms,
+                              successMessage: 'Расписание восстановлено. Проверь звонок на телефоне.',
+                            ),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Повторить восстановление'),
+                    ),
+                  const SizedBox(height: 20),
+                ],
                 if (!device.supported)
                   ..._preview()
                 else ...[
@@ -229,16 +342,8 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                           ? null
                           : () => _permission('alarmVolume'),
                     ),
-                  if (device.batteryOptimized == true)
-                    _advice(
-                      icon: Icons.battery_saver_outlined,
-                      title: 'Включена экономия батареи для приложения',
-                      text:
-                          'Если звонок пропадёт при блокировке, проверь ограничения '
-                          'батареи для «Ещё пять» в настройках телефона.',
-                      action: 'Открыть настройки батареи',
-                      onPressed: blocked ? null : () => _permission('battery'),
-                    ),
+                  if (device.platform == 'android')
+                    _reliabilitySettings(device, blocked),
                   if (check?.pending != true) ...[
                     const SizedBox(height: 28),
                     _heading('Проверочный звонок'),
@@ -342,6 +447,122 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
         ),
       );
     },
+  );
+
+  Widget _reliabilitySettings(
+    AlarmDeviceStatus device,
+    bool blocked,
+  ) => ExpansionTile(
+    key: const ValueKey('device-reliability'),
+    tilePadding: EdgeInsets.zero,
+    childrenPadding: const EdgeInsets.only(bottom: 16),
+    shape: const Border(),
+    collapsedShape: const Border(),
+    title: const Text('Надёжность и защита'),
+    subtitle: const Text('Перезагрузка, батарея и удаление'),
+    children: [
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'После перезагрузки',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            device.bootRecoverySupported == true
+                ? 'Расписание восстанавливается после загрузки Android, в том числе '
+                      'до первого разблокирования. Использованные переносы сохраняются. '
+                      'Проверь это на своём телефоне отдельным звонком после перезагрузки.'
+                : 'Поддержку восстановления на этом устройстве не удалось подтвердить. '
+                      'Обнови статус и проверь звонок после перезагрузки.',
+            style: const TextStyle(color: muted, height: 1.5),
+          ),
+          _advice(
+            icon: Icons.battery_saver_outlined,
+            title: switch (device.batteryOptimized) {
+              true => 'Приложение ограничено оптимизацией батареи',
+              false => 'Исключение из оптимизации батареи включено',
+              null => 'Проверь ограничения батареи',
+            },
+            text:
+                'Исключение помогает будильнику работать в фоне. На некоторых '
+                'телефонах нужно дополнительно разрешить автозапуск в настройках приложения.',
+            action: device.batteryOptimized == true
+                ? 'Разрешить работу без оптимизации'
+                : 'Открыть настройки батареи',
+            onPressed: blocked ? null : () => _permission('battery'),
+          ),
+          TextButton(
+            key: const ValueKey('device-app-settings'),
+            onPressed: blocked ? null : () => _permission('appSettings'),
+            child: const Text('Настройки приложения и автозапуск'),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Защита от удаления',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            switch (device.deviceAdminActive) {
+              true =>
+                'Статус администратора включён. Для удаления приложения '
+                    'сначала потребуется снять защиту. Её можно отключить здесь '
+                    'или в системных настройках.',
+              false =>
+                'Дополнительный шаг против удаления приложения в полусне. '
+                    'Включается отдельно через системный запрос Android.',
+              null =>
+                'Администратор устройства здесь недоступен. '
+                    'Эта защита не требуется для обычного звонка.',
+            },
+            key: const ValueKey('device-admin-status'),
+            style: const TextStyle(color: muted, height: 1.5),
+          ),
+          if (device.deviceAdminActive != null)
+            TextButton(
+              key: const ValueKey('device-admin-change'),
+              onPressed: blocked || _adminRemoving
+                  ? null
+                  : () => _changeAdmin(device.deviceAdminActive != true),
+              child: Text(
+                device.deviceAdminActive == true
+                    ? 'Снять защиту от удаления'
+                    : 'Включить защиту от удаления',
+              ),
+            ),
+          if (_adminRemoving)
+            Semantics(
+              liveRegion: true,
+              child: const Text(
+                'Android снимает защиту…',
+                key: ValueKey('device-admin-removing'),
+              ),
+            ),
+          const SizedBox(height: 12),
+          const Text(
+            'Защита не запрещает выключение телефона или принудительную остановку. '
+            'После принудительной остановки открой приложение и восстанови расписание. '
+            'В режиме «Не беспокоить» разреши будильники в настройках звука телефона.',
+            style: TextStyle(color: muted, height: 1.5),
+          ),
+          if (device.bootRecoverySupported == true &&
+              device.recoveryError == null)
+            TextButton.icon(
+              key: const ValueKey('alarm-recovery-manual'),
+              onPressed: blocked
+                  ? null
+                  : () => _run(
+                      controller.restoreAlarms,
+                      successMessage: 'Расписание восстановлено. Проверь звонок на телефоне.',
+                    ),
+              icon: const Icon(Icons.restore_rounded),
+              label: const Text('Восстановить расписание'),
+            ),
+        ],
+      ),
+    ],
   );
 
   List<Widget> _preview() => [

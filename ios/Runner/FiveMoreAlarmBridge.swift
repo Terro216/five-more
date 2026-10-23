@@ -71,6 +71,7 @@ private enum FiveMoreAlarmStore {
         // Legacy occurrences keep their original difficulty until the user opts in.
         // The next configuration write persists this additive default.
         if config["escalateOnSnooze"] == nil { config["escalateOnSnooze"] = false }
+        if config["moveSnoozeButton"] == nil { config["moveSnoozeButton"] = false }
         return config
       }
     }
@@ -310,6 +311,7 @@ private final class FiveMoreAlarmEngine {
     do {
       switch call.method {
       case "status": result(try status())
+      case "restoreAlarms": result(["ok": false, "error": "unsupported_permission"])
       case "requestPermissions":
         result(try await requestPermission(args["target"] as? String))
       case "getRingingAlarm": result(try ringingAlarm())
@@ -444,7 +446,7 @@ private final class FiveMoreAlarmEngine {
     let kind = args["challengeKind"] ?? "math"
     let difficulty = args["difficulty"] ?? "medium"
     guard let kind = kind as? String,
-      ["math", "memory", "stroop", "sequence", "mixed"].contains(kind),
+      ["math", "memory", "stroop", "sequence", "mirror", "captcha", "mixed"].contains(kind),
       let difficulty = difficulty as? String,
       ["easy", "medium", "hard"].contains(difficulty)
     else { throw failure("Проверь вид и сложность задания.") }
@@ -455,12 +457,19 @@ private final class FiveMoreAlarmEngine {
       else { throw failure("Проверь настройку усложнения после переноса.") }
       escalateOnSnooze = number.boolValue
     }
+    var moveSnoozeButton = false
+    if let value = args["moveSnoozeButton"] {
+      guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID()
+      else { throw failure("Проверь настройку перемещения кнопки переноса.") }
+      moveSnoozeButton = number.boolValue
+    }
     return [
       "id": id, "title": String((args["title"] as? String ?? "").prefix(100)),
       "hour": hour, "minute": minute, "weekdays": Array(Set(days)).sorted(),
       "enabled": args["enabled"] as? Bool ?? true, "snoozeMinutes": snooze,
       "maxSnoozes": maximum, "challengeKind": kind, "difficulty": difficulty,
       "escalateOnSnooze": escalateOnSnooze,
+      "moveSnoozeButton": moveSnoozeButton,
     ]
   }
 

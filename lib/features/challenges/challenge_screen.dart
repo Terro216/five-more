@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/theme.dart';
 import 'challenge_models.dart';
@@ -41,6 +42,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   MemoryPattern? _memory;
   StroopQuestion? _stroop;
   SequenceBoard? _sequence;
+  MirrorTextQuestion? _mirror;
+  CaptchaQuestion? _captcha;
+  final _typedAnswer = TextEditingController();
+  final _typedFocus = FocusNode();
   int _sequenceCompleted = 0;
   final _selected = <int>{};
   bool _showPattern = false;
@@ -80,6 +85,8 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   void dispose() {
     _previewTimer?.cancel();
     _nextTimer?.cancel();
+    _typedAnswer.dispose();
+    _typedFocus.dispose();
     super.dispose();
   }
 
@@ -89,6 +96,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     _transitioning = false;
     _selected.clear();
     _sequenceCompleted = 0;
+    _typedAnswer.clear();
     _activeKind = _session.currentKind;
     switch (_activeKind) {
       case ChallengeKind.math:
@@ -104,8 +112,24 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         _stroop = generateStroopQuestion(_random, widget.difficulty);
       case ChallengeKind.sequence:
         _sequence = generateSequenceBoard(_random, widget.difficulty);
+      case ChallengeKind.mirror:
+        _mirror = generateMirrorTextQuestion(
+          _random,
+          widget.difficulty,
+          previous: _mirror?.text,
+        );
+      case ChallengeKind.captcha:
+        _captcha = generateCaptchaQuestion(
+          _random,
+          widget.difficulty,
+          previous: _captcha?.code,
+        );
       case ChallengeKind.mixed:
         throw StateError('A mixed session contains concrete task types');
+    }
+    if (_activeKind != ChallengeKind.mirror &&
+        _activeKind != ChallengeKind.captcha) {
+      _typedFocus.unfocus();
     }
   }
 
@@ -155,6 +179,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   void _deliverCompletion() {
     if (!_completionReady || _finished || _emergencyDialogOpen) return;
     _finished = true;
+    _typedFocus.unfocus();
     widget.onComplete();
   }
 
@@ -183,10 +208,12 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       return;
     }
     _emergencyDialogOpen = true;
+    _typedFocus.unfocus();
     final confirmed = await showDialog<bool>(
       context: context,
       useRootNavigator: false,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: const Text('Остановить без задания?'),
         content: const Text(
           'Если нужно срочно выключить звук, можно выйти сейчас. '
@@ -218,6 +245,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     final currentNumber = (_session.completedSteps + (_transitioning ? 0 : 1))
         .clamp(1, _session.totalSteps);
     return PopScope(
@@ -230,27 +258,39 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               constraints: const BoxConstraints(maxWidth: 520),
               child: Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 16, 0),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.wb_twilight_rounded, color: _accent),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            widget.practice ? 'Пробный подъём' : 'Доброе утро',
-                            style: const TextStyle(color: _muted, fontSize: 15),
-                          ),
-                        ),
-                        if (widget.practice)
-                          IconButton(
-                            tooltip: 'Закрыть тренировку',
-                            onPressed: () => Navigator.maybePop(context),
-                            icon: const Icon(Icons.close, color: _muted),
-                          ),
-                      ],
+                  if (!keyboardVisible || widget.practice)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 16, 16, 0),
+                      child: Row(
+                        children: [
+                          if (!keyboardVisible) ...[
+                            const Icon(
+                              Icons.wb_twilight_rounded,
+                              color: _accent,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                widget.practice
+                                    ? 'Пробный подъём'
+                                    : 'Доброе утро',
+                                style: const TextStyle(
+                                  color: _muted,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ),
+                          ] else
+                            const Spacer(),
+                          if (widget.practice)
+                            IconButton(
+                              tooltip: 'Закрыть тренировку',
+                              onPressed: () => Navigator.maybePop(context),
+                              icon: const Icon(Icons.close, color: _muted),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
@@ -270,6 +310,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                                   ),
                                 ),
                               ),
+                              const SizedBox(width: 12),
                               Text(
                                 '$currentNumber / ${_session.totalSteps}',
                                 style: const TextStyle(
@@ -341,6 +382,8 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     ChallengeKind.memory => _buildMemory(),
     ChallengeKind.stroop => _buildStroop(),
     ChallengeKind.sequence => _buildSequence(),
+    ChallengeKind.mirror => _buildTextTask(mirrored: true),
+    ChallengeKind.captcha => _buildTextTask(mirrored: false),
     ChallengeKind.mixed => const SizedBox.shrink(),
   };
 
@@ -362,6 +405,143 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         style: const TextStyle(color: _muted, fontSize: 15, height: 1.5),
       ),
     ],
+  );
+
+  void _submitTextAnswer() {
+    if (_finished || _transitioning || _session.isComplete) return;
+    final correct = switch (_activeKind) {
+      ChallengeKind.mirror => _mirror!.accepts(_typedAnswer.text),
+      ChallengeKind.captcha => _captcha!.accepts(_typedAnswer.text),
+      _ => false,
+    };
+    _answer(correct);
+  }
+
+  Widget _buildTextTask({required bool mirrored}) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(
+        mirrored
+            ? 'Прочитай отражённую фразу и введи её обычным текстом.'
+            : 'Введи буквы и цифры с картинки. Буквы — латинские.',
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: _muted, fontSize: 15, height: 1.5),
+      ),
+      const SizedBox(height: 20),
+      Semantics(
+        label: mirrored
+            ? 'Зеркальная фраза для визуального чтения'
+            : 'Картинка с кодом для визуального чтения',
+        image: true,
+        child: ExcludeSemantics(
+          child: Container(
+            key: ValueKey(mirrored ? 'mirror-prompt' : 'captcha-prompt'),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            decoration: BoxDecoration(
+              color: _surface,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: mirrored
+                ? Transform.flip(
+                    key: const ValueKey('mirror-reflection'),
+                    flipX: true,
+                    child: Text(
+                      _mirror!.text,
+                      key: const ValueKey('mirror-phrase'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: _text,
+                        fontSize: 26,
+                        height: 1.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  )
+                : _captchaImage(_captcha!),
+          ),
+        ),
+      ),
+      const SizedBox(height: 20),
+      TextField(
+        key: const ValueKey('typed-challenge-answer'),
+        controller: _typedAnswer,
+        focusNode: _typedFocus,
+        readOnly: _transitioning || _finished,
+        autocorrect: false,
+        enableSuggestions: false,
+        enableIMEPersonalizedLearning: false,
+        autofillHints: const [],
+        smartDashesType: SmartDashesType.disabled,
+        smartQuotesType: SmartQuotesType.disabled,
+        keyboardType: mirrored
+            ? TextInputType.text
+            : TextInputType.visiblePassword,
+        textCapitalization: mirrored
+            ? TextCapitalization.none
+            : TextCapitalization.characters,
+        textInputAction: TextInputAction.done,
+        maxLength: mirrored ? 128 : 12,
+        inputFormatters: mirrored
+            ? null
+            : [FilteringTextInputFormatter.allow(RegExp('[a-zA-Z0-9]'))],
+        decoration: InputDecoration(
+          labelText: mirrored ? 'Ответ' : 'Код',
+          floatingLabelBehavior: FloatingLabelBehavior.never,
+          helperText: 'Регистр не важен',
+          errorText: _feedback != null && !_feedbackCorrect
+              ? 'Пока не совпало. Проверь картинку.'
+              : null,
+          errorMaxLines: 3,
+          counterText: '',
+        ),
+        onSubmitted: (_) => _submitTextAnswer(),
+      ),
+      const SizedBox(height: 14),
+      FilledButton(
+        key: const ValueKey('typed-challenge-submit'),
+        onPressed: _transitioning || _finished ? null : _submitTextAnswer,
+        child: const Text('Проверить ответ'),
+      ),
+      if (_accessibleNavigation) ...[
+        const SizedBox(height: 16),
+        const Text(
+          'Это визуальное задание. В тренировке можно выбрать другое. '
+          'Во время звонка доступно аварийное отключение.',
+          style: TextStyle(color: _muted, height: 1.5),
+        ),
+      ],
+    ],
+  );
+
+  Widget _captchaImage(CaptchaQuestion question) => CustomPaint(
+    foregroundPainter: _CaptchaLines(seed: question.decorationSeed),
+    child: Row(
+      key: const ValueKey('captcha-glyphs'),
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        for (var index = 0; index < question.code.length; index += 1)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Transform.rotate(
+                angle: question.rotations[index],
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    question.code[index],
+                    key: ValueKey('captcha-glyph-$index'),
+                    style: const TextStyle(
+                      color: _text,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
   );
 
   Widget _buildMath() {
@@ -704,4 +884,36 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     ChallengeInk.green => const Color(0xFF8EDDAB),
     ChallengeInk.purple => const Color(0xFFD5ABFF),
   };
+}
+
+class _CaptchaLines extends CustomPainter {
+  const _CaptchaLines({required this.seed});
+
+  final int seed;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final random = Random(seed);
+    final paint = Paint()
+      ..color = muted.withValues(alpha: .35)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+    for (var line = 0; line < 3; line += 1) {
+      final startY = size.height * (.2 + random.nextDouble() * .6);
+      final endY = size.height * (.2 + random.nextDouble() * .6);
+      final path = Path()
+        ..moveTo(0, startY)
+        ..quadraticBezierTo(
+          size.width / 2,
+          size.height * random.nextDouble(),
+          size.width,
+          endY,
+        );
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CaptchaLines oldDelegate) =>
+      seed != oldDelegate.seed;
 }

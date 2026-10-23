@@ -373,6 +373,27 @@ class _AlarmEditorState extends State<AlarmEditor> {
                         ),
                       ),
                     ],
+                    SwitchListTile.adaptive(
+                      key: const ValueKey('move-snooze-button'),
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Кнопка переноса меняет место'),
+                      subtitle: Text(
+                        _draft.maxSnoozes == 0 ? 'Сейчас переносы выключены.' : 'После каждого переноса — с другой стороны. Во время звонка она неподвижна.',
+                        style: const TextStyle(
+                          color: muted,
+                          fontSize: 12,
+                          height: 1.5,
+                        ),
+                      ),
+                      value: _draft.moveSnoozeButton,
+                      onChanged: _saving || _draft.maxSnoozes == 0
+                          ? null
+                          : (value) => setState(
+                              () => _draft = _draft.copyWith(
+                                moveSnoozeButton: value,
+                              ),
+                            ),
+                    ),
                     const _Heading('Задание для пробуждения'),
                     ...ChallengeKind.values.map(
                       (kind) => Semantics(
@@ -654,6 +675,8 @@ IconData challengeIcon(ChallengeKind kind) => switch (kind) {
   ChallengeKind.memory => Icons.grid_view_rounded,
   ChallengeKind.stroop => Icons.palette_outlined,
   ChallengeKind.sequence => Icons.format_list_numbered_rounded,
+  ChallengeKind.mirror => Icons.flip_rounded,
+  ChallengeKind.captcha => Icons.password_rounded,
   ChallengeKind.mixed => Icons.shuffle_rounded,
 };
 

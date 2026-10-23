@@ -30,6 +30,9 @@ class AlarmEngine(private val context: Context) {
             "batteryOptimized" to !context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName),
             "alarmVolume" to context.getSystemService(AudioManager::class.java).getStreamVolume(AudioManager.STREAM_ALARM),
             "alarmMaxVolume" to context.getSystemService(AudioManager::class.java).getStreamMaxVolume(AudioManager.STREAM_ALARM),
+            "deviceAdminActive" to AlarmDeviceAdminReceiver.active(context),
+            "bootRecoverySupported" to true,
+            "recoveryError" to (recoveryFailure ?: store.recoveryError),
             "scheduledCount" to alarms.count { it.optBoolean("enabled") },
             "alarms" to alarms.map { it.toMap() },
             "error" to safetyError,
@@ -86,6 +89,7 @@ class AlarmEngine(private val context: Context) {
             .put("enabled", enabled).put("snoozeMinutes", snoozeMinutes).put("maxSnoozes", maxSnoozes)
             .put("challengeKind", challenge.kind).put("difficulty", challenge.difficulty)
             .put("escalateOnSnooze", challenge.escalateOnSnooze)
+            .put("moveSnoozeButton", challenge.moveSnoozeButton)
             .put("snoozesUsed", 0).put("occurrenceId", UUID.randomUUID().toString())
             .put("state", if (enabled) "scheduled" else "disabled")
         val nextAt = if (enabled) {
@@ -188,7 +192,8 @@ class AlarmEngine(private val context: Context) {
         val now = System.currentTimeMillis()
         if (now + 1_000L < expectedAt) return false
         if (alarm.optLong("firedAt") == 0L) alarm.put("firedAt", now)
-        alarm.put("state", "ringing").put("ringingSince", now).put("nextAt", 0L)
+        val ringingSince = AlarmRules.ringingSinceAfterFire(alarm.optString("state"), alarm.optLong("ringingSince"), now)
+        alarm.put("state", "ringing").put("ringingSince", ringingSince).put("nextAt", 0L)
         store.put(alarm)
         store.event(alarm, "fired", now)
         return true
@@ -240,61 +245,74 @@ class AlarmEngine(private val context: Context) {
         )
     }
 
-    /** Boot/time changes only schedule AlarmManager work; never start media playback from boot. */
-    fun reschedule(clockChanged: Boolean = false, skipRinging: Boolean = false) {
-        if (!canSchedule()) return
-        val now = System.currentTimeMillis()
-        store.alarms().forEach { alarm ->
-            if (!alarm.optBoolean("enabled")) return@forEach
-            try {
-                when (alarm.optString("state")) {
-                    "ringing" -> {
-                        if (skipRinging) return@forEach
-                        // Preserve the occurrence and budget after process death/reboot.
-                        if (now - alarm.optLong("ringingSince", now) < MAX_RING_MS) {
-                            alarm.put("nextAt", now + 2_000L)
-                            store.put(alarm)
-                            arm(alarm)
-                        } else {
-                            store.event(alarm, "timed_out")
-                            resolve(alarm)
-                        }
-                    }
-                    "snoozed" -> {
-                        if (alarm.optLong("nextAt") <= now) {
-                            if (now - alarm.optLong("nextAt") > MAX_RING_MS) {
-                                store.event(alarm, "missed")
-                                resolve(alarm)
-                                return@forEach
-                            }
-                            alarm.put("nextAt", now + 2_000L)
-                        }
-                        store.put(alarm)
-                        arm(alarm)
-                    }
-                    "scheduled" -> {
-                        if (clockChanged && !AlarmRules.isPreviewId(alarm.optString("id"))) {
-                            alarm.put("nextAt", nextOccurrence(alarm))
-                        } else if (alarm.optLong("nextAt") <= now) {
-                            if (now - alarm.optLong("nextAt") <= MAX_RING_MS) {
-                                alarm.put("nextAt", now + 2_000L)
-                            } else {
-                                store.event(alarm, "missed")
-                                resolve(alarm)
-                                return@forEach
-                            }
-                        }
-                        store.put(alarm)
-                        arm(alarm)
-                    }
-                }
-            } catch (_: SecurityException) {
-                // Access can be revoked between canSchedule and setAlarmClock. UI reports it on resume.
-            }
-        }
+    /** Explicit foreground retry also reconciles audio after resolving an expired saved ring. */
+    fun restoreAlarms(): Map<String, Any?> {
+        reschedule(skipRinging = true)
+        refreshService()
+        val failure = recoveryFailure ?: store.recoveryError
+        return if (failure == null) mapOf("ok" to true) else fail(failure)
     }
 
-    private fun resolve(alarm: JSONObject) {
+    /** Boot/time changes only schedule AlarmManager work; never start media playback from boot. */
+    fun reschedule(clockChanged: Boolean = false, skipRinging: Boolean = false) {
+        val now = System.currentTimeMillis()
+        var failure: String? = null
+        try {
+            val alarms = store.alarms().filter { it.optBoolean("enabled") }
+            if (alarms.isNotEmpty() && !canSchedule()) {
+                failure = "exact_alarm_permission"
+            } else alarms.forEach { alarm ->
+                try {
+                    val plan = AlarmRules.recoveryPlan(
+                        enabled = true,
+                        state = alarm.optString("state"),
+                        nextAt = alarm.optLong("nextAt"),
+                        ringingSince = alarm.optLong("ringingSince", now),
+                        now = now,
+                        maximumRingMs = MAX_RING_MS,
+                        clockChanged = clockChanged,
+                        preview = AlarmRules.isPreviewId(alarm.optString("id")),
+                        skipRinging = skipRinging,
+                    )
+                    when (plan.action) {
+                        AlarmRules.RecoveryAction.IGNORE -> Unit
+                        AlarmRules.RecoveryAction.REARM, AlarmRules.RecoveryAction.NEXT_OCCURRENCE -> {
+                            // Never mint another occurrence or reset snoozes during recovery.
+                            val next = if (plan.action == AlarmRules.RecoveryAction.NEXT_OCCURRENCE)
+                                nextOccurrence(alarm, now) else plan.nextAt
+                            alarm.put("nextAt", next)
+                            store.put(alarm)
+                            arm(alarm)
+                        }
+                        AlarmRules.RecoveryAction.RESOLVE -> {
+                            store.event(alarm, checkNotNull(plan.event), now)
+                            resolve(alarm, onScheduleFailure = { failure = "exact_alarm_permission" })
+                        }
+                    }
+                } catch (_: SecurityException) {
+                    // Access can change between canSchedule and setAlarmClock.
+                    failure = "exact_alarm_permission"
+                } catch (_: Exception) {
+                    // Keep saved state for a later retry and expose restoration failure.
+                    failure = "schedule_failed"
+                }
+            }
+            // TIME_SET may resolve the last playing occurrence while no Activity is open.
+            // Its old service timeout would otherwise see not_ringing and leave audio running.
+            // A fresh successful store read is required; read failure leaves existing audio alone.
+            AlarmSafety.stopRecoveredPlaybackIfIdle(
+                hasRingingAlarm = { ringing() != null },
+                stopPlayback = { context.stopService(Intent(context, AlarmRingingService::class.java)) },
+            )
+        } catch (_: Exception) {
+            failure = "schedule_failed"
+        }
+        recoveryFailure = failure
+        try { store.recoveryError = failure }
+        catch (_: Exception) { recoveryFailure = "schedule_failed" }
+    }
+
+    private fun resolve(alarm: JSONObject, onScheduleFailure: (() -> Unit)? = null) {
         val repeats = alarm.optJSONArray("weekdays")?.length() ?: 0
         if (repeats == 0) {
             alarm.put("enabled", false).put("state", "disabled").put("nextAt", 0L)
@@ -316,7 +334,10 @@ class AlarmEngine(private val context: Context) {
             } catch (_: SecurityException) {
                 // A concurrent permission revocation must never prevent dismissing today's sound.
                 store.event(alarm, "schedule_failed")
+                onScheduleFailure?.invoke()
             }
+        } else if (alarm.optBoolean("enabled")) {
+            onScheduleFailure?.invoke()
         }
     }
 
@@ -364,6 +385,7 @@ class AlarmEngine(private val context: Context) {
         const val MAX_RING_MS = 15 * 60_000L
         private val silencedAlarmIds = mutableSetOf<String>()
         private var safetyError: String? = null
+        private var recoveryFailure: String? = null
 
         fun fail(error: String, message: String? = null): Map<String, Any?> = mapOf("ok" to false, "error" to error, "message" to message)
 

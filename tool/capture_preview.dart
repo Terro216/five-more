@@ -12,6 +12,7 @@ import 'package:five_more/features/alarms/ringing_screen.dart';
 import 'package:five_more/features/challenges/challenge_models.dart';
 import 'package:five_more/features/challenges/challenge_screen.dart';
 import 'package:five_more/models/alarm.dart';
+import 'package:five_more/services/alarm_gateway.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -213,9 +214,46 @@ void main() {
       );
     });
   }
+
+  for (final variant in [
+    (name: '18-mirror', surface: _PreviewSurface.mirror, keyboard: false),
+    (name: '19-captcha', surface: _PreviewSurface.captcha, keyboard: false),
+    (
+      name: '20-mirror-keyboard-small-200',
+      surface: _PreviewSurface.mirror,
+      keyboard: true,
+    ),
+    (
+      name: '21-captcha-keyboard-small-200',
+      surface: _PreviewSurface.captcha,
+      keyboard: true,
+    ),
+  ]) {
+    testWidgets('capture ${variant.name}', (tester) async {
+      await _captureVariant(
+        tester,
+        name: variant.name,
+        surface: variant.surface,
+        size: variant.keyboard ? const Size(320, 640) : const Size(390, 844),
+        textScale: variant.keyboard ? 2 : 1,
+        safeInsets: const EdgeInsets.only(top: 24, bottom: 24),
+        keyboardHeight: variant.keyboard ? 260 : 0,
+      );
+    });
+  }
+
+  testWidgets('capture moving snooze across native counters', (tester) async {
+    await _captureMovingSnooze(tester);
+  });
+
+  testWidgets('capture optional protection and recovery states', (
+    tester,
+  ) async {
+    await _captureProtection(tester);
+  });
 }
 
-enum _PreviewSurface { ringing, math, editor }
+enum _PreviewSurface { ringing, math, editor, mirror, captcha }
 
 Future<void> _captureVariant(
   WidgetTester tester, {
@@ -224,6 +262,7 @@ Future<void> _captureVariant(
   required Size size,
   required double textScale,
   required EdgeInsets safeInsets,
+  double keyboardHeight = 0,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -270,6 +309,7 @@ Future<void> _captureVariant(
             textScaler: TextScaler.linear(textScale),
             padding: safeInsets,
             viewPadding: safeInsets,
+            viewInsets: EdgeInsets.only(bottom: keyboardHeight),
           ),
           child: child!,
         ),
@@ -282,6 +322,14 @@ Future<void> _captureVariant(
             kind: ChallengeKind.math,
             difficulty: ChallengeDifficulty.hard,
             practice: true,
+            onComplete: () {},
+            onEmergencyExit: () {},
+          ),
+          _PreviewSurface.mirror || _PreviewSurface.captcha => ChallengeScreen(
+            kind: surface == _PreviewSurface.mirror
+                ? ChallengeKind.mirror
+                : ChallengeKind.captcha,
+            difficulty: ChallengeDifficulty.medium,
             onComplete: () {},
             onEmergencyExit: () {},
           ),
@@ -303,11 +351,173 @@ Future<void> _captureVariant(
         );
     await tester.pumpAndSettle();
   }
+  if (keyboardHeight > 0) {
+    final answer = find.byKey(const ValueKey('typed-challenge-answer'));
+    await _reveal(tester, answer);
+    await tester.showKeyboard(answer);
+    await tester.pumpAndSettle();
+    final emergency = find.text('Нужно срочно выключить');
+    expect(emergency.hitTestable(), findsOneWidget);
+    expect(
+      tester.getRect(emergency).bottom,
+      lessThanOrEqualTo(size.height - keyboardHeight),
+    );
+    // A widget capture reserves the keyboard inset; it cannot render an OS IME.
+  }
   await _capture(tester, boundary, name);
   if (surface == _PreviewSurface.math) {
     await _reveal(tester, find.byType(FilledButton).last);
     await _capture(tester, boundary, '17-math-answers-small-200');
   }
+  await tester.pumpWidget(const SizedBox.shrink());
+}
+
+Future<void> _captureMovingSnooze(WidgetTester tester) async {
+  tester.view.physicalSize = const Size(390, 844);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  const alarm = Alarm(
+    id: 'capture-moving',
+    hour: 7,
+    minute: 30,
+    title: 'Спокойное утро',
+    difficulty: ChallengeDifficulty.easy,
+    escalateOnSnooze: true,
+    moveSnoozeButton: true,
+  );
+  final gateway = DeviceCheckGateway()
+    ..currentTime = DateTime(2026, 10, 23, 7, 30);
+  gateway.nativeAlarms[alarm.id] = alarm;
+  RingingAlarm occurrence(int count) => RingingAlarm(
+    alarm: alarm,
+    occurrenceId: 'capture-moving-morning',
+    firedAt: gateway.currentTime,
+    snoozesUsed: count,
+  );
+  gateway.ringing = occurrence(0);
+  final controller = AlarmController(
+    gateway: gateway,
+    storage: MemoryAlarmStorage(),
+    now: () => gateway.currentTime,
+  );
+  addTearDown(controller.dispose);
+  await controller.initialize(startPolling: false);
+  final boundary = GlobalKey();
+  await tester.pumpWidget(
+    RepaintBoundary(
+      key: boundary,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: fiveMoreTheme(),
+        locale: const Locale('ru'),
+        supportedLocales: const [Locale('ru'), Locale('en')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        home: RingingScreen(controller: controller, ringing: gateway.ringing!),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  final snooze = find.byKey(const ValueKey('ringing-snooze'));
+  expect(snooze.hitTestable(), findsOneWidget);
+  final before = tester.getRect(snooze);
+  await _capture(tester, boundary, '22-moving-snooze-first');
+  // Model the next native ring; a successful native snooze supplies this counter.
+  gateway.currentTime = gateway.currentTime.add(const Duration(minutes: 5));
+  gateway.ringing = occurrence(1);
+  await controller.poll();
+  await tester.pumpAndSettle();
+  expect(snooze.hitTestable(), findsOneWidget);
+  expect(tester.getRect(snooze).center.dx, isNot(before.center.dx));
+  await _capture(tester, boundary, '23-moving-snooze-next');
+  await tester.pumpWidget(const SizedBox.shrink());
+}
+
+class _ProtectionCaptureGateway extends DeviceCheckGateway {
+  bool adminActive = false;
+  String? restoreError;
+
+  @override
+  Future<AlarmDeviceStatus> status() async => AlarmDeviceStatus(
+    platform: 'android',
+    supported: true,
+    exactAlarms: true,
+    notifications: true,
+    fullScreenIntent: true,
+    alarms: nativeAlarms.values.toList(),
+    activeTest: activeTest,
+    batteryOptimized: true,
+    alarmVolume: 5,
+    alarmMaxVolume: 7,
+    deviceAdminActive: adminActive,
+    bootRecoverySupported: true,
+    recoveryError: restoreError,
+  );
+
+  @override
+  Future<void> requestPermissions({String? target}) async {
+    if (target == 'deviceAdmin') adminActive = true;
+    if (target == 'removeDeviceAdmin') adminActive = false;
+  }
+}
+
+Future<void> _captureProtection(WidgetTester tester) async {
+  tester.view.physicalSize = const Size(390, 844);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  final gateway = _ProtectionCaptureGateway();
+  const alarm = Alarm(id: 'capture-protection', hour: 7, minute: 30);
+  gateway.nativeAlarms[alarm.id] = alarm;
+  final controller = AlarmController(
+    gateway: gateway,
+    storage: MemoryAlarmStorage(),
+  );
+  addTearDown(controller.dispose);
+  await controller.initialize(startPolling: false);
+  final boundary = GlobalKey();
+  await tester.pumpWidget(
+    RepaintBoundary(
+      key: boundary,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: fiveMoreTheme(),
+        locale: const Locale('ru'),
+        supportedLocales: const [Locale('ru'), Locale('en')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        home: DeviceCheckScreen(controller: controller),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  final reliability = find.byKey(const ValueKey('device-reliability'));
+  await _reveal(tester, reliability);
+  await tester.tap(reliability);
+  await tester.pumpAndSettle();
+  final admin = find.byKey(const ValueKey('device-admin-change'));
+  await _reveal(tester, admin);
+  await _capture(tester, boundary, '24-protection-off');
+  await tester.tap(admin);
+  await tester.pumpAndSettle();
+  await _capture(tester, boundary, '25-protection-confirm');
+  await tester.tap(find.byKey(const ValueKey('device-admin-confirm')));
+  await tester.pumpAndSettle();
+  expect(gateway.adminActive, isTrue);
+  await _reveal(tester, admin);
+  await _capture(tester, boundary, '26-protection-on');
+  gateway.restoreError = 'Один из будильников не удалось назначить повторно.';
+  await controller.refreshStatus();
+  await tester.pumpAndSettle();
+  tester
+      .state<ScrollableState>(find.byType(Scrollable).first)
+      .position
+      .jumpTo(0);
+  await tester.pumpAndSettle();
+  expect(
+    find.byKey(const ValueKey('alarm-recovery-retry')).hitTestable(),
+    findsOneWidget,
+  );
+  await _capture(tester, boundary, '27-recovery-error');
   await tester.pumpWidget(const SizedBox.shrink());
 }
 

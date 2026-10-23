@@ -54,6 +54,9 @@ class FakeAlarmGateway implements AlarmGateway {
   Future<void> requestPermissions({String? target}) async {}
 
   @override
+  Future<AlarmResult> restoreAlarms() async => const AlarmResult(ok: true);
+
+  @override
   Future<AlarmResult> schedule(Alarm alarm) async {
     scheduleCalls.add(alarm);
     await beforeSchedule?.call();

@@ -97,8 +97,10 @@ void main() {
         ChallengeKind.memory,
         ChallengeKind.stroop,
         ChallengeKind.sequence,
+        ChallengeKind.mirror,
+        ChallengeKind.captcha,
       });
-      expect(session.rounds, hasLength(4));
+      expect(session.rounds, hasLength(6));
     });
   });
 

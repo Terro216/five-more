@@ -18,14 +18,16 @@ class AlarmRulesTest {
         assertEquals("math", defaults.kind)
         assertEquals("medium", defaults.difficulty)
         assertFalse(defaults.escalateOnSnooze)
+        assertFalse(defaults.moveSnoozeButton)
         val legacy = AlarmRules.challengeOptions(mapOf("challengeKind" to "memory", "difficulty" to "hard"))!!
         assertEquals("memory", legacy.kind)
         assertEquals("hard", legacy.difficulty)
         assertFalse(legacy.escalateOnSnooze)
+        assertFalse(legacy.moveSnoozeButton)
     }
 
     @Test fun configuredChallengeKeepsBaseDifficultyForEverySupportedKind() {
-        for (kind in listOf("math", "memory", "stroop", "sequence", "mixed")) {
+        for (kind in listOf("math", "memory", "stroop", "sequence", "mirror", "captcha", "mixed")) {
             for (escalate in listOf(false, true)) {
                 val options = AlarmRules.challengeOptions(mapOf(
                     "challengeKind" to kind, "difficulty" to "easy", "escalateOnSnooze" to escalate,
@@ -40,6 +42,30 @@ class AlarmRulesTest {
     @Test fun escalationRejectsTruthyStringsNumbersAndExplicitNull() {
         for (value in listOf("true", "false", 1, 0, 1L, 1.0, null)) {
             assertNull(AlarmRules.challengeOptions(mapOf("escalateOnSnooze" to value)))
+        }
+    }
+
+    @Test fun movingSnoozeRequiresAnActualBooleanAndKeepsTheSavedChoice() {
+        for (moving in listOf(false, true)) {
+            val options = AlarmRules.challengeOptions(mapOf("moveSnoozeButton" to moving))!!
+            assertEquals(moving, options.moveSnoozeButton)
+        }
+        for (value in listOf("true", "false", 1, 0, 1L, 1.0, null)) {
+            assertNull(AlarmRules.challengeOptions(mapOf("moveSnoozeButton" to value)))
+            assertFalse(AlarmRules.challengeOptions(mapOf("moveSnoozeButton" to value), fromStoredConfiguration = true)!!.moveSnoozeButton)
+        }
+    }
+
+    @Test fun savedTextChallengeAndMovingSnoozeRemainAvailableInPreview() {
+        for (kind in listOf("mirror", "captcha")) {
+            val preview = AlarmRules.challengeOptions(mapOf(
+                "challengeKind" to kind, "difficulty" to "hard",
+                "escalateOnSnooze" to true, "moveSnoozeButton" to true,
+            ), fromStoredConfiguration = true)!!
+            assertEquals(kind, preview.kind)
+            assertEquals("hard", preview.difficulty)
+            assertTrue(preview.escalateOnSnooze)
+            assertTrue(preview.moveSnoozeButton)
         }
     }
 

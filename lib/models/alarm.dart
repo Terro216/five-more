@@ -39,6 +39,7 @@ class Alarm {
     this.challengeKind = ChallengeKind.math,
     this.difficulty = ChallengeDifficulty.medium,
     this.escalateOnSnooze = false,
+    this.moveSnoozeButton = false,
     this.nextAt,
   });
 
@@ -62,6 +63,7 @@ class Alarm {
   final ChallengeKind challengeKind;
   final ChallengeDifficulty difficulty;
   final bool escalateOnSnooze;
+  final bool moveSnoozeButton;
   final DateTime? nextAt;
 
   String get timeLabel =>
@@ -116,6 +118,7 @@ class Alarm {
     ChallengeKind? challengeKind,
     ChallengeDifficulty? difficulty,
     bool? escalateOnSnooze,
+    bool? moveSnoozeButton,
     DateTime? nextAt,
     bool clearNextAt = false,
   }) => Alarm(
@@ -130,6 +133,7 @@ class Alarm {
     challengeKind: challengeKind ?? this.challengeKind,
     difficulty: difficulty ?? this.difficulty,
     escalateOnSnooze: escalateOnSnooze ?? this.escalateOnSnooze,
+    moveSnoozeButton: moveSnoozeButton ?? this.moveSnoozeButton,
     nextAt: clearNextAt ? null : nextAt ?? this.nextAt,
   );
 
@@ -145,6 +149,7 @@ class Alarm {
     'challengeKind': challengeKind.name,
     'difficulty': difficulty.name,
     'escalateOnSnooze': escalateOnSnooze,
+    'moveSnoozeButton': moveSnoozeButton,
     if (nextAt != null) 'nextAt': nextAt!.millisecondsSinceEpoch,
   };
 
@@ -176,6 +181,8 @@ class Alarm {
       ),
       // Pre-0.3 alarms keep the level their owner chose until explicitly opted in.
       escalateOnSnooze: json['escalateOnSnooze'] == true,
+      // Relocation is an explicit choice; older alarms retain a fixed button.
+      moveSnoozeButton: json['moveSnoozeButton'] == true,
       nextAt: parseNextTimestamp(json['nextAt']),
     );
   }

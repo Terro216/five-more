@@ -158,7 +158,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('all five training choices are visible without scrolling', (
+  testWidgets('all seven training choices remain reachable above navigation', (
     tester,
   ) async {
     final gateway = FakeAlarmGateway();
@@ -168,6 +168,10 @@ void main() {
     final navigationTop = tester.getRect(find.byType(NavigationBar)).top;
     for (final kind in ChallengeKind.values) {
       final row = find.byKey(ValueKey('practice-kind-${kind.name}'));
+      await tester.scrollUntilVisible(row, 150);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
       expect(row.hitTestable(), findsOneWidget, reason: kind.name);
       final bounds = tester.getRect(row);
       expect(bounds.height, greaterThanOrEqualTo(48));
@@ -178,6 +182,10 @@ void main() {
       );
     }
 
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('practice-kind-sequence')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Порядок'));
     await tester.pumpAndSettle();
     final practice = tester.widget<ChallengeScreen>(

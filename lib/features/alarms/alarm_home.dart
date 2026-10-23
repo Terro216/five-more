@@ -396,6 +396,8 @@ class _AlarmHomeState extends State<AlarmHome> {
         ? 'Проверь разрешения телефона'
         : device.alarmVolume == 0
         ? 'Звук будильника выключен'
+        : device.recoveryError != null
+        ? 'Расписание требует восстановления'
         : device.error != null
         ? 'Не удалось проверить телефон'
         : check?.pending == true
@@ -411,6 +413,8 @@ class _AlarmHomeState extends State<AlarmHome> {
         ? 'Часть разрешений выключена. Проверь их перед следующим утром.'
         : device.alarmVolume == 0
         ? 'Подними громкость будильника и повтори проверку.'
+        : device.recoveryError != null
+        ? 'Открой проверку телефона и повтори восстановление расписания.'
         : device.error != null
         ? device.error!
         : check?.pending == true
@@ -632,7 +636,9 @@ class _AlarmHomeState extends State<AlarmHome> {
             ChallengeKind.memory => 'Повтори рисунок из клеток',
             ChallengeKind.stroop => 'Выбери цвет букв, не слово',
             ChallengeKind.sequence => 'Нажимай числа по порядку',
-            ChallengeKind.mixed => 'Все четыре задания по очереди',
+            ChallengeKind.mirror => 'Прочитай отражённую фразу и введи её',
+            ChallengeKind.captcha => 'Введи код с картинки',
+            ChallengeKind.mixed => 'Все шесть заданий по очереди',
           }, style: const TextStyle(color: muted, fontSize: 13)),
           trailing: const ExcludeSemantics(
             child: Icon(Icons.play_arrow_rounded, color: morning),
@@ -757,7 +763,7 @@ class _AlarmHomeState extends State<AlarmHome> {
     builder: (context) => AlertDialog(
       title: const Text('Ещё пять'),
       content: const Text(
-        'Версия · 0.4.0\n\n'
+        'Версия · 0.5.0\n\n'
         'Простой будильник, ограниченные переносы и задания для пробуждения.\n\n'
         'Без регистрации, рекламы и трекинга сна. Настройки и история остаются на телефоне.\n\n'
         'Перед первым утром проверь срабатывание на своём телефоне. '

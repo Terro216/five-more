@@ -1,7 +1,7 @@
 import 'dart:math';
 
 /// Wake-up tasks contain no network, storage, or alarm dependencies.
-enum ChallengeKind { math, memory, stroop, sequence, mixed }
+enum ChallengeKind { math, memory, stroop, sequence, mirror, captcha, mixed }
 
 extension ChallengeKindLabel on ChallengeKind {
   String get label => switch (this) {
@@ -9,6 +9,8 @@ extension ChallengeKindLabel on ChallengeKind {
     ChallengeKind.memory => 'Память',
     ChallengeKind.stroop => 'Цвета',
     ChallengeKind.sequence => 'Порядок',
+    ChallengeKind.mirror => 'Зеркальный текст',
+    ChallengeKind.captcha => 'Код с картинки',
     ChallengeKind.mixed => 'Микс',
   };
 
@@ -17,7 +19,10 @@ extension ChallengeKindLabel on ChallengeKind {
     ChallengeKind.memory => 'Запомни и повтори рисунок из клеток',
     ChallengeKind.stroop => 'Выбери цвет букв, а не написанное слово',
     ChallengeKind.sequence => 'Найди числа и нажми их по порядку',
-    ChallengeKind.mixed => 'Счёт, память, цвета и порядок — по одному заданию',
+    ChallengeKind.mirror =>
+      'Прочитай отражённую фразу и введи её обычным текстом',
+    ChallengeKind.captcha => 'Разбери и введи код из букв и цифр',
+    ChallengeKind.mixed => 'Все шесть видов заданий — по одному шагу',
   };
 }
 
@@ -214,6 +219,94 @@ StroopQuestion generateStroopQuestion(
   return StroopQuestion(word: word, ink: ink, choices: choices);
 }
 
+/// The stored phrase is ordinary text; only its visual presentation is mirrored.
+/// Tolerate typing conventions, not missing words or reversed answers.
+class MirrorTextQuestion {
+  const MirrorTextQuestion(this.text);
+
+  final String text;
+
+  bool accepts(String candidate) =>
+      _normalizePhrase(candidate) == _normalizePhrase(text);
+
+  static String _normalizePhrase(String value) => value
+      .trim()
+      .toLowerCase()
+      .replaceAll('ё', 'е')
+      .replaceAll(RegExp(r'\s+'), ' ');
+}
+
+MirrorTextQuestion generateMirrorTextQuestion(
+  Random random,
+  ChallengeDifficulty difficulty, {
+  String? previous,
+}) {
+  final phrases = switch (difficulty) {
+    ChallengeDifficulty.easy => const [
+      'пора вставать',
+      'утро настало',
+      'новый рассвет',
+      'сон позади',
+    ],
+    ChallengeDifficulty.medium => const [
+      'я выбираю ранний подъём',
+      'сегодня утро начинается',
+      'первый шаг уже сделан',
+      'за окном начинается день',
+    ],
+    ChallengeDifficulty.hard => const [
+      'сегодня я встаю с первым звонком',
+      'новое утро начинается с маленького шага',
+      'я открываю глаза и начинаю новый день',
+      'время просыпаться и встречать новый день',
+    ],
+  };
+  final choices = phrases.where((phrase) => phrase != previous).toList();
+  return MirrorTextQuestion(choices[random.nextInt(choices.length)]);
+}
+
+/// Excludes easily confused pairs such as O/0, I/l/1, B/8 and S/5.
+const captchaLetters = 'ACEFHJKMNPRTUVWXY';
+const captchaDigits = '34679';
+const captchaAlphabet = '$captchaLetters$captchaDigits';
+
+class CaptchaQuestion {
+  CaptchaQuestion({
+    required this.code,
+    required List<double> rotations,
+    required this.decorationSeed,
+  }) : rotations = List.unmodifiable(rotations);
+
+  final String code;
+  final List<double> rotations;
+  final int decorationSeed;
+
+  bool accepts(String candidate) => candidate.trim().toUpperCase() == code;
+}
+
+CaptchaQuestion generateCaptchaQuestion(
+  Random random,
+  ChallengeDifficulty difficulty, {
+  String? previous,
+}) {
+  final length = difficulty.index + 4;
+  String code;
+  do {
+    final characters = [
+      captchaLetters[random.nextInt(captchaLetters.length)],
+      captchaDigits[random.nextInt(captchaDigits.length)],
+      for (var index = 2; index < length; index += 1)
+        captchaAlphabet[random.nextInt(captchaAlphabet.length)],
+    ]..shuffle(random);
+    code = characters.join();
+  } while (code == previous);
+  return CaptchaQuestion(
+    code: code,
+    rotations: List.generate(length, (_) => (random.nextDouble() - .5) * .3),
+    decorationSeed: random.nextInt(1 << 30),
+  );
+}
+
 /// Mistakes never remove completed steps or create an impossible lockout.
 class ChallengeSession {
   ChallengeSession({
@@ -258,6 +351,8 @@ class ChallengeSession {
         ChallengeKind.memory,
         ChallengeKind.stroop,
         ChallengeKind.sequence,
+        ChallengeKind.mirror,
+        ChallengeKind.captcha,
       ]..shuffle(random);
       return List.unmodifiable(rounds);
     }
@@ -266,6 +361,8 @@ class ChallengeSession {
       ChallengeKind.memory => difficulty == ChallengeDifficulty.hard ? 3 : 2,
       ChallengeKind.stroop => difficulty.index + 3,
       ChallengeKind.sequence => difficulty == ChallengeDifficulty.hard ? 3 : 2,
+      ChallengeKind.mirror => difficulty == ChallengeDifficulty.hard ? 3 : 2,
+      ChallengeKind.captcha => difficulty == ChallengeDifficulty.hard ? 3 : 2,
       ChallengeKind.mixed => throw StateError('Mixed rounds are handled above'),
     };
     return List.unmodifiable(List.filled(count, kind));

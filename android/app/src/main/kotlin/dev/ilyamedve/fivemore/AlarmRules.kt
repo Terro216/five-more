@@ -6,22 +6,60 @@ import java.util.TimeZone
 /** Pure scheduling rules shared by the receiver/service and covered without an Android runtime. */
 object AlarmRules {
     data class Snooze(val used: Int, val nextAt: Long)
-    data class ChallengeOptions(val kind: String, val difficulty: String, val escalateOnSnooze: Boolean)
+    data class ChallengeOptions(
+        val kind: String,
+        val difficulty: String,
+        val escalateOnSnooze: Boolean,
+        val moveSnoozeButton: Boolean,
+    )
+    enum class RecoveryAction { IGNORE, REARM, NEXT_OCCURRENCE, RESOLVE }
+    data class RecoveryPlan(val action: RecoveryAction, val nextAt: Long = 0L, val event: String? = null)
+
+    /** Replaying an interrupted ring must not restart its fifteen-minute safety limit. */
+    fun ringingSinceAfterFire(previousState: String, previousSince: Long, now: Long): Long =
+        if (previousState == "ringing" && previousSince > 0L) previousSince else now
+
+    /** Decisions only: the engine applies them without replacing the occurrence or snooze budget. */
+    fun recoveryPlan(
+        enabled: Boolean,
+        state: String,
+        nextAt: Long,
+        ringingSince: Long,
+        now: Long,
+        maximumRingMs: Long,
+        clockChanged: Boolean = false,
+        preview: Boolean = false,
+        skipRinging: Boolean = false,
+    ): RecoveryPlan {
+        if (!enabled) return RecoveryPlan(RecoveryAction.IGNORE)
+        if (state == "ringing") {
+            if (now - ringingSince >= maximumRingMs) return RecoveryPlan(RecoveryAction.RESOLVE, event = "timed_out")
+            if (skipRinging) return RecoveryPlan(RecoveryAction.IGNORE)
+            return RecoveryPlan(RecoveryAction.REARM, now + 2_000L)
+        }
+        if (state !in setOf("scheduled", "snoozed")) return RecoveryPlan(RecoveryAction.IGNORE)
+        if (state == "scheduled" && clockChanged && !preview) return RecoveryPlan(RecoveryAction.NEXT_OCCURRENCE)
+        if (nextAt > now) return RecoveryPlan(RecoveryAction.REARM, nextAt)
+        return if (now - nextAt <= maximumRingMs) RecoveryPlan(RecoveryAction.REARM, now + 2_000L)
+            else RecoveryPlan(RecoveryAction.RESOLVE, event = "missed")
+    }
 
     /** New requests are strict; preview copies retain the safe defaults of legacy saved data. */
     fun challengeOptions(arguments: Map<*, *>, fromStoredConfiguration: Boolean = false): ChallengeOptions? {
         val kind = if (arguments.containsKey("challengeKind")) arguments["challengeKind"] else "math"
         val difficulty = if (arguments.containsKey("difficulty")) arguments["difficulty"] else "medium"
         val escalation = if (arguments.containsKey("escalateOnSnooze")) arguments["escalateOnSnooze"] else false
-        val validKind = kind is String && kind in setOf("math", "memory", "stroop", "sequence", "mixed")
+        val movingSnooze = if (arguments.containsKey("moveSnoozeButton")) arguments["moveSnoozeButton"] else false
+        val validKind = kind is String && kind in setOf("math", "memory", "stroop", "sequence", "mirror", "captcha", "mixed")
         val validDifficulty = difficulty is String && difficulty in setOf("easy", "medium", "hard")
         if (fromStoredConfiguration) return ChallengeOptions(
             if (validKind) kind as String else "math",
             if (validDifficulty) difficulty as String else "medium",
             escalation as? Boolean ?: false,
+            movingSnooze as? Boolean ?: false,
         )
-        if (!validKind || !validDifficulty || escalation !is Boolean) return null
-        return ChallengeOptions(kind as String, difficulty as String, escalation)
+        if (!validKind || !validDifficulty || escalation !is Boolean || movingSnooze !is Boolean) return null
+        return ChallengeOptions(kind as String, difficulty as String, escalation, movingSnooze)
     }
 
     /** MethodChannel integers may arrive as Int or Long; never truncate a fractional delay. */
