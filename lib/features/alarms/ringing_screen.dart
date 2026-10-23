@@ -30,10 +30,14 @@ class _RingingScreenState extends State<RingingScreen> {
   Timer? _holdTimer;
   Timer? _clockTimer;
   String? _error;
+  String? _completedOccurrenceId;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) FocusManager.instance.primaryFocus?.unfocus();
+    });
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && !_challenge && !_emergency) setState(() {});
     });
@@ -124,199 +128,68 @@ class _RingingScreenState extends State<RingingScreen> {
             ),
             kind: ringing.alarm.challengeKind,
             difficulty: ringing.challengeDifficulty,
-            onComplete: () => _dismiss(),
+            onComplete: () {
+              _completedOccurrenceId = ringing.occurrenceId;
+              _dismiss();
+            },
             onEmergencyExit: () => _dismiss(emergency: true),
           );
         }
         if (_emergency) return _emergencyScreen();
         return Scaffold(
           backgroundColor: ink,
+          resizeToAvoidBottomInset: false,
           bottomNavigationBar: SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: TextButton(
+                key: const ValueKey('ringing-emergency'),
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                 onPressed: _finishing
                     ? null
                     : () => setState(() => _emergency = true),
                 child: const Text(
                   'Аварийное отключение',
                   style: TextStyle(color: muted),
+                  textAlign: TextAlign.center,
                 ),
               ),
             ),
           ),
           body: SafeArea(
+            bottom: false,
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
+                constraints: const BoxConstraints(maxWidth: 900),
                 child: LayoutBuilder(
-                  builder: (context, constraints) => SingleChildScrollView(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(26, 26, 26, 18),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.wb_twilight_rounded,
-                              color: morning,
-                              size: 64,
-                            ),
-                            const SizedBox(height: 22),
-                            Text(
-                              ringing.alarm.id.startsWith('preview:')
-                                  ? 'Проверка будильника'
-                                  : 'Доброе утро',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: morning,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            FittedBox(
-                              child: Text(
-                                ringing.alarm.timeLabel,
-                                style: const TextStyle(
-                                  fontSize: 92,
-                                  fontWeight: FontWeight.w300,
-                                  letterSpacing: -5,
-                                  height: 1.1,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              ringing.alarm.displayTitle,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 23,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 38),
-                            Container(
-                              padding: const EdgeInsets.all(18),
-                              decoration: BoxDecoration(
-                                color: panel,
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    challengeIcon(ringing.alarm.challengeKind),
-                                    color: morning,
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          ringing.alarm.challengeKind.label,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _challengeLevel(ringing),
-                                          key: const ValueKey(
-                                            'ringing-challenge-level',
-                                          ),
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: muted,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            if (_error != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: Text(
-                                  _error!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Colors.redAccent,
-                                  ),
-                                ),
-                              ),
-                            SizedBox(
-                              width: double.infinity,
-                              child: FilledButton.icon(
-                                onPressed: _finishing || widget.controller.busy
-                                    ? null
-                                    : () => setState(() => _challenge = true),
-                                icon: const Icon(Icons.arrow_forward_rounded),
-                                label: const Text(
-                                  'Я встаю · пройти задание',
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            if (ringing.snoozesRemaining > 0) ...[
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed:
-                                      _finishing || widget.controller.busy
-                                      ? null
-                                      : _snooze,
-                                  icon: const Icon(Icons.snooze_rounded),
-                                  label: Text(
-                                    _snoozeLabel(ringing),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                'Осталось переносов: ${ringing.snoozesRemaining} из ${ringing.alarm.maxSnoozes}'
-                                ' · ${ringing.snoozesRemaining * ringing.alarm.snoozeMinutes} мин',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: muted,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _snoozeTiming(ringing),
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: morning,
-                                  fontSize: 12,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ] else
-                              const Text(
-                                'Переносов больше нет. Осталось разбудить голову.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: muted,
-                                  fontSize: 13,
-                                  height: 1.5,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                  builder: (context, constraints) {
+                    final summary = SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+                      child: _ringSummary(ringing),
+                    );
+                    final actions = Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                      child: _ringActions(ringing),
+                    );
+                    if (constraints.maxWidth >= 600 &&
+                        constraints.maxHeight < 600) {
+                      return Row(
+                        children: [
+                          Expanded(child: summary),
+                          Expanded(
+                            child: SingleChildScrollView(child: actions),
+                          ),
+                        ],
+                      );
+                    }
+                    return Column(
+                      children: [
+                        Expanded(child: Center(child: summary)),
+                        actions,
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -324,6 +197,136 @@ class _RingingScreenState extends State<RingingScreen> {
         );
       },
     ),
+  );
+
+  Widget _ringSummary(RingingAlarm ringing) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const Icon(Icons.wb_twilight_rounded, color: morning, size: 36),
+      const SizedBox(height: 12),
+      Text(
+        ringing.alarm.id.startsWith('preview:')
+            ? 'Проверка будильника'
+            : 'Доброе утро',
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: morning, fontSize: 16),
+      ),
+      const SizedBox(height: 12),
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          ringing.alarm.timeLabel,
+          style: const TextStyle(
+            fontSize: 72,
+            fontWeight: FontWeight.w300,
+            letterSpacing: -2,
+            height: 1.1,
+          ),
+        ),
+      ),
+      const SizedBox(height: 12),
+      Text(
+        ringing.alarm.displayTitle,
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 24),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            challengeIcon(ringing.alarm.challengeKind),
+            color: morning,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              ringing.alarm.challengeKind.label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 6),
+      Text(
+        _challengeLevel(ringing),
+        key: const ValueKey('ringing-challenge-level'),
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 14, color: muted),
+      ),
+      const SizedBox(height: 20),
+      if (ringing.snoozesRemaining > 0) ...[
+        Text(
+          'Осталось переносов: ${ringing.snoozesRemaining} из ${ringing.alarm.maxSnoozes}'
+          ' · ${ringing.snoozesRemaining * ringing.alarm.snoozeMinutes} мин',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: muted, fontSize: 14),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _snoozeTiming(ringing),
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: morning, fontSize: 14, height: 1.4),
+        ),
+      ] else
+        Text(
+          ringing.alarm.maxSnoozes == 0
+              ? 'Без переносов. Пройди задание, чтобы отключить звонок.'
+              : 'Переносы закончились. Пройди задание, чтобы отключить звонок.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: muted, fontSize: 14, height: 1.4),
+        ),
+    ],
+  );
+
+  Widget _ringActions(RingingAlarm ringing) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (_error != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 120),
+            child: SingleChildScrollView(
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  _error!,
+                  key: const ValueKey('ringing-error'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            ),
+          ),
+        ),
+      FilledButton.icon(
+        key: const ValueKey('ringing-start-challenge'),
+        onPressed: _finishing || widget.controller.busy
+            ? null
+            : _completedOccurrenceId == ringing.occurrenceId
+            ? () => _dismiss()
+            : () => setState(() => _challenge = true),
+        icon: const Icon(Icons.arrow_forward_rounded),
+        label: Text(
+          _completedOccurrenceId == ringing.occurrenceId
+              ? 'Повторить отключение'
+              : 'Пройти задание',
+          textAlign: TextAlign.center,
+        ),
+      ),
+      if (ringing.snoozesRemaining > 0) ...[
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          key: const ValueKey('ringing-snooze'),
+          onPressed: _finishing || widget.controller.busy ? null : _snooze,
+          icon: const Icon(Icons.snooze_rounded),
+          label: Text(_snoozeLabel(ringing), textAlign: TextAlign.center),
+        ),
+      ],
+    ],
   );
 
   String _challengeLevel(RingingAlarm ringing) {
@@ -355,8 +358,10 @@ class _RingingScreenState extends State<RingingScreen> {
     );
     String clock(DateTime value) =>
         '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
-    return 'Если нажать сейчас, снова зазвонит в ${clock(next)}. '
-        'Если каждый раз переносить сразу, последний звонок — в ${clock(last)}.';
+    return ringing.snoozesRemaining == 1
+        ? 'Если перенести сейчас, последний звонок — в ${clock(next)}.'
+        : 'Если перенести сейчас — ${clock(next)}. '
+              'Все оставшиеся переносы подряд — до ${clock(last)}.';
   }
 
   Widget _emergencyScreen() => Scaffold(

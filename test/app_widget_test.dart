@@ -88,7 +88,7 @@ void main() {
       );
       await controller.poll();
       await tester.pumpAndSettle();
-      final startChallenge = find.text('Я встаю · пройти задание');
+      final startChallenge = find.text('Пройти задание');
       await tester.ensureVisible(startChallenge);
       await tester.tap(startChallenge);
       await tester.pumpAndSettle();

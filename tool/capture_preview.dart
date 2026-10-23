@@ -5,14 +5,17 @@ import 'dart:ui' as ui;
 
 import 'package:five_more/app/alarm_controller.dart';
 import 'package:five_more/app/five_more_app.dart';
+import 'package:five_more/app/theme.dart';
 import 'package:five_more/features/alarms/alarm_editor.dart';
 import 'package:five_more/features/alarms/device_check_screen.dart';
+import 'package:five_more/features/alarms/ringing_screen.dart';
 import 'package:five_more/features/challenges/challenge_models.dart';
 import 'package:five_more/features/challenges/challenge_screen.dart';
 import 'package:five_more/models/alarm.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../test/alarm_fakes.dart';
@@ -74,31 +77,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    Future<void> capture(String name) async {
-      expect(tester.takeException(), isNull);
-      // The test engine uses Ahem for a null fontFamily, unlike the mobile
-      // engine's device font. Button-local TextStyles can deliberately have a
-      // null family even when the app theme specifies Roboto. Replace only
-      // that test fallback at the render boundary; leave production widgets,
-      // layout rules, text content and explicit icon fonts unchanged.
-      for (final paragraph in tester.renderObjectList<RenderParagraph>(
-        find.byType(RichText),
-      )) {
-        paragraph.text = _withDeviceFontFallback(paragraph.text);
-      }
-      await tester.pump();
-      expect(tester.takeException(), isNull);
-      final render =
-          boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-      await tester.runAsync(() async {
-        final image = await render.toImage(pixelRatio: 2);
-        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-        final file = File('artifacts/screenshots/$name.png');
-        file.parent.createSync(recursive: true);
-        file.writeAsBytesSync(bytes!.buffer.asUint8List());
-        image.dispose();
-      });
-    }
+    Future<void> capture(String name) => _capture(tester, boundary, name);
 
     await capture('01-home');
     await tester.tap(find.text('Задания'));
@@ -134,14 +113,24 @@ void main() {
     await tester.pumpAndSettle();
     navigator.push(
       MaterialPageRoute<void>(
+        builder: (_) => AlarmEditor(controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await capture('12-quick-editor');
+    navigator.pop();
+    await tester.pumpAndSettle();
+    navigator.push(
+      MaterialPageRoute<void>(
         builder: (_) => AlarmEditor(controller: controller, alarm: alarm),
       ),
     );
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.widgetWithText(ChoiceChip, 'Легко'),
-      200,
-    );
+    final advanced = find.byKey(const ValueKey('alarm-advanced'));
+    await _reveal(tester, advanced);
+    await tester.tap(advanced);
+    await tester.pumpAndSettle();
+    await _reveal(tester, find.widgetWithText(ChoiceChip, 'Легко'));
     await tester.pumpAndSettle();
     await capture('11-escalation-editor');
     navigator.pop();
@@ -181,6 +170,191 @@ void main() {
     await tester.pumpAndSettle();
     await capture('08-ringing');
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final variant in [
+    (
+      name: '13-ringing-small-200',
+      surface: _PreviewSurface.ringing,
+      size: const Size(320, 640),
+      textScale: 2.0,
+      safeInsets: const EdgeInsets.only(top: 24, bottom: 24),
+    ),
+    (
+      name: '14-math-small-200',
+      surface: _PreviewSurface.math,
+      size: const Size(320, 640),
+      textScale: 2.0,
+      safeInsets: const EdgeInsets.only(top: 24, bottom: 24),
+    ),
+    (
+      name: '15-ringing-landscape-150',
+      surface: _PreviewSurface.ringing,
+      size: const Size(844, 390),
+      textScale: 1.5,
+      safeInsets: const EdgeInsets.fromLTRB(44, 0, 44, 21),
+    ),
+    (
+      name: '16-quick-editor-small-150',
+      surface: _PreviewSurface.editor,
+      size: const Size(320, 640),
+      textScale: 1.5,
+      safeInsets: const EdgeInsets.only(top: 24, bottom: 24),
+    ),
+  ]) {
+    testWidgets('capture ${variant.name}', (tester) async {
+      await _captureVariant(
+        tester,
+        name: variant.name,
+        surface: variant.surface,
+        size: variant.size,
+        textScale: variant.textScale,
+        safeInsets: variant.safeInsets,
+      );
+    });
+  }
+}
+
+enum _PreviewSurface { ringing, math, editor }
+
+Future<void> _captureVariant(
+  WidgetTester tester, {
+  required String name,
+  required _PreviewSurface surface,
+  required Size size,
+  required double textScale,
+  required EdgeInsets safeInsets,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  const alarm = Alarm(
+    id: 'capture-variant',
+    hour: 7,
+    minute: 30,
+    title: 'Спокойное утро',
+    weekdays: [1, 2, 3, 4, 5],
+    difficulty: ChallengeDifficulty.easy,
+    escalateOnSnooze: true,
+  );
+  final gateway = DeviceCheckGateway()
+    ..currentTime = DateTime(2026, 10, 22, 7, 40);
+  gateway.nativeAlarms[alarm.id] = alarm;
+  final ringing = RingingAlarm(
+    alarm: alarm,
+    occurrenceId: 'capture-$name',
+    firedAt: gateway.currentTime,
+    snoozesUsed: 2,
+  );
+  if (surface == _PreviewSurface.ringing) gateway.ringing = ringing;
+  final controller = AlarmController(
+    gateway: gateway,
+    storage: MemoryAlarmStorage(),
+    now: () => gateway.currentTime,
+  );
+  addTearDown(controller.dispose);
+  await controller.initialize(startPolling: false);
+  final boundary = GlobalKey();
+  await tester.pumpWidget(
+    RepaintBoundary(
+      key: boundary,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: fiveMoreTheme(),
+        locale: const Locale('ru'),
+        supportedLocales: const [Locale('ru'), Locale('en')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+            padding: safeInsets,
+            viewPadding: safeInsets,
+          ),
+          child: child!,
+        ),
+        home: switch (surface) {
+          _PreviewSurface.ringing => RingingScreen(
+            controller: controller,
+            ringing: ringing,
+          ),
+          _PreviewSurface.math => ChallengeScreen(
+            kind: ChallengeKind.math,
+            difficulty: ChallengeDifficulty.hard,
+            practice: true,
+            onComplete: () {},
+            onEmergencyExit: () {},
+          ),
+          // Open the editor through the Navigator so its ordinary back action
+          // and app-bar layout are represented in the capture.
+          _PreviewSurface.editor => const Scaffold(body: SizedBox.shrink()),
+        },
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  if (surface == _PreviewSurface.editor) {
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) => AlarmEditor(controller: controller),
+          ),
+        );
+    await tester.pumpAndSettle();
+  }
+  await _capture(tester, boundary, name);
+  if (surface == _PreviewSurface.math) {
+    await _reveal(tester, find.byType(FilledButton).last);
+    await _capture(tester, boundary, '17-math-answers-small-200');
+  }
+  await tester.pumpWidget(const SizedBox.shrink());
+}
+
+Future<void> _reveal(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(
+    finder,
+    200,
+    scrollable: find
+        .byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable &&
+              axisDirectionToAxis(widget.axisDirection) == Axis.vertical,
+        )
+        .first,
+  );
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _capture(
+  WidgetTester tester,
+  GlobalKey boundary,
+  String name,
+) async {
+  expect(tester.takeException(), isNull);
+  // The test engine uses Ahem for a null fontFamily, unlike the mobile
+  // engine's device font. Button-local TextStyles can deliberately have a
+  // null family even when the app theme specifies Roboto. Replace only
+  // that test fallback at the render boundary; leave production widgets,
+  // layout rules, text content and explicit icon fonts unchanged.
+  for (final paragraph in tester.renderObjectList<RenderParagraph>(
+    find.byType(RichText),
+  )) {
+    paragraph.text = _withDeviceFontFallback(paragraph.text);
+  }
+  await tester.pump();
+  expect(tester.takeException(), isNull);
+  final render =
+      boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+  await tester.runAsync(() async {
+    final image = await render.toImage(pixelRatio: 2);
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    final file = File('artifacts/screenshots/$name.png');
+    file.parent.createSync(recursive: true);
+    file.writeAsBytesSync(bytes!.buffer.asUint8List());
+    image.dispose();
   });
 }
 

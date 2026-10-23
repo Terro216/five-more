@@ -74,6 +74,7 @@ Future<void> _openEditor(
   );
   await tester.tap(find.text('Открыть настройки'));
   await tester.pumpAndSettle();
+  await _tapScrolled(tester, find.byKey(const ValueKey('alarm-advanced')));
 }
 
 Future<void> _tapScrolled(WidgetTester tester, Finder finder) async {
@@ -120,7 +121,17 @@ void main() {
     expect(gateway.scheduleCalls.single.escalateOnSnooze, isTrue);
 
     await _openEditor(tester, controller, controller.alarms.single);
-    await tester.scrollUntilVisible(toggle, 220);
+    await tester.scrollUntilVisible(
+      toggle,
+      220,
+      scrollable: find
+          .byWidgetPredicate(
+            (widget) =>
+                widget is Scrollable &&
+                axisDirectionToAxis(widget.axisDirection) == Axis.vertical,
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
     expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
     expect(tester.takeException(), isNull);
@@ -140,7 +151,17 @@ void main() {
     await _openEditor(tester, controller, alarm);
 
     final toggle = find.byKey(const ValueKey('escalate-on-snooze'));
-    await tester.scrollUntilVisible(toggle, 220);
+    await tester.scrollUntilVisible(
+      toggle,
+      220,
+      scrollable: find
+          .byWidgetPredicate(
+            (widget) =>
+                widget is Scrollable &&
+                axisDirectionToAxis(widget.axisDirection) == Axis.vertical,
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
     expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
     expect(tester.widget<SwitchListTile>(toggle).onChanged, isNull);
@@ -239,7 +260,7 @@ void main() {
           ),
           findsOneWidget,
         );
-        await _tapScrolled(tester, find.text('Я встаю · пройти задание'));
+        await _tapScrolled(tester, find.text('Пройти задание'));
         expect(
           tester
               .widget<ChallengeScreen>(find.byType(ChallengeScreen))

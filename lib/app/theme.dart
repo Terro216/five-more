@@ -4,6 +4,7 @@ const ink = Color(0xFF101612);
 const panel = Color(0xFF1C251E);
 const morning = Color(0xFFF3C96B);
 const muted = Color(0xFFAAB5A8);
+const foreground = Color(0xFFF6F4E9);
 
 ThemeData fiveMoreTheme() {
   final scheme = ColorScheme.fromSeed(
@@ -11,6 +12,7 @@ ThemeData fiveMoreTheme() {
     brightness: Brightness.dark,
     surface: ink,
     primary: morning,
+    onSurface: foreground,
   );
   return ThemeData(
     useMaterial3: true,
@@ -20,7 +22,7 @@ ThemeData fiveMoreTheme() {
     cardColor: panel,
     appBarTheme: const AppBarTheme(
       backgroundColor: ink,
-      foregroundColor: Colors.white,
+      foregroundColor: foreground,
       surfaceTintColor: Colors.transparent,
       centerTitle: false,
     ),
@@ -40,7 +42,7 @@ ThemeData fiveMoreTheme() {
         minimumSize: const Size(48, 54),
         padding: const EdgeInsets.symmetric(horizontal: 22),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(

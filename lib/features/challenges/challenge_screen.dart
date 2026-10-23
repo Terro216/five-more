@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../../app/theme.dart';
 import 'challenge_models.dart';
 
 /// An offline challenge flow. The host owns alarm playback and dismissal.
@@ -27,11 +28,11 @@ class ChallengeScreen extends StatefulWidget {
 }
 
 class _ChallengeScreenState extends State<ChallengeScreen> {
-  static const _background = Color(0xFF101612);
-  static const _surface = Color(0xFF1C251E);
-  static const _accent = Color(0xFFF3C96B);
-  static const _text = Color(0xFFF6F4E9);
-  static const _muted = Color(0xFFB7C0B5);
+  static const _background = ink;
+  static const _surface = panel;
+  static const _accent = morning;
+  static const _text = foreground;
+  static const _muted = muted;
 
   final _random = Random();
   late final ChallengeSession _session;
@@ -43,6 +44,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   int _sequenceCompleted = 0;
   final _selected = <int>{};
   bool _showPattern = false;
+  bool _accessibleNavigation = false;
   bool _transitioning = false;
   bool _finished = false;
   bool _completionReady = false;
@@ -61,6 +63,17 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       random: _random,
     );
     _prepareRound();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final accessibleNavigation = MediaQuery.accessibleNavigationOf(context);
+    if (_accessibleNavigation == accessibleNavigation) return;
+    _accessibleNavigation = accessibleNavigation;
+    if (_activeKind == ChallengeKind.memory && _showPattern) {
+      _schedulePreviewEnd();
+    }
   }
 
   @override
@@ -97,9 +110,15 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   }
 
   void _startPreview() {
-    _previewTimer?.cancel();
     _showPattern = true;
     _selected.clear();
+    _schedulePreviewEnd();
+  }
+
+  void _schedulePreviewEnd() {
+    _previewTimer?.cancel();
+    _previewTimer = null;
+    if (_accessibleNavigation) return;
     _previewTimer = Timer(const Duration(seconds: 5), () {
       if (mounted) setState(() => _showPattern = false);
     });
@@ -350,13 +369,17 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _instruction('Разомнём голову', 'Выбери правильный ответ'),
-        const SizedBox(height: 24),
+        const Text(
+          'Выбери правильный ответ',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: _muted, fontSize: 15, height: 1.5),
+        ),
+        const SizedBox(height: 16),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 38),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           decoration: BoxDecoration(
             color: _surface,
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(16),
           ),
           child: FittedBox(
             fit: BoxFit.scaleDown,
@@ -371,21 +394,39 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
           ),
         ),
         const SizedBox(height: 20),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.9,
-          children: question.choices
-              .map(
-                (choice) => _answerButton(
-                  label: '$choice',
-                  onPressed: () => _answer(question.accepts(choice)),
-                ),
-              )
-              .toList(),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final cellWidth = (constraints.maxWidth - 12) / 2;
+            var cellHeight = max(62.0, cellWidth / 1.9);
+            for (final choice in question.choices) {
+              final painter = TextPainter(
+                text: TextSpan(text: '$choice', style: _answerTextStyle),
+                textDirection: Directionality.of(context),
+                textScaler: MediaQuery.textScalerOf(context),
+                textAlign: TextAlign.center,
+              )..layout(maxWidth: max(1.0, cellWidth - 40));
+              cellHeight = max(cellHeight, painter.height + 32);
+              painter.dispose();
+            }
+            return GridView(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                mainAxisExtent: cellHeight,
+              ),
+              children: question.choices
+                  .map(
+                    (choice) => _answerButton(
+                      label: '$choice',
+                      onPressed: () => _answer(question.accepts(choice)),
+                    ),
+                  )
+                  .toList(),
+            );
+          },
         ),
       ],
     );
@@ -618,6 +659,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     );
   }
 
+  TextStyle get _answerTextStyle =>
+      Theme.of(context).textTheme.labelLarge!
+          .copyWith(fontSize: 19, fontWeight: FontWeight.w600);
+
   Widget _answerButton({
     required String label,
     required VoidCallback? onPressed,
@@ -633,7 +678,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       minimumSize: const Size(64, 62),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      textStyle: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600),
+      textStyle: _answerTextStyle,
     ),
     child: Row(
       mainAxisAlignment: MainAxisAlignment.center,

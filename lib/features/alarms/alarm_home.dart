@@ -131,38 +131,60 @@ class _AlarmHomeState extends State<AlarmHome> {
           const SizedBox(width: 8),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (index) => setState(() => _tab = index),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.alarm_outlined),
-            selectedIcon: Icon(Icons.alarm_rounded),
-            label: 'Подъём',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.extension_outlined),
-            selectedIcon: Icon(Icons.extension_rounded),
-            label: 'Задания',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.history_rounded),
-            label: 'История',
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_tab == 0 && !controller.loading)
+            SafeArea(
+              top: false,
+              bottom: false,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 700),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        key: const ValueKey('add-alarm'),
+                        onPressed: controller.busy || !controller.storageHealthy
+                            ? null
+                            : () => _edit(),
+                        icon: const Icon(Icons.add_rounded),
+                        label: Text(
+                          controller.alarms.isEmpty
+                              ? 'Поставить будильник'
+                              : 'Добавить будильник',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          NavigationBar(
+            selectedIndex: _tab,
+            onDestinationSelected: (index) => setState(() => _tab = index),
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.alarm_outlined),
+                selectedIcon: Icon(Icons.alarm_rounded),
+                label: 'Подъём',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.extension_outlined),
+                selectedIcon: Icon(Icons.extension_rounded),
+                label: 'Задания',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.history_rounded),
+                label: 'История',
+              ),
+            ],
           ),
         ],
       ),
-      floatingActionButton:
-          _tab == 0 && controller.alarms.isNotEmpty && !controller.loading
-          ? FloatingActionButton.extended(
-              onPressed: controller.busy || !controller.storageHealthy
-                  ? null
-                  : () => _edit(),
-              backgroundColor: morning,
-              foregroundColor: ink,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Будильник'),
-            )
-          : null,
       body: controller.loading
           ? const Center(child: CircularProgressIndicator())
           : Center(
@@ -179,7 +201,7 @@ class _AlarmHomeState extends State<AlarmHome> {
   );
 
   Widget _today() {
-    final now = DateTime.now();
+    final now = controller.now;
     final next = controller.nextAlarm(now);
     final todaySnoozes = controller.events
         .where(
@@ -194,7 +216,7 @@ class _AlarmHomeState extends State<AlarmHome> {
       onRefresh: controller.refreshStatus,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
           Text(
             _dayTitle(now),
@@ -202,7 +224,7 @@ class _AlarmHomeState extends State<AlarmHome> {
           ),
           const SizedBox(height: 14),
           if (next != null) _nextCard(next, now) else _emptyCard(),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           _deviceCard(),
           if (controller.error != null)
             Padding(
@@ -224,7 +246,7 @@ class _AlarmHomeState extends State<AlarmHome> {
               ),
             ),
           if (controller.alarms.isNotEmpty) ...[
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
             Row(
               children: [
                 const Expanded(
@@ -267,122 +289,95 @@ class _AlarmHomeState extends State<AlarmHome> {
     final left = hours > 0
         ? '$hours ч ${minutes.toString().padLeft(2, '0')} мин'
         : '$minutes мин';
-    return InkWell(
-      onTap: () => _edit(alarm),
-      borderRadius: BorderRadius.circular(30),
-      child: Container(
-        padding: const EdgeInsets.all(26),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(30),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF374330), Color(0xFF222D21)],
-          ),
-          border: Border.all(color: morning.withValues(alpha: .18)),
+    final time = Text(
+      '${nextAt.hour.toString().padLeft(2, '0')}:${nextAt.minute.toString().padLeft(2, '0')}',
+      style: const TextStyle(
+        fontSize: 56,
+        fontWeight: FontWeight.w400,
+        height: 1.1,
+        letterSpacing: -1.5,
+        color: morning,
+      ),
+    );
+    final detail = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _relativeDay(nextAt, now),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.wb_twilight_rounded, size: 20, color: morning),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _relativeDay(nextAt, now).toUpperCase(),
-                    style: const TextStyle(
-                      color: morning,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.7,
+        const SizedBox(height: 4),
+        Text(
+          'До будильника $left',
+          style: const TextStyle(color: muted, fontSize: 13),
+        ),
+      ],
+    );
+    return Material(
+      color: panel,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        key: const ValueKey('next-alarm'),
+        onTap: controller.busy ? null : () => _edit(alarm),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final expandedText =
+                  MediaQuery.textScalerOf(context).scale(16) > 20;
+              if (constraints.maxWidth < 300 || expandedText) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FittedBox(fit: BoxFit.scaleDown, child: time),
+                    const SizedBox(height: 8),
+                    detail,
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: time,
                     ),
                   ),
-                ),
-                const Icon(Icons.arrow_outward_rounded, size: 18, color: muted),
-              ],
-            ),
-            const SizedBox(height: 14),
-            FittedBox(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '${nextAt.hour.toString().padLeft(2, '0')}:${nextAt.minute.toString().padLeft(2, '0')}',
-                style: const TextStyle(
-                  fontSize: 86,
-                  fontWeight: FontWeight.w300,
-                  height: 1.1,
-                  letterSpacing: -5,
-                  color: Color(0xFFFFE2A2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              alarm.displayTitle,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'До будильника $left',
-              style: const TextStyle(color: muted, fontSize: 13),
-            ),
-            const SizedBox(height: 22),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _Pill(
-                  icon: challengeIcon(alarm.challengeKind),
-                  text: alarm.challengeKind.label,
-                ),
-                _Pill(
-                  icon: Icons.snooze_rounded,
-                  text: alarm.maxSnoozes == 0
-                      ? 'Без переносов'
-                      : '${alarm.maxSnoozes} × ${alarm.snoozeMinutes} мин',
-                ),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 20),
+                  Expanded(child: detail),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  Widget _emptyCard() => Container(
-    padding: const EdgeInsets.all(26),
-    decoration: BoxDecoration(
-      color: panel,
-      borderRadius: BorderRadius.circular(30),
-    ),
+  Widget _emptyCard() => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 16),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SunMark(size: 58),
-        const SizedBox(height: 24),
         Text(
           controller.alarms.isEmpty
-              ? 'Утро начинается\nс одного будильника.'
-              : 'Ближайший подъём\nпока не назначен.',
+              ? 'Утро начинается с одного будильника.'
+              : 'Ближайший подъём пока не назначен.',
           style: const TextStyle(
-            fontSize: 29,
+            fontSize: 26,
             fontWeight: FontWeight.w600,
-            height: 1.15,
-            letterSpacing: -.8,
+            height: 1.2,
+            letterSpacing: -.6,
           ),
         ),
-        const SizedBox(height: 14),
-        const Text(
-          'Выбери время, оставь себе пару переносов\nи найди задание, которое разбудит.',
-          style: TextStyle(color: muted, height: 1.5, fontSize: 14),
-        ),
-        const SizedBox(height: 24),
-        FilledButton.icon(
-          onPressed: controller.busy || !controller.storageHealthy
-              ? null
-              : () => _edit(),
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Поставить будильник'),
+        const SizedBox(height: 12),
+        Text(
+          controller.alarms.isEmpty
+              ? 'Выбери время, переносы и задание для пробуждения.'
+              : 'Включи один из будильников или добавь новый.',
+          style: const TextStyle(color: muted, height: 1.5, fontSize: 14),
         ),
       ],
     ),
@@ -421,35 +416,79 @@ class _AlarmHomeState extends State<AlarmHome> {
         : check?.pending == true
         ? 'Вернись к проверке и отметь, прозвучал ли будильник.'
         : check?.heard == true
-        ? 'Это результат твоей проверки. После изменения настроек повтори её.'
+        ? 'После изменения настроек повтори проверку.'
         : check?.heard == false
         ? 'Посмотри настройки звука и разрешения, затем попробуй ещё раз.'
-        : 'Проверь звук с заблокированным экраном. Это займёт около минуты.';
-    return _InfoCard(
-      icon: !device.supported
-          ? Icons.visibility_outlined
-          : Icons.phonelink_ring_rounded,
-      title: title,
-      text: text,
-      action: TextButton(
-        onPressed: () => _checkDevice(),
-        child: Text(
-          device.supported ? 'Проверка телефона' : 'Что доступно здесь',
+        : 'Проверь звук с заблокированным экраном.';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const ValueKey('home-device-check'),
+        onTap: () => _checkDevice(),
+        borderRadius: BorderRadius.circular(12),
+        child: Semantics(
+          button: true,
+          label: device.supported ? 'Проверка телефона' : 'Что доступно здесь',
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(
+                    !device.supported
+                        ? Icons.visibility_outlined
+                        : Icons.phonelink_ring_rounded,
+                    color: morning,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        text,
+                        style: const TextStyle(
+                          color: muted,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right_rounded, color: muted),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
   Widget _alarmCard(Alarm alarm) => Padding(
+    key: ValueKey('alarm-card-${alarm.id}'),
     padding: const EdgeInsets.only(bottom: 10),
     child: Material(
       color: panel,
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: controller.busy ? null : () => _edit(alarm),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 10, 14),
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -462,7 +501,7 @@ class _AlarmHomeState extends State<AlarmHome> {
                       child: Text(
                         alarm.timeLabel,
                         style: TextStyle(
-                          fontSize: 38,
+                          fontSize: 36,
                           fontWeight: FontWeight.w400,
                           letterSpacing: -1,
                           color: alarm.enabled ? Colors.white : muted,
@@ -474,6 +513,7 @@ class _AlarmHomeState extends State<AlarmHome> {
                     label:
                         '${alarm.timeLabel}, ${alarm.enabled ? 'выключить' : 'включить'} будильник',
                     child: Switch(
+                      key: ValueKey('alarm-toggle-${alarm.id}'),
                       value: alarm.enabled,
                       onChanged: controller.busy || !controller.device.supported
                           ? null
@@ -481,6 +521,7 @@ class _AlarmHomeState extends State<AlarmHome> {
                     ),
                   ),
                   PopupMenuButton<String>(
+                    key: ValueKey('alarm-menu-${alarm.id}'),
                     tooltip: 'Действия с будильником',
                     enabled: !controller.busy,
                     onSelected: (action) {
@@ -517,23 +558,23 @@ class _AlarmHomeState extends State<AlarmHome> {
                 children: [
                   Text(
                     '${alarm.challengeKind.label} · ${alarm.difficulty.label.toLowerCase()}',
-                    style: const TextStyle(color: muted, fontSize: 11),
+                    style: const TextStyle(color: muted, fontSize: 12),
                   ),
                   Text(
                     alarm.maxSnoozes == 0
                         ? 'Без переносов'
                         : '${alarm.maxSnoozes} × ${alarm.snoozeMinutes} мин',
-                    style: const TextStyle(color: morning, fontSize: 11),
+                    style: const TextStyle(color: morning, fontSize: 12),
                   ),
                   if (alarm.escalateOnSnooze && alarm.maxSnoozes > 0)
                     const Text(
                       'Сложнее после переноса',
-                      style: TextStyle(color: morning, fontSize: 11),
+                      style: TextStyle(color: morning, fontSize: 12),
                     ),
                   if (!controller.device.supported)
                     const Text(
                       'Черновик',
-                      style: TextStyle(color: muted, fontSize: 11),
+                      style: TextStyle(color: muted, fontSize: 12),
                     ),
                 ],
               ),
@@ -545,109 +586,62 @@ class _AlarmHomeState extends State<AlarmHome> {
   );
 
   Widget _challenges() => ListView(
-    padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
+    padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
     children: [
       const Text(
         'Разбуди голову.',
         style: TextStyle(
-          fontSize: 32,
+          fontSize: 24,
           fontWeight: FontWeight.w600,
-          letterSpacing: -.8,
+          letterSpacing: -.6,
         ),
       ),
-      const SizedBox(height: 10),
+      const SizedBox(height: 8),
       const Text(
-        'Попробуй сейчас, чтобы утром знать правила.\nЗвук будильника в тренировке не включается.',
-        style: TextStyle(color: muted, height: 1.5),
+        'Попробуй задания заранее. В тренировке будильник не звучит.',
+        style: TextStyle(color: muted, height: 1.4, fontSize: 14),
       ),
-      const SizedBox(height: 22),
+      const SizedBox(height: 16),
       Wrap(
         spacing: 8,
-        runSpacing: 8,
+        runSpacing: 4,
         children: ChallengeDifficulty.values
             .map(
               (level) => ChoiceChip(
                 label: Text(level.label),
                 selected: _practiceDifficulty == level,
+                materialTapTargetSize: MaterialTapTargetSize.padded,
                 onSelected: (_) => setState(() => _practiceDifficulty = level),
               ),
             )
             .toList(),
       ),
-      const SizedBox(height: 22),
+      const SizedBox(height: 12),
       ...ChallengeKind.values.map(
-        (kind) => Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: Material(
-            color: panel,
-            borderRadius: BorderRadius.circular(24),
-            child: InkWell(
-              onTap: () => _practice(kind),
-              borderRadius: BorderRadius.circular(24),
-              child: Padding(
-                padding: const EdgeInsets.all(22),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: morning.withValues(alpha: .1),
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          child: Icon(challengeIcon(kind), color: morning),
-                        ),
-                        const Spacer(),
-                        const Icon(
-                          Icons.arrow_outward_rounded,
-                          color: muted,
-                          size: 20,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      kind.label,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      kind.description,
-                      style: const TextStyle(color: muted, height: 1.5),
-                    ),
-                    const SizedBox(height: 18),
-                    const Row(
-                      children: [
-                        Icon(
-                          Icons.play_arrow_rounded,
-                          color: morning,
-                          size: 18,
-                        ),
-                        SizedBox(width: 4),
-                        Text(
-                          'Попробовать',
-                          style: TextStyle(
-                            color: morning,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
+        (kind) => ListTile(
+          key: ValueKey('practice-kind-${kind.name}'),
+          contentPadding: EdgeInsets.zero,
+          minVerticalPadding: 8,
+          leading: Icon(challengeIcon(kind), color: morning),
+          title: Text(
+            kind.label,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
+          subtitle: Text(switch (kind) {
+            ChallengeKind.math => 'Реши несколько примеров',
+            ChallengeKind.memory => 'Повтори рисунок из клеток',
+            ChallengeKind.stroop => 'Выбери цвет букв, не слово',
+            ChallengeKind.sequence => 'Нажимай числа по порядку',
+            ChallengeKind.mixed => 'Все четыре задания по очереди',
+          }, style: const TextStyle(color: muted, fontSize: 13)),
+          trailing: const ExcludeSemantics(
+            child: Icon(Icons.play_arrow_rounded, color: morning),
+          ),
+          onTap: () => _practice(kind),
         ),
       ),
       const Padding(
-        padding: EdgeInsets.only(top: 10),
+        padding: EdgeInsets.only(top: 16),
         child: Text(
           'Сложность можно менять отдельно для каждого будильника. '
           'Аварийное отключение всегда доступно.',
@@ -763,7 +757,7 @@ class _AlarmHomeState extends State<AlarmHome> {
     builder: (context) => AlertDialog(
       title: const Text('Ещё пять'),
       content: const Text(
-        'Версия · 0.3.0\n\n'
+        'Версия · 0.4.0\n\n'
         'Простой будильник, ограниченные переносы и задания для пробуждения.\n\n'
         'Без регистрации, рекламы и трекинга сна. Настройки и история остаются на телефоне.\n\n'
         'Перед первым утром проверь срабатывание на своём телефоне. '
@@ -848,50 +842,23 @@ class _SunMark extends StatelessWidget {
   );
 }
 
-class _Pill extends StatelessWidget {
-  const _Pill({required this.icon, required this.text});
-  final IconData icon;
-  final String text;
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-    decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: .06),
-      borderRadius: BorderRadius.circular(10),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: morning),
-        const SizedBox(width: 6),
-        Text(
-          text,
-          style: const TextStyle(color: Color(0xFFD5DDD1), fontSize: 11),
-        ),
-      ],
-    ),
-  );
-}
-
 class _InfoCard extends StatelessWidget {
   const _InfoCard({
     required this.icon,
     required this.title,
     required this.text,
-    this.action,
     this.color = morning,
   });
   final IconData icon;
   final String title;
   final String text;
-  final Widget? action;
   final Color color;
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: color.withValues(alpha: .06),
-      borderRadius: BorderRadius.circular(19),
+      borderRadius: BorderRadius.circular(16),
       border: Border.all(color: color.withValues(alpha: .12)),
     ),
     child: Row(
@@ -919,8 +886,6 @@ class _InfoCard extends StatelessWidget {
                 text,
                 style: const TextStyle(color: muted, fontSize: 12, height: 1.5),
               ),
-              if (action != null)
-                Padding(padding: const EdgeInsets.only(top: 6), child: action!),
             ],
           ),
         ),
