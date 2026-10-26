@@ -4,6 +4,11 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Releases use the same explicitly supplied key on every machine. Development
+// CI may opt into debug signing, but a normal release must never fall back to it.
+val releaseKeyPath = System.getenv("ANDROID_KEYSTORE_PATH")
+val allowDebugSigning = System.getenv("FIVE_MORE_ALLOW_DEBUG_SIGNING") == "true"
+
 android {
     namespace = "dev.ilyamedve.fivemore"
     compileSdk = flutter.compileSdkVersion
@@ -15,7 +20,6 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "dev.ilyamedve.fivemore"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -29,11 +33,21 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            // A missing key fails validateSigningRelease; debug builds still work.
+            storeFile = file(releaseKeyPath ?: "missing-release-key.jks")
+            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: ""
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(
+                if (allowDebugSigning && releaseKeyPath == null) "debug" else "release"
+            )
         }
     }
 }
