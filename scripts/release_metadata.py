@@ -55,8 +55,18 @@ def verify_identity(badging, certificate, version, code, expected_certificate):
     match = re.search(r"package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'", badging)
     if not match or match.groups() != (PACKAGE, str(code), version):
         raise ValueError('APK package/version differs from the release source')
-    digests = re.findall(r'Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]+)', certificate)
-    if [value.lower() for value in digests] != [expected_certificate.lower()]:
+    if not re.search(r'^Number of signers: 1$', certificate, re.M):
+        raise ValueError('Release APK must have exactly one signer')
+    # Build-tools 37 prints scheme labels ("V2 Signer:") instead of "Signer #1".
+    # The same certificate may be reported once for each verified scheme.
+    signers = re.findall(
+        r'^(Signer #\d+|V[1-4](?:\.\d+)? Signer:) certificate SHA-256 digest: ([0-9a-fA-F]+)$',
+        certificate, re.M)
+    if not signers:
+        raise ValueError('No readable signing certificate in apksigner output')
+    if any(label.startswith('Signer #') and label != 'Signer #1' for label, _ in signers):
+        raise ValueError('Unexpected additional APK signer')
+    if {digest.lower() for _, digest in signers} != {expected_certificate.lower()}:
         raise ValueError('APK signing certificate differs from the established update key')
     if 'application-debuggable' in badging:
         raise ValueError('A debuggable APK cannot be published')
@@ -79,6 +89,7 @@ def package(apk, output):
     candidates = [path for path in (Path(sdk) / 'build-tools').iterdir()
                   if re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', path.name)]
     build_tools = max(candidates, key=lambda path: tuple(map(int, path.name.split('.'))))
+    print(f'Verifying APK with Android build-tools {build_tools.name}')
     certificate = run(str(build_tools / 'apksigner'), 'verify', '--verbose', '--print-certs', str(apk.resolve()))
     badging = run(str(build_tools / 'aapt'), 'dump', 'badging', str(apk.resolve()))
     expected = (ROOT / '.android-signing-certificate.sha256').read_text().strip()
@@ -96,6 +107,7 @@ def package(apk, output):
         'abis': ['armeabi-v7a', 'arm64-v8a', 'x86_64'],
         'flutter': (ROOT / '.flutter-version').read_text().strip(),
         'flutter_revision': (ROOT / '.flutter-revision').read_text().strip(),
+        'android_build_tools': build_tools.name,
         'physical_device_validation': 'not performed by CI; requires explicit user report',
     }
     if os.environ.get('GITHUB_RUN_ID'):

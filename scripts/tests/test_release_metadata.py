@@ -8,7 +8,7 @@ from release_metadata import parse_version, require_newer, verify_identity
 
 class ReleaseSafetyTest(unittest.TestCase):
     def setUp(self):
-        self.certificate = 'Signer #1 certificate SHA-256 digest: abc123'
+        self.certificate = 'Number of signers: 1\nSigner #1 certificate SHA-256 digest: abc123'
         self.badging = (
             "package: name='dev.ilyamedve.fivemore' versionCode='6' versionName='0.5.1'\n"
             "sdkVersion:'26'\nnative-code: 'arm64-v8a' 'x86_64' 'armeabi-v7a'\n"
@@ -39,8 +39,24 @@ class ReleaseSafetyTest(unittest.TestCase):
                 self.verify(badging=self.badging.replace(before, after))
 
     def test_different_or_extra_signer_cannot_be_published(self):
-        for cert in ['Signer #1 certificate SHA-256 digest: fff',
-                     self.certificate + '\nSigner #2 certificate SHA-256 digest: abc123']:
+        for cert in [self.certificate.replace('abc123', 'fff'),
+                     self.certificate + '\nSigner #2 certificate SHA-256 digest: abc123',
+                     self.certificate.replace('Number of signers: 1', 'Number of signers: 2')]:
+            with self.subTest(cert=cert), self.assertRaises(ValueError):
+                self.verify(certificate=cert)
+
+    def test_build_tools_37_scheme_labels(self):
+        for label in ['V2 Signer:', 'V3.0 Signer:', 'V3.1 Signer:', 'V3.2 Signer:']:
+            with self.subTest(label=label):
+                self.verify(certificate=self.certificate.replace('Signer #1', label))
+        self.verify(certificate='Number of signers: 1\n'
+                    'V2 Signer: certificate SHA-256 digest: abc123\n'
+                    'V3.0 Signer: certificate SHA-256 digest: abc123')
+
+    def test_unreadable_or_mixed_scheme_signatures_are_rejected(self):
+        for cert in ['Number of signers: 1\nUnrecognized certificate format',
+                     'Number of signers: 1\nV2 Signer: certificate SHA-256 digest: abc123\n'
+                     'V3.0 Signer: certificate SHA-256 digest: fff']:
             with self.subTest(cert=cert), self.assertRaises(ValueError):
                 self.verify(certificate=cert)
 
