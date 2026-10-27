@@ -21,4 +21,6 @@ challenge preview, never an actual background alarm.
 - For iOS changes, run the macOS build CI. Device alarm checks are separate from
   compilation; document any checks that have not been performed.
 - Do not commit build output, signing keys, provisioning profiles, or SDK caches.
-- GitHub repository stays private; publication to stores requires a separate request.
+- GitHub repository is public. Keep infrastructure details, personal paths and
+  recovery procedures out of source, history, releases and build artifacts.
+  Publication to stores requires a separate request.

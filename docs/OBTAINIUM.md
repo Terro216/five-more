@@ -3,33 +3,25 @@
 Источник приложения: **https://github.com/Terro216/five-more**.
 Для ручной установки используй [последний выпуск](https://github.com/Terro216/five-more/releases/latest).
 
-## Один раз подключить приватный GitHub
+## Подключить приложение
 
-1. В своём GitHub открой [создание fine-grained токена](https://github.com/settings/personal-access-tokens/new).
-   Назови его, например, `Obtainium — Five More`, выбери срок действия.
-2. В **Repository access → Only select repositories** выбери только
-   `Terro216/five-more`. В **Repository permissions** добавь
-   **Contents → Read-only**. Metadata: Read-only добавляется автоматически.
-   Права на запись, Actions и Administration не нужны.
-3. Создай токен и вставь его в Obtainium: **Настройки → настройки источника
-   GitHub → персональный токен доступа**. Названия пунктов могут зависеть от
-   языка и версии Obtainium. Токен вводится на телефоне; не добавляй его в URL,
-   репозиторий, скриншот или файл импорта.
-4. В Obtainium нажми **Добавить приложение** и вставь
+Аккаунт GitHub и персональный токен не нужны: репозиторий и выпуски публичные.
+
+1. В Obtainium нажми **Добавить приложение** и вставь
    `https://github.com/Terro216/five-more`. Установи найденный универсальный APK.
    Предварительные выпуски включать не требуется начиная с 0.5.2.
-5. Разреши Android установку приложений из Obtainium, когда система попросит.
+2. Разреши Android установку приложений из Obtainium, когда система попросит.
    Включи фоновую проверку обновлений в настройках Obtainium. Если система
    запрашивает подтверждение установки, подтверди его.
 
 Можно также открыть на Android ссылку
-`obtainium://add/https://github.com/Terro216/five-more` после настройки токена.
+`obtainium://add/https://github.com/Terro216/five-more`.
 Она заполняет источник приложения. В обычном варианте фильтры APK не нужны:
 каждый новый выпуск содержит ровно один универсальный APK.
 
-Когда токен истечёт, замени его в Obtainium. Ошибка 404 у приватного репозитория
-обычно означает отсутствие доступа: проверь выбранный репозиторий, разрешение
-Contents и срок токена. Используй прямой доступ GitHub без стороннего прокси.
+Если Obtainium сообщит о лимите запросов GitHub, повтори проверку позже.
+Токен в настройках источника GitHub необязателен и нужен только для увеличения
+этого лимита. Самому приложению он не требуется.
 
 ## Обновить уже установленный пилот
 
@@ -50,12 +42,10 @@ versionCode с 5 до 7 и подписан тем же сертификатом
 
 ## Как это работает
 
-GitHub Actions публикует APK, SHA-256 и сведения о сборке в приватный Release.
-Obtainium читает версии и скачивает APK через GitHub API с твоим токеном.
+GitHub Actions публикует APK, SHA-256 и сведения о сборке в публичный Release.
+Obtainium читает версии и скачивает APK через GitHub API.
 Само приложение работает без сети и не обращается к GitHub.
 
 Официальные источники:
 [источник GitHub и токены в Obtainium](https://wiki.obtainium.imranr.dev/sources/#github),
-[ссылки добавления](https://wiki.obtainium.imranr.dev/deep_links/),
-[минимальные права для чтения Releases](https://docs.github.com/en/rest/releases/releases#list-releases),
-[права на скачивание APK](https://docs.github.com/en/rest/releases/assets#get-a-release-asset).
+[ссылки добавления](https://wiki.obtainium.imranr.dev/deep_links/).
