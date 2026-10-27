@@ -1,3 +1,5 @@
+import 'ui_helpers.dart';
+
 import 'package:five_more/app/alarm_controller.dart';
 import 'package:five_more/app/five_more_app.dart';
 import 'package:five_more/features/challenges/challenge_screen.dart';
@@ -27,6 +29,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Новый будильник'), findsOneWidget);
     expect(find.text('Сохранить черновик'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Один раз'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Один раз'));
     await tester.tap(find.text('Сохранить черновик'));
     await tester.pumpAndSettle();
@@ -95,10 +102,10 @@ void main() {
       expect(find.byType(ChallengeScreen), findsOneWidget);
       expect(gateway.dismissCalls, isEmpty);
 
-      await tester.tap(find.text('Нужно срочно выключить'));
+      await tester.tap(find.text('Не получается пройти'));
       await tester.pumpAndSettle();
-      expect(find.text('Остановить без задания?'), findsOneWidget);
-      await tester.tap(find.text('Остановить'));
+      expect(find.text('Остановить звонок?'), findsOneWidget);
+      await completeEmergencyHold(tester);
       await tester.pumpAndSettle();
 
       expect(gateway.dismissCalls, ['actual-alarm']);

@@ -1,3 +1,5 @@
+import 'ui_helpers.dart';
+
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -66,7 +68,7 @@ void main() {
   });
 
   group('Challenge progression', () {
-    test('mistakes preserve completed steps and never prevent completion', () {
+    test('mistakes return one step and never prevent completion', () {
       final session = ChallengeSession(
         kind: ChallengeKind.math,
         difficulty: ChallengeDifficulty.medium,
@@ -75,7 +77,7 @@ void main() {
       for (var attempt = 0; attempt < 100; attempt += 1) {
         session.submitIncorrect();
       }
-      expect(session.completedSteps, 1);
+      expect(session.completedSteps, 0);
       expect(session.mistakes, 100);
       while (!session.isComplete) {
         session.submitCorrect();
@@ -99,8 +101,9 @@ void main() {
         ChallengeKind.sequence,
         ChallengeKind.mirror,
         ChallengeKind.captcha,
+        ChallengeKind.flags,
       });
-      expect(session.rounds, hasLength(6));
+      expect(session.rounds, hasLength(7));
     });
   });
 
@@ -120,7 +123,7 @@ void main() {
     );
     expect(find.text('Пробный подъём'), findsOneWidget);
     expect(find.byType(FilledButton), findsNWidgets(4));
-    expect(find.text('Нужно срочно выключить'), findsNothing);
+    expect(find.text('Не получается пройти'), findsNothing);
     expect(completed, isFalse);
     expect(tester.takeException(), isNull);
   });
@@ -137,11 +140,11 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('Нужно срочно выключить'));
+    await tester.tap(find.text('Не получается пройти'));
     await tester.pumpAndSettle();
     expect(exited, isFalse);
-    expect(find.text('Остановить без задания?'), findsOneWidget);
-    await tester.tap(find.text('Остановить'));
+    expect(find.text('Остановить звонок?'), findsOneWidget);
+    await completeEmergencyHold(tester);
     await tester.pumpAndSettle();
     expect(exited, isTrue);
   });
@@ -200,19 +203,4 @@ void main() {
   });
 }
 
-// Independently evaluate the small expression grammar used by the generator.
-int _calculateExpression(String expression) {
-  final tokens = expression.split(' ');
-  final first = int.parse(tokens[0]);
-  final second = int.parse(tokens[2]);
-  final subtotal = switch (tokens[1]) {
-    '+' => first + second,
-    '−' => first - second,
-    '×' => first * second,
-    '÷' => first ~/ second,
-    _ => throw StateError('Unknown operation'),
-  };
-  if (tokens.length == 3) return subtotal;
-  final last = int.parse(tokens[4]);
-  return tokens[3] == '+' ? subtotal + last : subtotal - last;
-}
+int _calculateExpression(String expression) => evaluateMath(expression);

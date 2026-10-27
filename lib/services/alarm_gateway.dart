@@ -145,7 +145,7 @@ abstract class AlarmGateway {
   Future<AlarmResult> restoreAlarms();
   Future<AlarmResult> schedule(Alarm alarm);
   Future<AlarmResult> cancel(String id);
-  Future<AlarmResult> snooze(String id);
+  Future<AlarmResult> snooze(String id, {int? minutes});
   Future<AlarmResult> dismiss(String id, {bool emergency = false});
   Future<AlarmResult> testAlarm(String id, {int delaySeconds = 5});
   Future<AlarmResult> cancelTestAlarm(String id);
@@ -211,7 +211,8 @@ class NativeAlarmGateway implements AlarmGateway {
   @override
   Future<AlarmResult> cancel(String id) => _action('cancel', {'id': id});
   @override
-  Future<AlarmResult> snooze(String id) => _action('snooze', {'id': id});
+  Future<AlarmResult> snooze(String id, {int? minutes}) =>
+      _action('snooze', {'id': id, 'minutes': ?minutes});
   @override
   Future<AlarmResult> dismiss(String id, {bool emergency = false}) =>
       _action('dismiss', {'id': id, 'emergency': emergency});

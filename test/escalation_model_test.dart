@@ -43,12 +43,15 @@ void main() {
           expect(level.index, greaterThanOrEqualTo(previous));
           expect(
             level.index,
-            lessThanOrEqualTo(ChallengeDifficulty.hard.index),
+            lessThanOrEqualTo(ChallengeDifficulty.extreme.index),
           );
           previous = level.index;
         }
         expect(alarm.difficultyForSnoozes(-1), baseline);
-        expect(alarm.difficultyForSnoozes(1000000), ChallengeDifficulty.hard);
+        expect(
+          alarm.difficultyForSnoozes(1000000),
+          ChallengeDifficulty.extreme,
+        );
         expect(alarm.difficulty, baseline);
         expect(Alarm.fromJson(alarm.toJson()).difficulty, baseline);
       }

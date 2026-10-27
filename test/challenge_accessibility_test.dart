@@ -1,3 +1,5 @@
+import 'ui_helpers.dart';
+
 import 'package:five_more/app/theme.dart';
 import 'package:five_more/features/challenges/challenge_models.dart';
 import 'package:five_more/features/challenges/challenge_screen.dart';
@@ -10,7 +12,7 @@ void main() {
   Future<ValueNotifier<bool>> showChallenge(
     WidgetTester tester, {
     ChallengeKind kind = ChallengeKind.memory,
-    ChallengeDifficulty difficulty = ChallengeDifficulty.hard,
+    ChallengeDifficulty difficulty = ChallengeDifficulty.easy,
     bool accessibleNavigation = false,
     double width = 390,
     double height = 844,
@@ -107,6 +109,57 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  for (final difficulty in [
+    ChallengeDifficulty.hard,
+    ChallengeDifficulty.extreme,
+  ]) {
+    testWidgets(
+      '${difficulty.name} memory reveals the entire pattern before starting the timer',
+      (tester) async {
+        await showChallenge(
+          tester,
+          difficulty: difficulty,
+          width: 320,
+          height: 640,
+          textScale: 1.5,
+          onEmergencyExit: () {},
+        );
+        final preview = find.byKey(const ValueKey('complete-memory-preview'));
+        final bounds = tester.getRect(preview);
+        expect(bounds.left, greaterThanOrEqualTo(0));
+        expect(bounds.right, lessThanOrEqualTo(320));
+        expect(bounds.top, greaterThanOrEqualTo(0));
+        expect(
+          bounds.bottom,
+          lessThanOrEqualTo(
+            tester.getRect(find.text('Не получается пройти')).top,
+          ),
+        );
+        final cells = find.descendant(
+          of: preview,
+          matching: find.byType(DecoratedBox),
+        );
+        expect(
+          cells,
+          findsNWidgets(difficulty == ChallengeDifficulty.hard ? 25 : 36),
+        );
+        for (final element in cells.evaluate()) {
+          final cell = tester.getRect(find.byWidget(element.widget));
+          expect(bounds.contains(cell.center), isTrue);
+        }
+        await tester.pump(
+          Duration(
+            milliseconds: difficulty == ChallengeDifficulty.hard ? 2500 : 1800,
+          ),
+        );
+        expect(preview, findsNothing);
+        expect(find.text('Повтори рисунок'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   for (final difficulty in ChallengeDifficulty.values) {
     testWidgets(
       '${difficulty.name} math fits doubled text and keeps emergency reachable',
@@ -123,17 +176,26 @@ void main() {
           onComplete: () => completions += 1,
           onEmergencyExit: () => exits += 1,
         );
-        final emergency = find.text('Нужно срочно выключить');
+        final emergency = find.text('Не получается пройти');
         for (var step = 0; step < difficulty.index + 2; step += 1) {
           final expressionFinder = find.byWidgetPredicate(
             (widget) =>
                 widget is Text &&
-                RegExp(r'^\d+ [ +−×÷] \d+').hasMatch(widget.data ?? ''),
+                RegExp(r'^\(?\d+ [ +−×÷] \d+').hasMatch(widget.data ?? ''),
           );
           final expression = tester.widget<Text>(expressionFinder).data!;
           await tester.ensureVisible(expressionFinder);
           await tester.pumpAndSettle();
           expect(expressionFinder.hitTestable(), findsOneWidget);
+          if (difficulty.index >= 2) {
+            final input = find.byKey(const ValueKey('math-answer-input'));
+            await tester.ensureVisible(input);
+            await tester.enterText(input, '${evaluateMath(expression)}');
+            await tester.testTextInput.receiveAction(TextInputAction.done);
+            await tester.pump(const Duration(milliseconds: 500));
+            expect(emergency.hitTestable(), findsOneWidget);
+            continue;
+          }
           final answers = find.byType(FilledButton);
           expect(answers, findsNWidgets(4));
           for (var index = 0; index < 4; index += 1) {
@@ -172,18 +234,4 @@ void main() {
   }
 }
 
-int _calculateExpression(String expression) {
-  final tokens = expression.split(' ');
-  final first = int.parse(tokens[0]);
-  final second = int.parse(tokens[2]);
-  final subtotal = switch (tokens[1]) {
-    '+' => first + second,
-    '−' => first - second,
-    '×' => first * second,
-    '÷' => first ~/ second,
-    _ => throw StateError('Unknown operation'),
-  };
-  if (tokens.length == 3) return subtotal;
-  final last = int.parse(tokens[4]);
-  return tokens[3] == '+' ? subtotal + last : subtotal - last;
-}
+int _calculateExpression(String expression) => evaluateMath(expression);

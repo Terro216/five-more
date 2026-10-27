@@ -18,11 +18,12 @@ build phase and provide `NSAlarmKitUsageDescription` in Info.plist.
   difficulty and preserved in snooze and preview configurations. Older saved
   alarms without it return `false`; reads do not rewrite the store. Flutter
   computes the current challenge from the native `snoozesUsed` count, one level
-  per snooze up to hard. Native code keeps the base difficulty unchanged and
+  per snooze up to extreme. Native code keeps the base difficulty unchanged and
   starts the next ordinary occurrence with a fresh count. New schedule requests
-  reject strings/numbers in this boolean and accept only `math`, `memory`,
-  `stroop`, `sequence`, `mixed` and the `easy`/`medium`/`hard` difficulty levels.
-- The system configuration, occurrence identifier, snooze budget and bounded
+  reject strings/numbers in this boolean and accept `math`, `memory`,
+  `stroop`, `sequence`, `mirror`, `captcha`, `qr`, `shake`, `maze`, `flags`,
+  `mixed` and the `easy`/`medium`/`hard`/`extreme` difficulty levels.
+- The system configuration, occurrence identifier, snooze budget and pending
   event queue live in native UserDefaults, independent of the Dart process.
   `LiveActivityIntent` runs in the app process, so no App Group is required.
   `drainEvents` peeks without deleting; `ackEvents` removes explicit event IDs
@@ -39,7 +40,11 @@ build phase and provide `NSAlarmKitUsageDescription` in Info.plist.
   It cancels a pending test or stops a ringing test with an emergency-dismissal
   event, then removes its configuration and occurrences. An already removed
   preview succeeds without changes; an ordinary ID returns `invalid_test_id`.
-- The system default sound is used. There is no server or network requirement.
+- Per-alarm sound uses the system default, bundled PCM loops, or an imported
+  clip converted to CAF in Library/Sounds (first 29 seconds). Custom-sound
+  playback must be checked on a physical iPhone. No network is needed to ring.
+- Bedtime reminders use local UNCalendarNotificationTrigger notifications.
+  Morning audio uses AVAudioRecorder and stays in the app container.
 
 `requestPermissions` accepts optional `target: notifications` or `exactAlarms`;
 both represent AlarmKit authorization on iOS. When access has been denied, the

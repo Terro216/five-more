@@ -82,6 +82,14 @@ class AlarmEngine(private val context: Context) {
         val challenge = AlarmRules.challengeOptions(arguments, fromStoredConfiguration = test != null)
             ?: return fail("invalid_challenge")
         val enabled = arguments["enabled"] as? Boolean ?: true
+        val oneShotAt = (arguments["oneShotAt"] as? Number)?.toLong() ?: 0L
+        if (test == null && enabled && oneShotAt != 0L && (oneShotAt <= System.currentTimeMillis() || weekdays.isNotEmpty())) return fail("invalid_schedule")
+        val order = (arguments["mixOrder"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+        if (order.size > 12 || order.any { it !in setOf("math", "memory", "stroop", "sequence", "mirror", "captcha", "qr", "shake", "maze", "flags") }) return fail("invalid_challenge")
+        val qr = (arguments["qrValue"] as? String ?: "").take(2048)
+        if ((challenge.kind == "qr" || (challenge.kind == "mixed" && "qr" in order)) && qr.isBlank()) return fail("invalid_challenge")
+        val sound = arguments["sound"] as? String ?: "system"
+        try { ExtrasBridge.soundUri(context, sound) } catch (_: Exception) { return fail("sound_unavailable", "Мелодия недоступна. Выбери её снова.") }
         if (enabled && !canSchedule()) return fail("exact_alarm_permission")
         val alarm = JSONObject()
             .put("id", id).put("title", (arguments["title"] as? String ?: "Ещё пять").take(160))
@@ -90,10 +98,13 @@ class AlarmEngine(private val context: Context) {
             .put("challengeKind", challenge.kind).put("difficulty", challenge.difficulty)
             .put("escalateOnSnooze", challenge.escalateOnSnooze)
             .put("moveSnoozeButton", challenge.moveSnoozeButton)
+            .put("oneShotAt", if (test == null) oneShotAt else 0L)
+            .put("mixOrder", JSONArray(order)).put("qrValue", qr)
+            .put("sound", sound).put("soundLabel", (arguments["soundLabel"] as? String ?: "Системный будильник").take(80))
             .put("snoozesUsed", 0).put("occurrenceId", UUID.randomUUID().toString())
             .put("state", if (enabled) "scheduled" else "disabled")
         val nextAt = if (enabled) {
-            test?.dueAt ?: nextOccurrence(alarm)
+            test?.dueAt ?: if (oneShotAt > 0) oneShotAt else nextOccurrence(alarm)
         } else 0L
         alarm.put("nextAt", nextAt)
         if (test != null) {
@@ -131,10 +142,10 @@ class AlarmEngine(private val context: Context) {
         return success(alarm)
     }
 
-    fun snooze(id: String): Map<String, Any?> {
+    fun snooze(id: String, minutes: Int? = null): Map<String, Any?> {
         val alarm = store.get(id) ?: return fail("not_found")
         if (alarm.optString("state") != "ringing") return fail("not_ringing")
-        val snooze = AlarmRules.nextSnooze(System.currentTimeMillis(), alarm.optInt("snoozesUsed"), alarm.optInt("snoozeMinutes", 5), alarm.optInt("maxSnoozes", 3))
+        val snooze = AlarmRules.nextSnooze(System.currentTimeMillis(), alarm.optInt("snoozesUsed"), (minutes ?: alarm.optInt("snoozeMinutes", 5)), alarm.optInt("maxSnoozes", 3))
             ?: return fail("snooze_limit")
         if (!canSchedule()) return fail("exact_alarm_permission")
         val previous = JSONObject(alarm.toString())
@@ -271,7 +282,7 @@ class AlarmEngine(private val context: Context) {
                         now = now,
                         maximumRingMs = MAX_RING_MS,
                         clockChanged = clockChanged,
-                        preview = AlarmRules.isPreviewId(alarm.optString("id")),
+                        preview = AlarmRules.isPreviewId(alarm.optString("id")) || alarm.optLong("oneShotAt") > 0L,
                         skipRinging = skipRinging,
                     )
                     when (plan.action) {

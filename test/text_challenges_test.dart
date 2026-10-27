@@ -50,7 +50,7 @@ void main() {
         for (var seed = 0; seed < 200; seed += 1) {
           final random = Random(seed);
           final question = generateCaptchaQuestion(random, difficulty);
-          expect(question.code.length, 4 + difficulty.index);
+          expect(question.code.length, [4, 5, 8, 10][difficulty.index]);
           expect(
             question.code.split('').every(captchaAlphabet.contains),
             isTrue,
@@ -84,36 +84,40 @@ void main() {
     },
   );
 
-  test(
-    'typed tasks have bounded rounds and mixed contains all six kinds once',
-    () {
-      for (final difficulty in ChallengeDifficulty.values) {
-        for (final kind in [ChallengeKind.mirror, ChallengeKind.captcha]) {
-          final session = ChallengeSession(kind: kind, difficulty: difficulty);
-          expect(
-            session.totalSteps,
-            difficulty == ChallengeDifficulty.hard ? 3 : 2,
-          );
-          expect(session.submitCorrect(), isFalse);
-          session.submitIncorrect();
-          expect(session.completedSteps, 1);
-          while (!session.isComplete) {
-            session.submitCorrect();
-          }
-          expect(session.submitCorrect(), isFalse);
-        }
-        final mixed = ChallengeSession(
-          kind: ChallengeKind.mixed,
-          difficulty: difficulty,
-        );
+  test('typed tasks have bounded rounds and mixed contains all seven screen tasks once', () {
+    for (final difficulty in ChallengeDifficulty.values) {
+      for (final kind in [ChallengeKind.mirror, ChallengeKind.captcha]) {
+        final session = ChallengeSession(kind: kind, difficulty: difficulty);
         expect(
-          mixed.rounds.toSet(),
-          ChallengeKind.values
-              .where((kind) => kind != ChallengeKind.mixed)
-              .toSet(),
+          session.totalSteps,
+          difficulty.index >= 2 ? difficulty.index + 1 : 2,
         );
-        expect(mixed.rounds, hasLength(6));
+        expect(session.submitCorrect(), isFalse);
+        session.submitIncorrect();
+        expect(session.completedSteps, 0);
+        while (!session.isComplete) {
+          session.submitCorrect();
+        }
+        expect(session.submitCorrect(), isFalse);
       }
-    },
-  );
+      final mixed = ChallengeSession(
+        kind: ChallengeKind.mixed,
+        difficulty: difficulty,
+      );
+      expect(
+        mixed.rounds.toSet(),
+        ChallengeKind.values
+            .where(
+              (kind) => ![
+                ChallengeKind.mixed,
+                ChallengeKind.qr,
+                ChallengeKind.shake,
+                ChallengeKind.maze,
+              ].contains(kind),
+            )
+            .toSet(),
+      );
+      expect(mixed.rounds, hasLength(7));
+    }
+  });
 }

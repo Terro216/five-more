@@ -1,7 +1,7 @@
 name: five_more
 description: 'Ещё пять — простой будильник с переносами и заданиями для пробуждения.'
 publish_to: 'none'
-version: 0.5.2+7
+version: 0.6.0+8
 
 environment:
   sdk: '>=3.13.0 <4.0.0'
@@ -13,6 +13,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   shared_preferences: 2.5.3
+  mobile_scanner: 7.4.2
+  sensors_plus: 7.1.1
+  http: 1.6.0
 
 dev_dependencies:
   flutter_test:

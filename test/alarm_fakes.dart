@@ -84,7 +84,7 @@ class FakeAlarmGateway implements AlarmGateway {
   }
 
   @override
-  Future<AlarmResult> snooze(String id) async {
+  Future<AlarmResult> snooze(String id, {int? minutes}) async {
     snoozeCalls.add(id);
     ringing = null;
     return const AlarmResult(ok: true);

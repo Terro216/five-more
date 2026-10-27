@@ -139,9 +139,14 @@ void main() {
     await controller.initialize(startPolling: false);
     await _openEditor(tester, controller, alarm: custom);
 
-    await _reveal(tester, find.text('Свои настройки'));
-    expect(find.text('Свои настройки'), findsOneWidget);
-    expect(find.byKey(const ValueKey('alarm-title')), findsNothing);
+    await _reveal(tester, find.byKey(const ValueKey('wake-preset-summary')));
+    expect(find.byKey(const ValueKey('wake-preset-summary')), findsOneWidget);
+    expect(
+      tester
+          .widget<ExpansionTile>(find.byKey(const ValueKey('alarm-advanced')))
+          .initiallyExpanded,
+      isTrue,
+    );
     await tester.tap(_save);
     await tester.pumpAndSettle();
 
@@ -248,8 +253,12 @@ void main() {
       await _reveal(tester, _advanced, delta: -220);
       await tester.tap(find.text('Настроить вручную'));
       await tester.pumpAndSettle();
-      await _reveal(tester, find.text('Свои настройки'), delta: -220);
-      expect(find.text('Свои настройки'), findsOneWidget);
+      await _reveal(
+        tester,
+        find.byKey(const ValueKey('wake-preset-summary')),
+        delta: -220,
+      );
+      expect(find.byKey(const ValueKey('wake-preset-summary')), findsOneWidget);
       await tester.tap(_save);
       await tester.pumpAndSettle();
       expect(gateway.scheduleCalls.single.title, 'Мой режим');

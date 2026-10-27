@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/alarm_controller.dart';
 import '../../app/theme.dart';
@@ -6,6 +9,9 @@ import '../../models/alarm.dart';
 import '../../models/wake_preset.dart';
 import '../challenges/challenge_models.dart';
 import '../challenges/challenge_screen.dart';
+import '../challenges/physical_tasks.dart';
+import '../../services/native_extras.dart';
+import '../../widgets/time_composer.dart';
 
 class AlarmEditor extends StatefulWidget {
   const AlarmEditor({super.key, required this.controller, this.alarm});
@@ -22,42 +28,51 @@ class _AlarmEditorState extends State<AlarmEditor> {
   bool _saving = false;
   int _practiceSnoozes = 0;
   String? _error;
+  final _advanced = ExpansibleController();
+  bool _nap = false;
+  int _napMinutes = 20;
+  Timer? _clock;
+  bool _soundBusy = false;
+  bool _timeValid = true;
 
   @override
   void initState() {
     super.initState();
     _draft = widget.alarm ?? Alarm.fresh();
     _title = TextEditingController(text: _draft.title);
+    _clock = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _title.dispose();
+    _advanced.dispose();
+    _clock?.cancel();
+    if (NativeExtras.available) {
+      unawaited(NativeExtras.call<void>('stopAudio').catchError((Object _) {}));
+    }
     super.dispose();
   }
 
-  Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay(hour: _draft.hour, minute: _draft.minute),
-      initialEntryMode: TimePickerEntryMode.input,
-      helpText: 'Во сколько встаём?',
-      cancelText: 'Отмена',
-      confirmText: 'Готово',
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-        child: child!,
-      ),
-    );
-    if (picked != null && mounted) {
-      setState(
-        () =>
-            _draft = _draft.copyWith(hour: picked.hour, minute: picked.minute),
+  Future<void> _save() async {
+    if ((_draft.challengeKind == ChallengeKind.qr ||
+            (_draft.challengeKind == ChallengeKind.mixed &&
+                _draft.mixOrder.contains(ChallengeKind.qr))) &&
+        _draft.qrValue.isEmpty) {
+      setState(() => _error = 'Сначала зарегистрируй QR-код.');
+      return;
+    }
+    if (_nap) {
+      final at = widget.controller.now.add(Duration(minutes: _napMinutes));
+      _draft = _draft.copyWith(
+        hour: at.hour,
+        minute: at.minute,
+        weekdays: const [],
+        oneShotAt: at,
       );
     }
-  }
-
-  Future<void> _save() async {
     setState(() {
       _saving = true;
       _error = null;
@@ -84,6 +99,8 @@ class _AlarmEditorState extends State<AlarmEditor> {
       MaterialPageRoute<void>(
         builder: (context) => ChallengeScreen(
           kind: _draft.challengeKind,
+          order: _draft.mixOrder,
+          qrValue: _draft.qrValue,
           difficulty: _draft.difficultyForSnoozes(_practiceSnoozes),
           practice: true,
           onComplete: () => Navigator.of(context).pop(),
@@ -125,7 +142,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
               ),
             FilledButton(
               key: const ValueKey('save-alarm'),
-              onPressed: _saving ? null : _save,
+              onPressed: _saving || (!_nap && !_timeValid) ? null : _save,
               child: _saving
                   ? const SizedBox.square(
                       dimension: 22,
@@ -153,127 +170,160 @@ class _AlarmEditorState extends State<AlarmEditor> {
                 icon: Icons.info_outline_rounded,
                 text: 'Режим знакомства: настройки сохранятся, но будильник не зазвонит.',
               ),
-            Semantics(
-              button: true,
-              enabled: !_saving,
-              label: 'Время подъёма ${_draft.timeLabel}. Изменить время',
-              excludeSemantics: true,
-              onTap: _saving ? null : _pickTime,
-              child: InkWell(
-                onTap: _saving ? null : _pickTime,
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 18,
-                  ),
-                  decoration: BoxDecoration(
-                    color: panel,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                _draft.timeLabel,
-                                style: const TextStyle(
-                                  fontSize: 52,
-                                  height: 1.15,
-                                  fontWeight: FontWeight.w400,
-                                  letterSpacing: -1,
-                                  color: morning,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'Изменить время',
-                              style: TextStyle(color: muted),
-                            ),
-                          ],
-                        ),
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: false, label: Text('Будильник')),
+                ButtonSegment(value: true, label: Text('Вздремнуть')),
+              ],
+              selected: {_nap},
+              onSelectionChanged: _saving
+                  ? null
+                  : (v) => setState(() {
+                      _nap = v.single;
+                      if (!_nap) _draft = _draft.copyWith(clearOneShotAt: true);
+                    }),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                _nap
+                    ? 'Звонок в ${clockLabel(TimeOfDay.fromDateTime(widget.controller.now.add(Duration(minutes: _napMinutes))))} · через $_napMinutes мин'
+                    : 'До звонка ${remainingLabel(_draft.nextOccurrence(widget.controller.now), widget.controller.now)}',
+                key: const ValueKey('alarm-time-remaining'),
+                style: const TextStyle(color: morning, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            if (_nap) ...[
+              Text(
+                '$_napMinutes минут',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 36, color: morning),
+              ),
+              Slider(
+                value: _napMinutes.toDouble(),
+                min: 1,
+                max: 180,
+                divisions: 179,
+                label: '$_napMinutes мин',
+                onChanged: _saving
+                    ? null
+                    : (v) => setState(() => _napMinutes = v.round()),
+              ),
+              Wrap(
+                spacing: 8,
+                children: [10, 20, 30, 60, 90]
+                    .map(
+                      (n) => ChoiceChip(
+                        label: Text('$n мин'),
+                        selected: _napMinutes == n,
+                        onSelected: _saving
+                            ? null
+                            : (_) => setState(() => _napMinutes = n),
                       ),
-                      const Icon(Icons.edit_outlined, color: morning),
-                    ],
+                    )
+                    .toList(),
+              ),
+            ] else
+              TimeComposer(
+                time: TimeOfDay(hour: _draft.hour, minute: _draft.minute),
+                enabled: !_saving,
+                onValidityChanged: (valid) =>
+                    setState(() => _timeValid = valid),
+                onChanged: (time) => setState(
+                  () => _draft = _draft.copyWith(
+                    hour: time.hour,
+                    minute: time.minute,
+                    clearOneShotAt: true,
                   ),
                 ),
               ),
-            ),
-            const _Heading('Когда повторять'),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _preset('Один раз', const []),
-                _preset('Будни', const [1, 2, 3, 4, 5]),
-                _preset('Каждый день', const [1, 2, 3, 4, 5, 6, 7]),
-              ],
-            ),
-            const SizedBox(height: 12),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final columns = constraints.maxWidth >= 348 ? 7 : 4;
-                final gap = columns == 7 ? 2.0 : 6.0;
-                return Wrap(
-                  spacing: gap,
-                  runSpacing: 6,
-                  children: List.generate(7, (index) {
-                    final selected = _draft.weekdays.contains(index + 1);
-                    return SizedBox(
-                      width:
-                          ((constraints.maxWidth - gap * (columns - 1)) /
-                                  columns)
-                              .clamp(48.0, 80.0),
-                      child: Semantics(
-                        label: '${shortWeekdays[index]}, повторять',
-                        button: true,
-                        enabled: !_saving,
-                        selected: selected,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
-                          onTap: _saving
-                              ? null
-                              : () {
-                                  final days = [..._draft.weekdays];
-                                  selected
-                                      ? days.remove(index + 1)
-                                      : days.add(index + 1);
-                                  days.sort();
-                                  setState(
-                                    () => _draft = _draft.copyWith(
-                                      weekdays: days,
-                                    ),
-                                  );
-                                },
-                          child: Container(
-                            height: 48,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: selected ? morning : panel,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Text(
-                              shortWeekdays[index],
-                              style: TextStyle(
-                                color: selected ? ink : muted,
-                                fontWeight: FontWeight.w700,
+            if (!_nap) ...[
+              const _Heading('Когда повторять'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _preset('Один раз', const []),
+                  _preset('Будни', const [1, 2, 3, 4, 5]),
+                  _preset('Каждый день', const [1, 2, 3, 4, 5, 6, 7]),
+                ],
+              ),
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 348 ? 7 : 4;
+                  final gap = columns == 7 ? 2.0 : 6.0;
+                  return Wrap(
+                    spacing: gap,
+                    runSpacing: 6,
+                    children: List.generate(7, (index) {
+                      final selected = _draft.weekdays.contains(index + 1);
+                      return SizedBox(
+                        width:
+                            ((constraints.maxWidth - gap * (columns - 1)) /
+                                    columns)
+                                .clamp(48.0, 80.0),
+                        child: Semantics(
+                          label: '${shortWeekdays[index]}, повторять',
+                          button: true,
+                          enabled: !_saving,
+                          selected: selected,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: _saving
+                                ? null
+                                : () {
+                                    final days = [..._draft.weekdays];
+                                    selected
+                                        ? days.remove(index + 1)
+                                        : days.add(index + 1);
+                                    days.sort();
+                                    setState(
+                                      () => _draft = _draft.copyWith(
+                                        weekdays: days,
+                                      ),
+                                    );
+                                  },
+                            child: Container(
+                              height: 48,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: selected ? morning : panel,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Text(
+                                shortWeekdays[index],
+                                style: TextStyle(
+                                  color: selected ? ink : muted,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  }),
-                );
-              },
-            ),
+                      );
+                    }),
+                  );
+                },
+              ),
+            ],
             const _Heading('Как просыпаться'),
             ...WakePreset.values.map(_wakePreset),
+            ListTile(
+              key: const ValueKey('preset-custom'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              leading: Icon(
+                WakePreset.matching(_draft) == null
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.tune_rounded,
+                color: morning,
+              ),
+              title: const Text('Свои настройки'),
+              onTap: _saving ? null : () => _advanced.expand(),
+            ),
             const SizedBox(height: 12),
             Text(
               WakePreset.matching(_draft) == null
@@ -293,19 +343,21 @@ class _AlarmEditorState extends State<AlarmEditor> {
             const SizedBox(height: 12),
             ExpansionTile(
               key: const ValueKey('alarm-advanced'),
+              controller: _advanced,
+              initiallyExpanded: WakePreset.matching(_draft) == null,
               tilePadding: EdgeInsets.zero,
               childrenPadding: const EdgeInsets.only(bottom: 16),
               shape: const Border(),
               collapsedShape: const Border(),
               title: const Text('Настроить вручную'),
-              subtitle: const Text('Переносы, задание и название'),
+              subtitle: const Text('Переносы, задания и порядок'),
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const _Heading('Ещё пять — сколько раз?'),
+                    const _Heading('Сколько переносов разрешить'),
                     const Text(
-                      'Лимит общий для одного подъёма: закрытие приложения его не сбросит.',
+                      'Сколько раз можно отложить звонок перед заданием.',
                       style: TextStyle(color: muted, height: 1.5),
                     ),
                     const SizedBox(height: 14),
@@ -378,7 +430,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Кнопка переноса меняет место'),
                       subtitle: Text(
-                        _draft.maxSnoozes == 0 ? 'Сейчас переносы выключены.' : 'После каждого переноса — с другой стороны. Во время звонка она неподвижна.',
+                        _draft.maxSnoozes == 0 ? 'Сейчас переносы выключены.' : 'После переноса меняются место, размер, цвет и форма. Во время нажатия кнопка остаётся на месте.',
                         style: const TextStyle(
                           color: muted,
                           fontSize: 12,
@@ -436,6 +488,11 @@ class _AlarmEditorState extends State<AlarmEditor> {
                         ),
                       ),
                     ),
+                    if (_draft.challengeKind == ChallengeKind.mixed)
+                      _mixSettings(),
+                    if (_draft.challengeKind == ChallengeKind.qr ||
+                        _draft.mixOrder.contains(ChallengeKind.qr))
+                      _qrSettings(),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -543,6 +600,8 @@ class _AlarmEditorState extends State<AlarmEditor> {
                 ),
               ],
             ),
+            const _Heading('Мелодия'),
+            _soundSettings(),
             if (!widget.controller.device.challengeEnforced)
               const _Note(
                 icon: Icons.phone_iphone_rounded,
@@ -556,9 +615,205 @@ class _AlarmEditorState extends State<AlarmEditor> {
     ),
   );
 
+  Widget _mixSettings() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      SwitchListTile.adaptive(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Свой порядок заданий'),
+        value: _draft.mixOrder.isNotEmpty,
+        onChanged: _saving
+            ? null
+            : (v) => setState(
+                () => _draft = _draft.copyWith(
+                  mixOrder: v
+                      ? [
+                          ChallengeKind.math,
+                          ChallengeKind.memory,
+                          ChallengeKind.stroop,
+                          ChallengeKind.sequence,
+                          ChallengeKind.mirror,
+                          ChallengeKind.captcha,
+                          ChallengeKind.flags,
+                        ]
+                      : [],
+                ),
+              ),
+      ),
+      if (_draft.mixOrder.isNotEmpty) ...[
+        const Text(
+          'Перетаскивай за ручку. Можно повторить один вид несколько раз.',
+          style: TextStyle(color: muted, fontSize: 12),
+        ),
+        ReorderableListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          itemCount: _draft.mixOrder.length,
+          onReorderItem: (old, next) {
+            if (_saving) return;
+            final items = [..._draft.mixOrder];
+            items.insert(next, items.removeAt(old));
+            setState(() => _draft = _draft.copyWith(mixOrder: items));
+          },
+          itemBuilder: (context, index) => ListTile(
+            key: ValueKey('mix-$index-${_draft.mixOrder[index].name}'),
+            contentPadding: EdgeInsets.zero,
+            leading: ReorderableDragStartListener(
+              index: index,
+              child: const Padding(
+                padding: EdgeInsets.all(12),
+                child: Icon(Icons.drag_handle),
+              ),
+            ),
+            title: Text('${index + 1}. ${_draft.mixOrder[index].label}'),
+            trailing: IconButton(
+              tooltip: 'Убрать этап',
+              onPressed: _saving || _draft.mixOrder.length == 1
+                  ? null
+                  : () {
+                      final items = [..._draft.mixOrder]..removeAt(index);
+                      setState(() => _draft = _draft.copyWith(mixOrder: items));
+                    },
+              icon: const Icon(Icons.remove_circle_outline),
+            ),
+          ),
+        ),
+        PopupMenuButton<ChallengeKind>(
+          onSelected: (kind) => setState(
+            () =>
+                _draft = _draft.copyWith(mixOrder: [..._draft.mixOrder, kind]),
+          ),
+          enabled: !_saving && _draft.mixOrder.length < 12,
+          itemBuilder: (_) => ChallengeKind.values
+              .where((k) => k != ChallengeKind.mixed)
+              .map((k) => PopupMenuItem(value: k, child: Text(k.label)))
+              .toList(),
+          child: const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('Добавить этап', style: TextStyle(color: morning)),
+          ),
+        ),
+      ],
+    ],
+  );
+  Widget _qrSettings() => ListTile(
+    contentPadding: EdgeInsets.zero,
+    leading: const Icon(Icons.qr_code_scanner_rounded),
+    title: Text(
+      _draft.qrValue.isEmpty
+          ? 'Зарегистрировать QR-код'
+          : 'QR-код зарегистрирован',
+    ),
+    subtitle: const Text('Например, код в ванной или на кухне'),
+    trailing: const Icon(Icons.chevron_right),
+    onTap: _saving
+        ? null
+        : () async {
+            final code = await registerQr(context);
+            if (code != null && mounted) {
+              setState(() => _draft = _draft.copyWith(qrValue: code));
+            }
+          },
+  );
+  Widget _soundSettings() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      DropdownButtonFormField<String>(
+        key: ValueKey('sound-${_draft.sound}'),
+        initialValue: _draft.sound,
+        isExpanded: true,
+        items:
+            {
+                  ...const {
+                    'system': 'Системный будильник',
+                    'classic': 'Классический звонок',
+                    'sunrise': 'Мягкий рассвет',
+                    'arcade': 'Аркадное утро',
+                    'pulse': 'Пульс',
+                  },
+                  if (_draft.sound.startsWith('file:'))
+                    _draft.sound: _draft.soundLabel,
+                }.entries
+                .map(
+                  (e) => DropdownMenuItem(
+                    value: e.key,
+                    child: Text(e.value, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+        onChanged: _saving
+            ? null
+            : (v) {
+                if (v != null) {
+                  setState(() => _draft = _draft.copyWith(sound: v));
+                }
+              },
+        decoration: const InputDecoration(labelText: 'Звук этого будильника'),
+      ),
+      Wrap(
+        spacing: 8,
+        children: [
+          TextButton.icon(
+            icon: const Icon(Icons.play_arrow_rounded),
+            label: const Text('Послушать'),
+            onPressed: _soundBusy
+                ? null
+                : () => _soundAction(() async {
+                    await NativeExtras.call<void>('previewSound', {
+                      'sound': _draft.sound,
+                    });
+                  }),
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.audio_file_outlined),
+            label: const Text('Выбрать аудиофайл'),
+            onPressed: _soundBusy
+                ? null
+                : () => _soundAction(() async {
+                    final value = await NativeExtras.call<Map>('pickSound');
+                    if (value != null && mounted) {
+                      setState(
+                        () => _draft = _draft.copyWith(
+                          sound: value['sound'] as String,
+                          soundLabel: value['label'] as String,
+                        ),
+                      );
+                    }
+                  }),
+          ),
+        ],
+      ),
+      if (widget.controller.device.platform == 'ios')
+        const Text(
+          'Для iPhone берём первые 29 секунд файла.',
+          style: TextStyle(color: muted, fontSize: 12),
+        ),
+    ],
+  );
+  Future<void> _soundAction(Future<void> Function() action) async {
+    setState(() => _soundBusy = true);
+    try {
+      await action();
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => _error = e is PlatformException
+              ? e.message
+              : 'Не удалось открыть аудио.',
+        );
+      }
+    }
+    if (mounted) setState(() => _soundBusy = false);
+  }
+
   Widget _wakePreset(WakePreset preset) {
     final selected = preset.matches(_draft);
-    void choose() => setState(() => _updateDraft(preset.applyTo(_draft)));
+    void choose() {
+      setState(() => _updateDraft(preset.applyTo(_draft)));
+      _advanced.collapse();
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Semantics(
@@ -677,6 +932,10 @@ IconData challengeIcon(ChallengeKind kind) => switch (kind) {
   ChallengeKind.sequence => Icons.format_list_numbered_rounded,
   ChallengeKind.mirror => Icons.flip_rounded,
   ChallengeKind.captcha => Icons.password_rounded,
+  ChallengeKind.qr => Icons.qr_code_scanner_rounded,
+  ChallengeKind.shake => Icons.vibration_rounded,
+  ChallengeKind.maze => Icons.sports_esports_outlined,
+  ChallengeKind.flags => Icons.flag_outlined,
   ChallengeKind.mixed => Icons.shuffle_rounded,
 };
 

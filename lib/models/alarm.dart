@@ -41,6 +41,11 @@ class Alarm {
     this.escalateOnSnooze = false,
     this.moveSnoozeButton = false,
     this.nextAt,
+    this.oneShotAt,
+    this.mixOrder = const [],
+    this.qrValue = '',
+    this.sound = 'system',
+    this.soundLabel = 'Системный будильник',
   });
 
   factory Alarm.fresh() => Alarm(
@@ -65,6 +70,11 @@ class Alarm {
   final bool escalateOnSnooze;
   final bool moveSnoozeButton;
   final DateTime? nextAt;
+  final DateTime? oneShotAt;
+  final List<ChallengeKind> mixOrder;
+  final String qrValue;
+  final String sound;
+  final String soundLabel;
 
   String get timeLabel =>
       '${hour.toString().padLeft(2, '0')}:'
@@ -77,10 +87,10 @@ class Alarm {
   /// the level. The saved difficulty always remains the first-ring baseline.
   ChallengeDifficulty difficultyForSnoozes(int snoozesUsed) {
     if (!escalateOnSnooze) return difficulty;
-    final level = (difficulty.index + snoozesUsed.clamp(0, 2)).clamp(
-      0,
-      ChallengeDifficulty.values.length - 1,
-    );
+    final level =
+        (difficulty.index +
+                snoozesUsed.clamp(0, ChallengeDifficulty.values.length - 1))
+            .clamp(0, ChallengeDifficulty.values.length - 1);
     return ChallengeDifficulty.values[level];
   }
 
@@ -90,6 +100,7 @@ class Alarm {
   /// A calendar calculation, deliberately avoiding Duration(days: 1), which
   /// would drift local wall-clock time across daylight-saving transitions.
   DateTime nextOccurrence(DateTime now) {
+    if (oneShotAt != null && weekdays.isEmpty) return oneShotAt!;
     final localNow = now.toLocal();
     for (var offset = 0; offset <= 7; offset++) {
       final candidate = DateTime(
@@ -121,8 +132,19 @@ class Alarm {
     bool? moveSnoozeButton,
     DateTime? nextAt,
     bool clearNextAt = false,
+    DateTime? oneShotAt,
+    bool clearOneShotAt = false,
+    List<ChallengeKind>? mixOrder,
+    String? qrValue,
+    String? sound,
+    String? soundLabel,
   }) => Alarm(
     id: id,
+    oneShotAt: clearOneShotAt ? null : oneShotAt ?? this.oneShotAt,
+    mixOrder: List.unmodifiable(mixOrder ?? this.mixOrder),
+    qrValue: qrValue ?? this.qrValue,
+    sound: sound ?? this.sound,
+    soundLabel: soundLabel ?? this.soundLabel,
     hour: hour ?? this.hour,
     minute: minute ?? this.minute,
     title: title ?? this.title,
@@ -139,6 +161,11 @@ class Alarm {
 
   Map<String, Object?> toJson() => {
     'id': id,
+    'oneShotAt': oneShotAt?.millisecondsSinceEpoch,
+    'mixOrder': mixOrder.map((kind) => kind.name).toList(),
+    'qrValue': qrValue,
+    'sound': sound,
+    'soundLabel': soundLabel,
     'hour': hour,
     'minute': minute,
     'title': title,
@@ -164,6 +191,20 @@ class Alarm {
           ..sort();
     return Alarm(
       id: json['id'] as String,
+      oneShotAt: parseNextTimestamp(json['oneShotAt']),
+      mixOrder: (json['mixOrder'] as List? ?? [])
+          .whereType<String>()
+          .map(
+            (name) => ChallengeKind.values
+                .where((k) => k.name == name && k != ChallengeKind.mixed)
+                .firstOrNull,
+          )
+          .whereType<ChallengeKind>()
+          .take(12)
+          .toList(),
+      qrValue: json['qrValue'] as String? ?? '',
+      sound: json['sound'] as String? ?? 'system',
+      soundLabel: json['soundLabel'] as String? ?? 'Системный будильник',
       hour: intValue(json['hour'], 7).clamp(0, 23),
       minute: intValue(json['minute'], 30).clamp(0, 59),
       title: json['title'] as String? ?? '',

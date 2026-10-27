@@ -15,13 +15,14 @@ enum WakePreset {
   };
 
   String get description => switch (this) {
-    gentle => 'Лёгкий счёт · один перенос на 5 минут',
+    gentle => 'Чилл · счёт · один перенос на 5 минут',
     gradual => 'Счёт · до 3 переносов по 5 минут · сложность растёт',
     direct => 'Микс заданий · средняя сложность',
   };
 
   Alarm applyTo(Alarm alarm) => switch (this) {
     gentle => alarm.copyWith(
+      mixOrder: const [],
       challengeKind: ChallengeKind.math,
       difficulty: ChallengeDifficulty.easy,
       snoozeMinutes: 5,
@@ -29,6 +30,7 @@ enum WakePreset {
       escalateOnSnooze: false,
     ),
     gradual => alarm.copyWith(
+      mixOrder: const [],
       challengeKind: ChallengeKind.math,
       difficulty: ChallengeDifficulty.easy,
       snoozeMinutes: 5,
@@ -36,6 +38,7 @@ enum WakePreset {
       escalateOnSnooze: true,
     ),
     direct => alarm.copyWith(
+      mixOrder: const [],
       challengeKind: ChallengeKind.mixed,
       difficulty: ChallengeDifficulty.medium,
       snoozeMinutes: 5,
@@ -46,7 +49,8 @@ enum WakePreset {
 
   bool matches(Alarm alarm) {
     final preset = applyTo(alarm);
-    return alarm.challengeKind == preset.challengeKind &&
+    return alarm.mixOrder.isEmpty &&
+        alarm.challengeKind == preset.challengeKind &&
         alarm.difficulty == preset.difficulty &&
         alarm.snoozeMinutes == preset.snoozeMinutes &&
         alarm.maxSnoozes == preset.maxSnoozes &&

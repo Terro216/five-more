@@ -9,6 +9,8 @@ import '../../models/snooze_position.dart';
 import '../challenges/challenge_models.dart';
 import '../challenges/challenge_screen.dart';
 import 'alarm_editor.dart';
+import '../../widgets/emergency_stop.dart';
+import '../../widgets/time_composer.dart';
 
 class RingingScreen extends StatefulWidget {
   const RingingScreen({
@@ -26,9 +28,9 @@ class RingingScreen extends StatefulWidget {
 class _RingingScreenState extends State<RingingScreen> {
   bool _challenge = false;
   bool _emergency = false;
+  bool _snoozeEditing = false;
+  int _chosenMinutes = 5;
   bool _finishing = false;
-  double _hold = 0;
-  Timer? _holdTimer;
   Timer? _clockTimer;
   String? _error;
   String? _completedOccurrenceId;
@@ -46,7 +48,6 @@ class _RingingScreenState extends State<RingingScreen> {
 
   @override
   void dispose() {
-    _holdTimer?.cancel();
     _clockTimer?.cancel();
     super.dispose();
   }
@@ -83,6 +84,7 @@ class _RingingScreenState extends State<RingingScreen> {
     final result = await widget.controller.snooze(
       alarmId: widget.ringing.alarm.id,
       occurrenceId: widget.ringing.occurrenceId,
+      minutes: _snoozeEditing ? _chosenMinutes : null,
     );
     if (mounted && !result.ok) {
       setState(() {
@@ -92,27 +94,21 @@ class _RingingScreenState extends State<RingingScreen> {
     }
   }
 
-  void _startHold() {
-    if (_finishing) return;
-    _holdTimer?.cancel();
-    setState(() => _hold = 0);
-    _holdTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      final progress = (timer.tick / 40).clamp(0.0, 1.0);
-      setState(() => _hold = progress);
-      if (progress >= 1) {
-        timer.cancel();
-        unawaited(_dismiss(emergency: true));
-      }
-    });
+  Future<void> _emergencyStop() async {
+    if (_finishing || _emergency) return;
+    setState(() => _emergency = true);
+    final confirmed = await confirmEmergencyStop(context);
+    if (!mounted) return;
+    setState(() => _emergency = false);
+    if (confirmed) await _dismiss(emergency: true);
   }
 
-  void _stopHold() {
-    _holdTimer?.cancel();
-    if (mounted && !_finishing) setState(() => _hold = 0);
+  void _editSnooze(RingingAlarm ringing) {
+    if (_finishing) return;
+    setState(() {
+      _chosenMinutes = ringing.alarm.snoozeMinutes;
+      _snoozeEditing = true;
+    });
   }
 
   @override
@@ -129,6 +125,8 @@ class _RingingScreenState extends State<RingingScreen> {
             ),
             kind: ringing.alarm.challengeKind,
             difficulty: ringing.challengeDifficulty,
+            order: ringing.alarm.mixOrder,
+            qrValue: ringing.alarm.qrValue,
             onComplete: () {
               _completedOccurrenceId = ringing.occurrenceId;
               _dismiss();
@@ -136,7 +134,6 @@ class _RingingScreenState extends State<RingingScreen> {
             onEmergencyExit: () => _dismiss(emergency: true),
           );
         }
-        if (_emergency) return _emergencyScreen();
         return Scaffold(
           backgroundColor: ink,
           resizeToAvoidBottomInset: false,
@@ -147,11 +144,9 @@ class _RingingScreenState extends State<RingingScreen> {
               child: TextButton(
                 key: const ValueKey('ringing-emergency'),
                 style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-                onPressed: _finishing
-                    ? null
-                    : () => setState(() => _emergency = true),
+                onPressed: _finishing ? null : _emergencyStop,
                 child: const Text(
-                  'Аварийное отключение',
+                  'Не получается пройти',
                   style: TextStyle(color: muted),
                   textAlign: TextAlign.center,
                 ),
@@ -173,6 +168,9 @@ class _RingingScreenState extends State<RingingScreen> {
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
                       child: _ringActions(ringing),
                     );
+                    if (_snoozeEditing) {
+                      return SingleChildScrollView(child: actions);
+                    }
                     if (constraints.maxWidth >= 600 &&
                         constraints.maxHeight < 600) {
                       return Row(
@@ -259,8 +257,7 @@ class _RingingScreenState extends State<RingingScreen> {
       const SizedBox(height: 20),
       if (ringing.snoozesRemaining > 0) ...[
         Text(
-          'Осталось переносов: ${ringing.snoozesRemaining} из ${ringing.alarm.maxSnoozes}'
-          ' · ${ringing.snoozesRemaining * ringing.alarm.snoozeMinutes} мин',
+          'Осталось переносов: ${ringing.snoozesRemaining} из ${ringing.alarm.maxSnoozes}',
           textAlign: TextAlign.center,
           style: const TextStyle(color: muted, fontSize: 14),
         ),
@@ -269,6 +266,12 @@ class _RingingScreenState extends State<RingingScreen> {
           _snoozeTiming(ringing),
           textAlign: TextAlign.center,
           style: const TextStyle(color: morning, fontSize: 14, height: 1.4),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Удерживай кнопку переноса, чтобы выбрать минуты',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: muted, fontSize: 12),
         ),
         if (ringing.alarm.moveSnoozeButton &&
             ringing.alarm.difficultyForSnoozes(ringing.snoozesUsed + 1) !=
@@ -282,7 +285,9 @@ class _RingingScreenState extends State<RingingScreen> {
         ],
       ] else
         Text(
-          ringing.alarm.maxSnoozes == 0
+          !widget.controller.device.challengeEnforced
+              ? 'Переносов нет. Можно пройти задание здесь или остановить звонок системной кнопкой iOS.'
+              : ringing.alarm.maxSnoozes == 0
               ? 'Без переносов. Пройди задание, чтобы отключить звонок.'
               : 'Переносы закончились. Пройди задание, чтобы отключить звонок.',
           textAlign: TextAlign.center,
@@ -336,47 +341,111 @@ class _RingingScreenState extends State<RingingScreen> {
   );
 
   Widget _snoozeControl(RingingAlarm ringing) {
+    if (_snoozeEditing) {
+      final next = widget.controller.now.add(Duration(minutes: _chosenMinutes));
+      return Container(
+        key: const ValueKey('snooze-slider'),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: panel,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            Text(
+              'Ещё $_chosenMinutes мин · звонок в ${clockLabel(TimeOfDay.fromDateTime(next))}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: morning),
+            ),
+            Slider(
+              value: _chosenMinutes.toDouble(),
+              min: 1,
+              max: 30,
+              divisions: 29,
+              label: '$_chosenMinutes мин',
+              onChanged: _finishing
+                  ? null
+                  : (v) => setState(() => _chosenMinutes = v.round()),
+            ),
+            Text(
+              'После этого останется переносов: ${ringing.snoozesRemaining - 1}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: muted, fontSize: 12),
+            ),
+            Wrap(
+              spacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: _finishing
+                      ? null
+                      : () => setState(() => _snoozeEditing = false),
+                  child: const Text('Отмена'),
+                ),
+                FilledButton(
+                  onPressed: _finishing ? null : _snooze,
+                  child: Text('Отложить на $_chosenMinutes мин'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
     final onPressed = _finishing || widget.controller.busy ? null : _snooze;
     if (!ringing.alarm.moveSnoozeButton) {
       return OutlinedButton.icon(
         key: const ValueKey('ringing-snooze'),
+        onLongPress: onPressed == null ? null : () => _editSnooze(ringing),
         onPressed: onPressed,
         icon: const Icon(Icons.snooze_rounded),
         label: Text(_snoozeLabel(ringing), textAlign: TextAlign.center),
       );
     }
-    final position = snoozePositionFor(
+    final appearance = snoozeAppearanceFor(
       ringing.occurrenceId,
       ringing.snoozesUsed,
     );
-    // Reserve the full area for the current ring. There is no animation,
-    // timer-driven relocation, or layout change while a press is in progress.
+    const colors = [
+      morning,
+      Color(0xFF8EDDAB),
+      Color(0xFF7FBFFF),
+      Color(0xFFD5ABFF),
+      Color(0xFFFFB4AB),
+    ];
     return LayoutBuilder(
-      builder: (context, constraints) => Padding(
+      builder: (context, constraints) => SizedBox(
         key: const ValueKey('moving-snooze-area'),
-        padding: EdgeInsets.only(
-          top: position.onBottom ? 16 : 0,
-          bottom: position.onBottom ? 0 : 16,
-        ),
+        height: 168,
         child: Align(
-          alignment: position.onRight
-              ? Alignment.centerRight
-              : Alignment.centerLeft,
+          alignment: Alignment(appearance.x, appearance.y),
           child: SizedBox(
-            width: constraints.maxWidth * .6,
-            child: OutlinedButton(
+            width: (constraints.maxWidth * appearance.widthFactor).clamp(
+              100.0,
+              constraints.maxWidth,
+            ),
+            child: FilledButton(
               key: const ValueKey('ringing-snooze'),
               onPressed: onPressed,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(48, 50),
+              onLongPress: onPressed == null
+                  ? null
+                  : () => _editSnooze(ringing),
+              style: FilledButton.styleFrom(
+                backgroundColor: colors[appearance.colorIndex],
+                foregroundColor: ink,
+                minimumSize: Size(48, appearance.height),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+                  horizontal: 10,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(appearance.radius),
                 ),
               ),
               child: Text(
                 'Ещё ${ringing.alarm.snoozeMinutes} мин',
-                semanticsLabel: _snoozeLabel(ringing),
+                semanticsLabel:
+                    '${_snoozeLabel(ringing)}. Удерживай, чтобы выбрать минуты.',
                 textAlign: TextAlign.center,
               ),
             ),
@@ -389,6 +458,9 @@ class _RingingScreenState extends State<RingingScreen> {
   String _challengeLevel(RingingAlarm ringing) {
     final level = ringing.challengeDifficulty.label;
     final used = ringing.snoozesUsed;
+    if (!widget.controller.device.challengeEnforced) {
+      return '$level · системная остановка iOS тоже доступна';
+    }
     if (!ringing.alarm.escalateOnSnooze || used == 0) {
       return '$level · пройди, чтобы отключить';
     }
@@ -409,102 +481,22 @@ class _RingingScreenState extends State<RingingScreen> {
 
   String _snoozeTiming(RingingAlarm ringing) {
     final now = widget.controller.now;
-    final next = now.add(Duration(minutes: ringing.alarm.snoozeMinutes));
+    final minutes = _snoozeEditing
+        ? _chosenMinutes
+        : ringing.alarm.snoozeMinutes;
+    final next = now.add(Duration(minutes: minutes));
     final last = now.add(
-      Duration(minutes: ringing.alarm.snoozeMinutes * ringing.snoozesRemaining),
+      Duration(
+        minutes:
+            minutes +
+            ringing.alarm.snoozeMinutes * (ringing.snoozesRemaining - 1),
+      ),
     );
     String clock(DateTime value) =>
         '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
     return ringing.snoozesRemaining == 1
         ? 'Если перенести сейчас, последний звонок — в ${clock(next)}.'
         : 'Если перенести сейчас — ${clock(next)}. '
-              'Все оставшиеся переносы подряд — до ${clock(last)}.';
+              'Если дальше по ${ringing.alarm.snoozeMinutes} мин — до ${clock(last)}.';
   }
-
-  Widget _emergencyScreen() => Scaffold(
-    backgroundColor: ink,
-    body: SafeArea(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.volume_off_outlined, color: morning, size: 54),
-                const SizedBox(height: 24),
-                const Text(
-                  'Отключить без задания?',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 27, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Если сейчас не до задач, удерживай кнопку две секунды. '
-                  'Будильник остановится, а в истории появится аварийное отключение.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: muted, height: 1.6),
-                ),
-                const SizedBox(height: 30),
-                Semantics(
-                  button: true,
-                  label: 'Удерживайте две секунды, чтобы отключить будильник',
-                  onLongPress: () => _dismiss(emergency: true),
-                  child: GestureDetector(
-                    onLongPressStart: (_) => _startHold(),
-                    onLongPressEnd: (_) => _stopHold(),
-                    onLongPressCancel: _stopHold,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: panel,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: morning.withValues(alpha: .4),
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            _finishing
-                                ? 'Отключаем…'
-                                : 'Удерживай, чтобы отключить',
-                            style: const TextStyle(
-                              color: morning,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: LinearProgressIndicator(
-                              value: _hold,
-                              minHeight: 5,
-                              backgroundColor: ink,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: _finishing
-                      ? null
-                      : () {
-                          _stopHold();
-                          setState(() => _emergency = false);
-                        },
-                  child: const Text('Вернуться к будильнику'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
 }

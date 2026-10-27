@@ -17,6 +17,17 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var extras: ExtrasBridge? = null
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        extras?.permissionResult(requestCode, grantResults)
+    }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        extras?.fileResult(requestCode, resultCode, data)
+    }
+    override fun onDestroy() { extras?.dispose(); super.onDestroy() }
     override fun onCreate(savedInstanceState: Bundle?) {
         if (AlarmEngine(this).ringing() != null) enableWakeScreen()
         super.onCreate(savedInstanceState)
@@ -25,6 +36,7 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.getBooleanExtra("bedtime", false)) extras?.bedtimeOpened()
         if (AlarmEngine(this).ringing() != null) enableWakeScreen()
     }
 
@@ -47,6 +59,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        extras = ExtrasBridge(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "five_more/extras"))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "five_more/alarm").setMethodCallHandler { call, result ->
             try {
                 val engine = AlarmEngine(this)
@@ -55,7 +68,7 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "schedule" -> result.success(engine.schedule(args))
                     "cancel" -> result.success(engine.cancel(id))
-                    "snooze" -> result.success(engine.snooze(id))
+                    "snooze" -> result.success(engine.snooze(id, (args["minutes"] as? Number)?.toInt()))
                     "dismiss" -> result.success(engine.dismiss(id, emergency = args["emergency"] == true))
                     "status" -> result.success(engine.status())
                     "restoreAlarms" -> result.success(engine.restoreAlarms())

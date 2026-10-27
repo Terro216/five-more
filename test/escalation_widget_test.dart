@@ -74,7 +74,22 @@ Future<void> _openEditor(
   );
   await tester.tap(find.text('Открыть настройки'));
   await tester.pumpAndSettle();
-  await _tapScrolled(tester, find.byKey(const ValueKey('alarm-advanced')));
+  final advanced = find.byKey(const ValueKey('alarm-advanced'));
+  await tester.scrollUntilVisible(
+    advanced,
+    220,
+    scrollable: find
+        .byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable &&
+              axisDirectionToAxis(widget.axisDirection) == Axis.vertical,
+        )
+        .first,
+  );
+  await tester.pumpAndSettle();
+  if (!tester.widget<ExpansionTile>(advanced).initiallyExpanded) {
+    await _tapScrolled(tester, find.text('Настроить вручную'));
+  }
 }
 
 Future<void> _tapScrolled(WidgetTester tester, Finder finder) async {
