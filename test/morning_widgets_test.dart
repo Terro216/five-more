@@ -110,6 +110,10 @@ void main() {
   testWidgets(
     'holding snooze opens slider and passes duration to native only on confirm',
     (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       const alarm = Alarm(id: 'a', hour: 7, minute: 30, snoozeMinutes: 5);
       final gateway = _MinuteGateway()
         ..ringing = RingingAlarm(
@@ -127,6 +131,11 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: fiveMoreTheme(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(2)),
+            child: child!,
+          ),
           home: RingingScreen(
             controller: controller,
             ringing: gateway.ringing!,
@@ -140,6 +149,9 @@ void main() {
       tester.widget<Slider>(find.byType(Slider)).onChanged!(17);
       await tester.pump();
       expect(find.text('После этого останется переносов: 1'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('Отложить на 17 мин'));
+      await tester.pump();
       await tester.tap(find.text('Отложить на 17 мин'));
       await tester.pumpAndSettle();
       expect(gateway.selected, 17);
@@ -174,7 +186,7 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
       await gesture.up();
       expect(stopped, isNull);
-      await tester.tap(find.text('Остановить без пройденного задания'));
+      await tester.tap(find.text('Остановить без задания'));
       await tester.pump();
       gesture = await tester.startGesture(
         tester.getCenter(find.text('Удерживай 5 секунд')),

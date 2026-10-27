@@ -109,6 +109,57 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  for (final difficulty in [
+    ChallengeDifficulty.hard,
+    ChallengeDifficulty.extreme,
+  ]) {
+    testWidgets(
+      '${difficulty.name} memory reveals the entire pattern before starting the timer',
+      (tester) async {
+        await showChallenge(
+          tester,
+          difficulty: difficulty,
+          width: 320,
+          height: 640,
+          textScale: 1.5,
+          onEmergencyExit: () {},
+        );
+        final preview = find.byKey(const ValueKey('complete-memory-preview'));
+        final bounds = tester.getRect(preview);
+        expect(bounds.left, greaterThanOrEqualTo(0));
+        expect(bounds.right, lessThanOrEqualTo(320));
+        expect(bounds.top, greaterThanOrEqualTo(0));
+        expect(
+          bounds.bottom,
+          lessThanOrEqualTo(
+            tester.getRect(find.text('Не получается пройти')).top,
+          ),
+        );
+        final cells = find.descendant(
+          of: preview,
+          matching: find.byType(DecoratedBox),
+        );
+        expect(
+          cells,
+          findsNWidgets(difficulty == ChallengeDifficulty.hard ? 25 : 36),
+        );
+        for (final element in cells.evaluate()) {
+          final cell = tester.getRect(find.byWidget(element.widget));
+          expect(bounds.contains(cell.center), isTrue);
+        }
+        await tester.pump(
+          Duration(
+            milliseconds: difficulty == ChallengeDifficulty.hard ? 2500 : 1800,
+          ),
+        );
+        expect(preview, findsNothing);
+        expect(find.text('Повтори рисунок'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   for (final difficulty in ChallengeDifficulty.values) {
     testWidgets(
       '${difficulty.name} math fits doubled text and keeps emergency reachable',

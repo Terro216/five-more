@@ -73,16 +73,15 @@ class _EmergencyStopState extends State<_EmergencyStop>
   @override
   Widget build(BuildContext context) => AlertDialog(
     scrollable: true,
-    title: const Text('Нужна помощь с остановкой?'),
+    insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+    title: const Text('Остановить звонок?'),
     content: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
-          'Если задание выполнить не получается, звонок можно остановить здесь. Этот подъём попадёт в историю как аварийное отключение.',
-        ),
+        const Text('Подъём будет отмечен как аварийный.'),
         CheckboxListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Остановить без пройденного задания'),
+          title: const Text('Остановить без задания'),
           value: _acknowledged,
           onChanged: (v) {
             _cancel();

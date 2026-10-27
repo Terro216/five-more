@@ -120,7 +120,7 @@ void main() {
     );
     await tester.tap(find.text('Не получается пройти'));
     await tester.pumpAndSettle();
-    expect(find.text('Нужна помощь с остановкой?'), findsOneWidget);
+    expect(find.text('Остановить звонок?'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

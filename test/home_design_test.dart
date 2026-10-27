@@ -221,6 +221,7 @@ void main() {
       expect(find.byKey(const ValueKey('time-hour-input')), findsOneWidget);
       expect(find.byType(AlarmEditor), findsNothing);
       expect(find.byKey(const ValueKey('time-remaining')), findsOneWidget);
+      expect(find.text('До звонка 1 ч 30 мин'), findsOneWidget);
       Navigator.of(tester.element(find.text('Готово'))).pop();
       await tester.pumpAndSettle();
 

@@ -168,6 +168,9 @@ class _RingingScreenState extends State<RingingScreen> {
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
                       child: _ringActions(ringing),
                     );
+                    if (_snoozeEditing) {
+                      return SingleChildScrollView(child: actions);
+                    }
                     if (constraints.maxWidth >= 600 &&
                         constraints.maxHeight < 600) {
                       return Row(
@@ -254,8 +257,7 @@ class _RingingScreenState extends State<RingingScreen> {
       const SizedBox(height: 20),
       if (ringing.snoozesRemaining > 0) ...[
         Text(
-          'Осталось переносов: ${ringing.snoozesRemaining} из ${ringing.alarm.maxSnoozes}'
-          ' · ${ringing.snoozesRemaining * ringing.alarm.snoozeMinutes} мин',
+          'Осталось переносов: ${ringing.snoozesRemaining} из ${ringing.alarm.maxSnoozes}',
           textAlign: TextAlign.center,
           style: const TextStyle(color: muted, fontSize: 14),
         ),
@@ -264,6 +266,12 @@ class _RingingScreenState extends State<RingingScreen> {
           _snoozeTiming(ringing),
           textAlign: TextAlign.center,
           style: const TextStyle(color: morning, fontSize: 14, height: 1.4),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Удерживай кнопку переноса, чтобы выбрать минуты',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: muted, fontSize: 12),
         ),
         if (ringing.alarm.moveSnoozeButton &&
             ringing.alarm.difficultyForSnoozes(ringing.snoozesUsed + 1) !=
@@ -277,7 +285,9 @@ class _RingingScreenState extends State<RingingScreen> {
         ],
       ] else
         Text(
-          ringing.alarm.maxSnoozes == 0
+          !widget.controller.device.challengeEnforced
+              ? 'Переносов нет. Можно пройти задание здесь или остановить звонок системной кнопкой iOS.'
+              : ringing.alarm.maxSnoozes == 0
               ? 'Без переносов. Пройди задание, чтобы отключить звонок.'
               : 'Переносы закончились. Пройди задание, чтобы отключить звонок.',
           textAlign: TextAlign.center,
@@ -406,7 +416,7 @@ class _RingingScreenState extends State<RingingScreen> {
     return LayoutBuilder(
       builder: (context, constraints) => SizedBox(
         key: const ValueKey('moving-snooze-area'),
-        height: 200,
+        height: 168,
         child: Align(
           alignment: Alignment(appearance.x, appearance.y),
           child: SizedBox(
@@ -448,6 +458,9 @@ class _RingingScreenState extends State<RingingScreen> {
   String _challengeLevel(RingingAlarm ringing) {
     final level = ringing.challengeDifficulty.label;
     final used = ringing.snoozesUsed;
+    if (!widget.controller.device.challengeEnforced) {
+      return '$level · системная остановка iOS тоже доступна';
+    }
     if (!ringing.alarm.escalateOnSnooze || used == 0) {
       return '$level · пройди, чтобы отключить';
     }
@@ -468,15 +481,22 @@ class _RingingScreenState extends State<RingingScreen> {
 
   String _snoozeTiming(RingingAlarm ringing) {
     final now = widget.controller.now;
-    final next = now.add(Duration(minutes: ringing.alarm.snoozeMinutes));
+    final minutes = _snoozeEditing
+        ? _chosenMinutes
+        : ringing.alarm.snoozeMinutes;
+    final next = now.add(Duration(minutes: minutes));
     final last = now.add(
-      Duration(minutes: ringing.alarm.snoozeMinutes * ringing.snoozesRemaining),
+      Duration(
+        minutes:
+            minutes +
+            ringing.alarm.snoozeMinutes * (ringing.snoozesRemaining - 1),
+      ),
     );
     String clock(DateTime value) =>
         '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
     return ringing.snoozesRemaining == 1
         ? 'Если перенести сейчас, последний звонок — в ${clock(next)}.'
         : 'Если перенести сейчас — ${clock(next)}. '
-              'Все оставшиеся переносы подряд — до ${clock(last)}.';
+              'Если дальше по ${ringing.alarm.snoozeMinutes} мин — до ${clock(last)}.';
   }
 }

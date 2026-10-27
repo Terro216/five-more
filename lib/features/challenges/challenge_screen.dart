@@ -69,6 +69,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   bool _feedbackCorrect = false;
   Timer? _previewTimer;
   Timer? _nextTimer;
+  int _previewGeneration = 0;
 
   @override
   void initState() {
@@ -160,13 +161,27 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   void _schedulePreviewEnd() {
     _previewTimer?.cancel();
     _previewTimer = null;
+    final generation = ++_previewGeneration;
+    final round = _roundSerial;
     if (_accessibleNavigation) return;
-    _previewTimer = Timer(
-      Duration(milliseconds: [5000, 4000, 2500, 1800][widget.difficulty.index]),
-      () {
-        if (mounted) setState(() => _showPattern = false);
-      },
-    );
+    // Begin only after the complete preview has reached its first frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !_showPattern ||
+          _accessibleNavigation ||
+          generation != _previewGeneration ||
+          round != _roundSerial) {
+        return;
+      }
+      _previewTimer = Timer(
+        Duration(
+          milliseconds: [5000, 4000, 2500, 1800][widget.difficulty.index],
+        ),
+        () {
+          if (mounted) setState(() => _showPattern = false);
+        },
+      );
+    });
   }
 
   void _answer(bool correct) {
@@ -297,68 +312,81 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                       ),
                     ),
                   Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  widget.kind.label,
-                                  style: const TextStyle(
-                                    color: _text,
-                                    fontSize: 34,
-                                    height: 1.1,
-                                    fontWeight: FontWeight.w700,
+                    child:
+                        _activeKind == ChallengeKind.memory &&
+                            _showPattern &&
+                            _hard
+                        ? _memoryPreview()
+                        : SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Wrap(
+                                  alignment: WrapAlignment.spaceBetween,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 12,
+                                  runSpacing: 8,
+                                  children: [
+                                    Text(
+                                      widget.kind.label,
+                                      style: TextStyle(
+                                        color: _text,
+                                        fontSize:
+                                            MediaQuery.textScalerOf(context)
+                                                    .scale(1) >
+                                                1.3
+                                            ? 26
+                                            : 34,
+                                        height: 1.1,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$currentNumber / ${_session.totalSteps}',
+                                      style: const TextStyle(
+                                        color: _accent,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 18),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: LinearProgressIndicator(
+                                    value: _session.progress,
+                                    minHeight: 5,
+                                    color: _accent,
+                                    backgroundColor: _surface,
+                                    semanticsLabel:
+                                        'Пройдено заданий: ${_session.completedSteps} из ${_session.totalSteps}',
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                '$currentNumber / ${_session.totalSteps}',
-                                style: const TextStyle(
-                                  color: _accent,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
+                                const SizedBox(height: 30),
+                                IgnorePointer(
+                                  ignoring: _transitioning,
+                                  child: _buildTask(),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 18),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: LinearProgressIndicator(
-                              value: _session.progress,
-                              minHeight: 5,
-                              color: _accent,
-                              backgroundColor: _surface,
-                              semanticsLabel:
-                                  'Пройдено заданий: ${_session.completedSteps} из ${_session.totalSteps}',
+                                const SizedBox(height: 20),
+                                Semantics(
+                                  liveRegion: true,
+                                  child: Text(
+                                    _feedback ?? '',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: _feedbackCorrect
+                                          ? _accent
+                                          : _muted,
+                                      fontSize: 14,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 30),
-                          IgnorePointer(
-                            ignoring: _transitioning,
-                            child: _buildTask(),
-                          ),
-                          const SizedBox(height: 20),
-                          Semantics(
-                            liveRegion: true,
-                            child: Text(
-                              _feedback ?? '',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: _feedbackCorrect ? _accent : _muted,
-                                fontSize: 14,
-                                height: 1.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
                   if (!widget.practice && widget.onEmergencyExit != null)
                     Padding(
@@ -685,6 +713,74 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
           },
         ),
       ],
+    );
+  }
+
+  Widget _memoryPreview() {
+    final pattern = _memory!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+      child: Column(
+        children: [
+          const Text(
+            'Запомни рисунок',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+          ),
+          Text(
+            '${pattern.cells.length} отмеченных клеток',
+            style: const TextStyle(color: muted),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final size = min(constraints.maxWidth, constraints.maxHeight);
+                return Center(
+                  child: SizedBox.square(
+                    key: const ValueKey('complete-memory-preview'),
+                    dimension: size,
+                    child: GridView.builder(
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: EdgeInsets.zero,
+                      itemCount: pattern.cellCount,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: pattern.side,
+                        crossAxisSpacing: 4,
+                        mainAxisSpacing: 4,
+                      ),
+                      itemBuilder: (context, index) => Semantics(
+                        label:
+                            'Ряд ${index ~/ pattern.side + 1}, столбец ${index % pattern.side + 1}',
+                        selected: pattern.cells.contains(index),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: pattern.cells.contains(index)
+                                ? morning
+                                : panel,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: pattern.cells.contains(index)
+                              ? const Icon(Icons.circle, color: ink, size: 12)
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: () {
+              _previewTimer?.cancel();
+              setState(() => _showPattern = false);
+            },
+            child: const Text('Запомнил, начнём', textAlign: TextAlign.center),
+          ),
+        ],
+      ),
     );
   }
 

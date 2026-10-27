@@ -143,7 +143,7 @@ void main() {
     await tester.tap(find.text('Не получается пройти'));
     await tester.pumpAndSettle();
     expect(exited, isFalse);
-    expect(find.text('Нужна помощь с остановкой?'), findsOneWidget);
+    expect(find.text('Остановить звонок?'), findsOneWidget);
     await completeEmergencyHold(tester);
     await tester.pumpAndSettle();
     expect(exited, isTrue);

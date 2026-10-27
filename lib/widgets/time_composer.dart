@@ -284,18 +284,30 @@ Future<TimeOfDay?> editClock(
   TimeOfDay initial, {
   String title = 'Время подъёма',
   DateTime Function(TimeOfDay)? nextAt,
+  DateTime Function()? now,
 }) => showModalBottomSheet<TimeOfDay>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
-  builder: (_) => _ClockSheet(initial: initial, title: title, nextAt: nextAt),
+  builder: (_) => _ClockSheet(
+    initial: initial,
+    title: title,
+    nextAt: nextAt,
+    now: now ?? DateTime.now,
+  ),
 );
 
 class _ClockSheet extends StatefulWidget {
-  const _ClockSheet({required this.initial, required this.title, this.nextAt});
+  const _ClockSheet({
+    required this.initial,
+    required this.title,
+    required this.now,
+    this.nextAt,
+  });
   final TimeOfDay initial;
   final String title;
   final DateTime Function(TimeOfDay)? nextAt;
+  final DateTime Function() now;
   @override
   State<_ClockSheet> createState() => _ClockSheetState();
 }
@@ -338,7 +350,7 @@ class _ClockSheetState extends State<_ClockSheet> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  'До звонка ${remainingLabel(widget.nextAt!(_time), DateTime.now())}',
+                  'До звонка ${remainingLabel(widget.nextAt!(_time), widget.now())}',
                   key: const ValueKey('time-remaining'),
                   style: const TextStyle(color: morning),
                 ),

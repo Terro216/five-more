@@ -67,6 +67,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
     final time = await editClock(
       context,
       TimeOfDay(hour: alarm.hour, minute: alarm.minute),
+      now: () => controller.now,
       nextAt: (time) => alarm
           .copyWith(hour: time.hour, minute: time.minute, clearOneShotAt: true)
           .nextOccurrence(controller.now),
