@@ -89,7 +89,11 @@ void main() {
       textScale: 1.5,
       home: (controller) => AlarmEditor(controller: controller),
     );
-    await tester.scrollUntilVisible(find.text('Пн'), 200);
+    await tester.scrollUntilVisible(
+      find.text('Пн'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Пн'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -114,9 +118,9 @@ void main() {
       home: (controller) =>
           RingingScreen(controller: controller, ringing: ring),
     );
-    await tester.tap(find.text('Аварийное отключение'));
+    await tester.tap(find.text('Не получается пройти'));
     await tester.pumpAndSettle();
-    expect(find.text('Отключить без задания?'), findsOneWidget);
+    expect(find.text('Нужна помощь с остановкой?'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

@@ -66,7 +66,7 @@ class AlarmRingingService : Service() {
                 if (it.isHeld) it.release()
                 it.acquire(AlarmEngine.MAX_RING_MS + 60_000L)
             }
-            startSound()
+            startSound(alarm)
             val remaining = (AlarmEngine.MAX_RING_MS - (System.currentTimeMillis() - alarm.optLong("ringingSince"))).coerceAtLeast(1L)
             handler.postDelayed({
                 val id = currentId ?: return@postDelayed
@@ -95,7 +95,7 @@ class AlarmRingingService : Service() {
             .setContentIntent(open)
             .setFullScreenIntent(open, true)
             .addAction(Notification.Action.Builder(null, "Проснуться", open).build())
-        if (alarm.optInt("snoozesUsed") < alarm.optInt("maxSnoozes", 3)) {
+        if (!alarm.optBoolean("moveSnoozeButton") && alarm.optInt("snoozesUsed") < alarm.optInt("maxSnoozes", 3)) {
             val snooze = PendingIntent.getBroadcast(this, 0,
                 Intent(this, AlarmReceiver::class.java).setAction(AlarmEngine.ACTION_SNOOZE)
                     .setData(Uri.parse("fivemore://snooze/${Uri.encode(id)}"))
@@ -107,11 +107,13 @@ class AlarmRingingService : Service() {
         return builder.build()
     }
 
-    private fun startSound() {
+    private fun startSound(alarm: JSONObject) {
         val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
         // Device ringtone can be inaccessible before unlock, so a bundled sound is mandatory.
+        val selected = try { ExtrasBridge.soundUri(this, alarm.optString("sound", "system")) } catch (_: Exception) { null }
         val uris = listOfNotNull(
+            selected,
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
             Uri.parse("android.resource://$packageName/${R.raw.alarm_tone}"),
         )

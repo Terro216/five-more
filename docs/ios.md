@@ -39,7 +39,11 @@ build phase and provide `NSAlarmKitUsageDescription` in Info.plist.
   It cancels a pending test or stops a ringing test with an emergency-dismissal
   event, then removes its configuration and occurrences. An already removed
   preview succeeds without changes; an ordinary ID returns `invalid_test_id`.
-- The system default sound is used. There is no server or network requirement.
+- Per-alarm sound uses the system default, bundled PCM loops, or an imported
+  clip converted to CAF in Library/Sounds (first 29 seconds). Custom-sound
+  playback must be checked on a physical iPhone. No network is needed to ring.
+- Bedtime reminders use local UNCalendarNotificationTrigger notifications.
+  Morning audio uses AVAudioRecorder and stays in the app container.
 
 `requestPermissions` accepts optional `target: notifications` or `exactAlarms`;
 both represent AlarmKit authorization on iOS. When access has been denied, the

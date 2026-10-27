@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import '../../app/alarm_controller.dart';
 import '../../app/theme.dart';
@@ -7,6 +10,12 @@ import '../challenges/challenge_models.dart';
 import '../challenges/challenge_screen.dart';
 import 'alarm_editor.dart';
 import 'device_check_screen.dart';
+import '../history/history_view.dart';
+import '../sleep/bedtime_screen.dart';
+import '../sleep/sleep_review.dart';
+import '../../services/sleep_journal.dart';
+import '../../services/native_extras.dart';
+import '../../widgets/time_composer.dart';
 
 class AlarmHome extends StatefulWidget {
   const AlarmHome({super.key, required this.controller});
@@ -15,7 +24,139 @@ class AlarmHome extends StatefulWidget {
   State<AlarmHome> createState() => _AlarmHomeState();
 }
 
-class _AlarmHomeState extends State<AlarmHome> {
+class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
+  final _journal = SleepJournal();
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _journal.addListener(_journalChanged);
+    unawaited(_journal.load());
+    NativeExtras.channel.setMethodCallHandler((call) async {
+      if (call.method == 'bedtimeOpened') await _checkBedtimeOpen();
+    });
+    unawaited(_checkBedtimeOpen());
+  }
+
+  void _journalChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_checkBedtimeOpen());
+  }
+
+  Future<void> _checkBedtimeOpen() async {
+    try {
+      final open = await NativeExtras.call<bool>('takeBedtimeOpen');
+      if (open == true && mounted) setState(() => _tab = 2);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    NativeExtras.channel.setMethodCallHandler(null);
+    _journal.removeListener(_journalChanged);
+    _journal.dispose();
+    super.dispose();
+  }
+
+  Future<void> _editTime(Alarm alarm) async {
+    final time = await editClock(
+      context,
+      TimeOfDay(hour: alarm.hour, minute: alarm.minute),
+      nextAt: (time) => alarm
+          .copyWith(hour: time.hour, minute: time.minute, clearOneShotAt: true)
+          .nextOccurrence(controller.now),
+    );
+    if (time == null) return;
+    final result = await controller.saveAlarm(
+      alarm.copyWith(
+        hour: time.hour,
+        minute: time.minute,
+        clearOneShotAt: true,
+      ),
+    );
+    if (mounted) {
+      _message(
+        result.ok
+            ? 'Время изменено'
+            : result.error ?? 'Не удалось изменить время',
+      );
+    }
+  }
+
+  Widget _morningReview() {
+    final event = controller.events
+        .where(
+          (e) =>
+              const [
+                'dismissed',
+                'emergency',
+                'emergency_dismissed',
+              ].contains(e.type) &&
+              !e.alarmId.startsWith('preview:') &&
+              !e.at.isAfter(controller.now) &&
+              controller.now.difference(e.at) < const Duration(hours: 18),
+        )
+        .firstOrNull;
+    if (!_journal.ready ||
+        event == null ||
+        _journal.reported(event.occurrenceId)) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Как спалось?',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+          ),
+          const Text(
+            'Оцени утро и оставь вечернему себе голосовое.',
+            style: TextStyle(color: muted),
+          ),
+          Wrap(
+            spacing: 8,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        SleepReview(journal: _journal, event: event),
+                  ),
+                ),
+                child: const Text('Оценить утро'),
+              ),
+              TextButton.icon(
+                onPressed: () => setState(() => _tab = 2),
+                icon: const Icon(Icons.mic_outlined),
+                label: const Text('Записать голос'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  try {
+                    await _journal.skip(event.occurrenceId);
+                  } catch (_) {
+                    if (mounted) {
+                      _message('Не удалось сохранить. Попробуй ещё раз.');
+                    }
+                  }
+                },
+                child: const Text('Пропустить'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   int _tab = 0;
   ChallengeDifficulty _practiceDifficulty = ChallengeDifficulty.medium;
   AlarmController get controller => widget.controller;
@@ -124,6 +265,11 @@ class _AlarmHomeState extends State<AlarmHome> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Проверка телефона',
+            onPressed: () => _checkDevice(),
+            icon: const Icon(Icons.phonelink_ring_outlined),
+          ),
+          IconButton(
             tooltip: 'О приложении',
             onPressed: _about,
             icon: const Icon(Icons.info_outline_rounded),
@@ -178,6 +324,11 @@ class _AlarmHomeState extends State<AlarmHome> {
                 label: 'Задания',
               ),
               NavigationDestination(
+                icon: Icon(Icons.bedtime_outlined),
+                selectedIcon: Icon(Icons.bedtime_rounded),
+                label: 'Вечер',
+              ),
+              NavigationDestination(
                 icon: Icon(Icons.history_rounded),
                 label: 'История',
               ),
@@ -193,7 +344,12 @@ class _AlarmHomeState extends State<AlarmHome> {
                 child: switch (_tab) {
                   0 => _today(),
                   1 => _challenges(),
-                  _ => _history(),
+                  2 => BedtimeScreen(journal: _journal),
+                  _ => HistoryView(
+                    events: controller.events,
+                    journal: _journal,
+                    now: controller.now,
+                  ),
                 },
               ),
             ),
@@ -226,6 +382,7 @@ class _AlarmHomeState extends State<AlarmHome> {
           if (next != null) _nextCard(next, now) else _emptyCard(),
           const SizedBox(height: 12),
           _deviceCard(),
+          _morningReview(),
           if (controller.error != null)
             Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -283,7 +440,7 @@ class _AlarmHomeState extends State<AlarmHome> {
   Widget _nextCard(Alarm alarm, DateTime now) {
     final nextAt = controller.nextTime(alarm, now);
     final duration = nextAt.difference(now);
-    final totalMinutes = (duration.inSeconds / 60).ceil();
+    final totalMinutes = (duration.inSeconds / 60).ceil().clamp(0, 10000000);
     final hours = totalMinutes ~/ 60;
     final minutes = totalMinutes % 60;
     final left = hours > 0
@@ -318,7 +475,7 @@ class _AlarmHomeState extends State<AlarmHome> {
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         key: const ValueKey('next-alarm'),
-        onTap: controller.busy ? null : () => _edit(alarm),
+        onTap: controller.busy ? null : () => _editTime(alarm),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -390,6 +547,15 @@ class _AlarmHomeState extends State<AlarmHome> {
         !device.notifications ||
         !device.exactAlarms ||
         !device.fullScreenIntent;
+    if (device.supported &&
+        !missingPermission &&
+        device.alarmVolume != 0 &&
+        device.recoveryError == null &&
+        device.error == null &&
+        check?.heard == true &&
+        check?.pending != true) {
+      return const SizedBox.shrink();
+    }
     final title = !device.supported
         ? 'Режим знакомства'
         : missingPermission
@@ -485,104 +651,121 @@ class _AlarmHomeState extends State<AlarmHome> {
   Widget _alarmCard(Alarm alarm) => Padding(
     key: ValueKey('alarm-card-${alarm.id}'),
     padding: const EdgeInsets.only(bottom: 10),
-    child: Material(
-      color: panel,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: controller.busy ? null : () => _edit(alarm),
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 8, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+    child: Dismissible(
+      key: ValueKey('swipe-alarm-${alarm.id}'),
+      direction: controller.busy
+          ? DismissDirection.none
+          : DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        decoration: BoxDecoration(
+          color: const Color(0xFF572D2B),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Icon(Icons.delete_outline_rounded),
+      ),
+      confirmDismiss: (_) async {
+        await _delete(alarm);
+        return false;
+      },
+      child: Semantics(
+        customSemanticsActions: {
+          CustomSemanticsAction(label: 'Удалить будильник'): () =>
+              _delete(alarm),
+        },
+        child: Material(
+          color: panel,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            onTap: controller.busy ? null : () => _edit(alarm),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        alarm.timeLabel,
-                        style: TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.w400,
-                          letterSpacing: -1,
-                          color: alarm.enabled ? Colors.white : muted,
-                        ),
-                      ),
+                  Text(
+                    alarm.displayTitle,
+                    key: ValueKey('alarm-name-${alarm.id}'),
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  Semantics(
-                    label:
-                        '${alarm.timeLabel}, ${alarm.enabled ? 'выключить' : 'включить'} будильник',
-                    child: Switch(
-                      key: ValueKey('alarm-toggle-${alarm.id}'),
-                      value: alarm.enabled,
-                      onChanged: controller.busy || !controller.device.supported
-                          ? null
-                          : (value) => _toggle(alarm, value),
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    key: ValueKey('alarm-menu-${alarm.id}'),
-                    tooltip: 'Действия с будильником',
-                    enabled: !controller.busy,
-                    onSelected: (action) {
-                      if (action == 'edit') _edit(alarm);
-                      if (action == 'test') _checkDevice(alarm);
-                      if (action == 'delete') _delete(alarm);
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Text('Настроить'),
-                      ),
-                      if (controller.device.supported)
-                        const PopupMenuItem(
-                          value: 'test',
-                          child: Text('Проверить срабатывание'),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: InkWell(
+                            key: ValueKey('alarm-time-${alarm.id}'),
+                            onTap: controller.busy
+                                ? null
+                                : () => _editTime(alarm),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Text(
+                                alarm.timeLabel,
+                                style: TextStyle(
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.w400,
+                                  color: alarm.enabled ? foreground : muted,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Text('Удалить'),
                       ),
+                      Semantics(
+                        label:
+                            '${alarm.timeLabel}, ${alarm.enabled ? 'выключить' : 'включить'} будильник',
+                        child: Switch(
+                          key: ValueKey('alarm-toggle-${alarm.id}'),
+                          value: alarm.enabled,
+                          onChanged:
+                              controller.busy || !controller.device.supported
+                              ? null
+                              : (value) => _toggle(alarm, value),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    alarm.repeatLabel,
+                    style: const TextStyle(color: muted, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 6,
+                    children: [
+                      Text(
+                        '${alarm.challengeKind.label} · ${alarm.difficulty.label.toLowerCase()}',
+                        style: const TextStyle(color: muted, fontSize: 12),
+                      ),
+                      Text(
+                        alarm.maxSnoozes == 0
+                            ? 'Без переносов'
+                            : '${alarm.maxSnoozes} × ${alarm.snoozeMinutes} мин',
+                        style: const TextStyle(color: morning, fontSize: 12),
+                      ),
+                      if (alarm.escalateOnSnooze && alarm.maxSnoozes > 0)
+                        const Text(
+                          'Сложнее после переноса',
+                          style: TextStyle(color: morning, fontSize: 12),
+                        ),
+                      if (!controller.device.supported)
+                        const Text(
+                          'Черновик',
+                          style: TextStyle(color: muted, fontSize: 12),
+                        ),
                     ],
                   ),
                 ],
               ),
-              Text(
-                '${alarm.repeatLabel}${alarm.title.isEmpty ? '' : ' · ${alarm.title}'}',
-                style: const TextStyle(color: muted, fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 6,
-                children: [
-                  Text(
-                    '${alarm.challengeKind.label} · ${alarm.difficulty.label.toLowerCase()}',
-                    style: const TextStyle(color: muted, fontSize: 12),
-                  ),
-                  Text(
-                    alarm.maxSnoozes == 0
-                        ? 'Без переносов'
-                        : '${alarm.maxSnoozes} × ${alarm.snoozeMinutes} мин',
-                    style: const TextStyle(color: morning, fontSize: 12),
-                  ),
-                  if (alarm.escalateOnSnooze && alarm.maxSnoozes > 0)
-                    const Text(
-                      'Сложнее после переноса',
-                      style: TextStyle(color: morning, fontSize: 12),
-                    ),
-                  if (!controller.device.supported)
-                    const Text(
-                      'Черновик',
-                      style: TextStyle(color: muted, fontSize: 12),
-                    ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -631,15 +814,10 @@ class _AlarmHomeState extends State<AlarmHome> {
             kind.label,
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
-          subtitle: Text(switch (kind) {
-            ChallengeKind.math => 'Реши несколько примеров',
-            ChallengeKind.memory => 'Повтори рисунок из клеток',
-            ChallengeKind.stroop => 'Выбери цвет букв, не слово',
-            ChallengeKind.sequence => 'Нажимай числа по порядку',
-            ChallengeKind.mirror => 'Прочитай отражённую фразу и введи её',
-            ChallengeKind.captcha => 'Введи код с картинки',
-            ChallengeKind.mixed => 'Все шесть заданий по очереди',
-          }, style: const TextStyle(color: muted, fontSize: 13)),
+          subtitle: Text(
+            kind.description,
+            style: const TextStyle(color: muted, fontSize: 13),
+          ),
           trailing: const ExcludeSemantics(
             child: Icon(Icons.play_arrow_rounded, color: morning),
           ),
@@ -657,126 +835,29 @@ class _AlarmHomeState extends State<AlarmHome> {
     ],
   );
 
-  Widget _history() {
-    final events = controller.events;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
-      children: [
-        const Text(
-          'Как прошло утро',
-          style: TextStyle(
-            fontSize: 30,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -.8,
-          ),
+  Future<void> _about() async {
+    final version = await NativeExtras.version();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ещё пять'),
+        content: Text(
+          'Версия · $version\n\n'
+          'Простой будильник, ограниченные переносы и задания для пробуждения.\n\n'
+          'Без регистрации и рекламы. Записи, оценки сна и история остаются на телефоне. Фразы из интернета — только по желанию.\n\n'
+          'Перед первым утром проверь срабатывание на своём телефоне. '
+          'После принудительной остановки приложения открой его снова.',
         ),
-        const SizedBox(height: 10),
-        const Text(
-          'Срабатывания, переносы и отключения.\nТолько события будильника, без оценки сна.',
-          style: TextStyle(color: muted, height: 1.5),
-        ),
-        const SizedBox(height: 28),
-        if (events.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: panel,
-              borderRadius: BorderRadius.circular(26),
-            ),
-            child: const Column(
-              children: [
-                Icon(Icons.wb_twilight_rounded, size: 52, color: morning),
-                SizedBox(height: 20),
-                Text(
-                  'Первое утро ещё впереди',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  'После срабатывания здесь появится история.\nТренировки в неё не записываются.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: muted, height: 1.5),
-                ),
-              ],
-            ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Понятно'),
           ),
-        for (var index = 0; index < events.length; index++) ...[
-          if (index == 0 || !_sameDay(events[index - 1].at, events[index].at))
-            Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 14),
-              child: Text(
-                _dayTitle(events[index].at),
-                style: const TextStyle(
-                  color: morning,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          _eventTile(events[index]),
-        ],
-        if (events.isNotEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 20),
-            child: Text(
-              'Последние 500 событий хранятся только на этом устройстве.',
-              style: TextStyle(color: muted, fontSize: 12, height: 1.5),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _eventTile(AlarmEvent event) {
-    final clock =
-        '${event.at.hour.toString().padLeft(2, '0')}:${event.at.minute.toString().padLeft(2, '0')}';
-    final icon = switch (event.type) {
-      'snoozed' => Icons.snooze_rounded,
-      'dismissed' => Icons.check_rounded,
-      'emergency_dismissed' ||
-      'emergency' ||
-      'timed_out' => Icons.priority_high_rounded,
-      _ => Icons.alarm_rounded,
-    };
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: panel,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: muted, size: 22),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(event.label, style: const TextStyle(fontSize: 14)),
-          ),
-          const SizedBox(width: 10),
-          Text(clock, style: const TextStyle(color: muted, fontSize: 13)),
         ],
       ),
     );
   }
-
-  void _about() => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Ещё пять'),
-      content: const Text(
-        'Версия · 0.5.0\n\n'
-        'Простой будильник, ограниченные переносы и задания для пробуждения.\n\n'
-        'Без регистрации, рекламы и трекинга сна. Настройки и история остаются на телефоне.\n\n'
-        'Перед первым утром проверь срабатывание на своём телефоне. '
-        'После принудительной остановки приложения открой его снова.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Понятно'),
-        ),
-      ],
-    ),
-  );
 }
 
 bool _sameDay(DateTime a, DateTime b) =>

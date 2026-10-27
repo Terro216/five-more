@@ -50,8 +50,8 @@ object AlarmRules {
         val difficulty = if (arguments.containsKey("difficulty")) arguments["difficulty"] else "medium"
         val escalation = if (arguments.containsKey("escalateOnSnooze")) arguments["escalateOnSnooze"] else false
         val movingSnooze = if (arguments.containsKey("moveSnoozeButton")) arguments["moveSnoozeButton"] else false
-        val validKind = kind is String && kind in setOf("math", "memory", "stroop", "sequence", "mirror", "captcha", "mixed")
-        val validDifficulty = difficulty is String && difficulty in setOf("easy", "medium", "hard")
+        val validKind = kind is String && kind in setOf("math", "memory", "stroop", "sequence", "mirror", "captcha", "qr", "shake", "maze", "flags", "mixed")
+        val validDifficulty = difficulty is String && difficulty in setOf("easy", "medium", "hard", "extreme")
         if (fromStoredConfiguration) return ChallengeOptions(
             if (validKind) kind as String else "math",
             if (validDifficulty) difficulty as String else "medium",

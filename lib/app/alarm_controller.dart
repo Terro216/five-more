@@ -178,7 +178,11 @@ class AlarmController extends ChangeNotifier {
     return const AlarmResult(ok: true);
   });
 
-  Future<AlarmResult> snooze({String? alarmId, String? occurrenceId}) {
+  Future<AlarmResult> snooze({
+    String? alarmId,
+    String? occurrenceId,
+    int? minutes,
+  }) {
     // Capture the originating screen before queueing: a native timeout may
     // expose another overlapping alarm while this action is waiting its turn.
     final expectedAlarmId = alarmId ?? ringing?.alarm.id;
@@ -199,7 +203,13 @@ class AlarmController extends ChangeNotifier {
           error: 'На этот подъём переносов больше нет.',
         );
       }
-      final result = await gateway.snooze(active.alarm.id);
+      if (minutes != null && (minutes < 1 || minutes > 30)) {
+        return const AlarmResult(
+          ok: false,
+          error: 'Выбери перенос от 1 до 30 минут.',
+        );
+      }
+      final result = await gateway.snooze(active.alarm.id, minutes: minutes);
       if (result.ok) {
         ringing = null;
         await _refreshNative();
@@ -505,7 +515,6 @@ class AlarmController extends ChangeNotifier {
         }
       }
       _events.sort((a, b) => a.at.compareTo(b.at));
-      if (_events.length > 500) _events = _events.sublist(_events.length - 500);
       try {
         await _persist();
         await gateway.ackEvents(

@@ -60,8 +60,8 @@ class ReleaseSafetyTest(unittest.TestCase):
             with self.subTest(cert=cert), self.assertRaises(ValueError):
                 self.verify(certificate=cert)
 
-    def test_debug_and_network_permissions_cannot_be_published(self):
-        for line in ['application-debuggable', "uses-permission: name='android.permission.INTERNET'"]:
+    def test_debug_and_personal_data_permissions_cannot_be_published(self):
+        for line in ['application-debuggable', "uses-permission: name='android.permission.READ_CONTACTS'"]:
             with self.subTest(line=line), self.assertRaises(ValueError):
                 self.verify(badging=self.badging + line)
 

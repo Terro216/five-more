@@ -27,7 +27,7 @@ class AlarmRulesTest {
     }
 
     @Test fun configuredChallengeKeepsBaseDifficultyForEverySupportedKind() {
-        for (kind in listOf("math", "memory", "stroop", "sequence", "mirror", "captcha", "mixed")) {
+        for (kind in listOf("math", "memory", "stroop", "sequence", "mirror", "captcha", "qr", "shake", "maze", "flags", "mixed")) {
             for (escalate in listOf(false, true)) {
                 val options = AlarmRules.challengeOptions(mapOf(
                     "challengeKind" to kind, "difficulty" to "easy", "escalateOnSnooze" to escalate,
@@ -37,6 +37,14 @@ class AlarmRulesTest {
                 assertEquals(escalate, options.escalateOnSnooze)
             }
         }
+    }
+
+    @Test fun extremeDifficultySurvivesNativeConfigurationWithoutChangingLegacyLevels() {
+        val extreme = AlarmRules.challengeOptions(mapOf("challengeKind" to "maze", "difficulty" to "extreme"))!!
+        assertEquals("extreme", extreme.difficulty)
+        assertEquals("maze", extreme.kind)
+        assertFalse(extreme.escalateOnSnooze)
+        assertEquals("hard", AlarmRules.challengeOptions(mapOf("difficulty" to "hard"))!!.difficulty)
     }
 
     @Test fun escalationRejectsTruthyStringsNumbersAndExplicitNull() {

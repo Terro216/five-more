@@ -95,7 +95,7 @@ private enum FiveMoreAlarmStore {
     ]
     if let nextAt { event["nextAt"] = nextAt }
     events.append(event)
-    root["events"] = Array(events.suffix(1000))
+    root["events"] = events
     data = root
   }
 
@@ -160,6 +160,10 @@ private enum FiveMoreAlarmStore {
   }
 
   static func nextDate(_ config: [String: Any], after now: Date = Date()) -> Date? {
+    if let stamp = config["oneShotAt"] as? NSNumber, stamp.doubleValue > 0 {
+      let date = Date(timeIntervalSince1970: stamp.doubleValue / 1000)
+      return date > now ? date : nil
+    }
     let calendar = Calendar.current
     let days = config["weekdays"] as? [Int] ?? []
     let candidates: [Int?] = days.isEmpty ? [nil] : days.map { $0 % 7 + 1 }
@@ -446,9 +450,9 @@ private final class FiveMoreAlarmEngine {
     let kind = args["challengeKind"] ?? "math"
     let difficulty = args["difficulty"] ?? "medium"
     guard let kind = kind as? String,
-      ["math", "memory", "stroop", "sequence", "mirror", "captcha", "mixed"].contains(kind),
+      ["math", "memory", "stroop", "sequence", "mirror", "captcha", "qr", "shake", "maze", "flags", "mixed"].contains(kind),
       let difficulty = difficulty as? String,
-      ["easy", "medium", "hard"].contains(difficulty)
+      ["easy", "medium", "hard", "extreme"].contains(difficulty)
     else { throw failure("Проверь вид и сложность задания.") }
     var escalateOnSnooze = false
     if let value = args["escalateOnSnooze"] {
@@ -463,7 +467,18 @@ private final class FiveMoreAlarmEngine {
       else { throw failure("Проверь настройку перемещения кнопки переноса.") }
       moveSnoozeButton = number.boolValue
     }
+    let order = args["mixOrder"] as? [String] ?? []
+    let kinds = ["math", "memory", "stroop", "sequence", "mirror", "captcha", "qr", "shake", "maze", "flags"]
+    guard order.count <= 12, order.allSatisfy({ kinds.contains($0) }) else { throw failure("Проверь порядок заданий.") }
+    let qr = String((args["qrValue"] as? String ?? "").prefix(2048))
+    if (kind == "qr" || (kind == "mixed" && order.contains("qr"))) && qr.isEmpty { throw failure("Сначала зарегистрируй QR-код.") }
+    let oneShot = (args["oneShotAt"] as? NSNumber)?.int64Value ?? 0
+    if args["enabled"] as? Bool != false && oneShot > 0 && (oneShot <= FiveMoreAlarmStore.now() || !days.isEmpty) { throw failure("Время короткого сна уже прошло. Выбери длительность снова.") }
+    let sound = args["sound"] as? String ?? "system"
+    if sound != "system" { _ = try FiveMoreExtrasBridge.soundURL(sound) }
     return [
+      "oneShotAt": oneShot, "mixOrder": order, "qrValue": qr,
+      "sound": sound, "soundLabel": args["soundLabel"] as? String ?? "Системный будильник",
       "id": id, "title": String((args["title"] as? String ?? "").prefix(100)),
       "hour": hour, "minute": minute, "weekdays": Array(Set(days)).sorted(),
       "enabled": args["enabled"] as? Bool ?? true, "snoozeMinutes": snooze,
@@ -492,7 +507,7 @@ private final class FiveMoreAlarmEngine {
       schedule: schedule, attributes: attributes,
       stopIntent: FiveMoreSystemStopIntent(systemID: systemID.uuidString),
       secondaryIntent: FiveMoreOpenChallengeIntent(systemID: systemID.uuidString),
-      sound: .default
+      sound: (config["sound"] as? String ?? "system") == "system" ? .default : .named(FiveMoreExtrasBridge.soundName(config["sound"] as? String ?? "system"))
     )
   }
 
@@ -526,7 +541,7 @@ private final class FiveMoreAlarmEngine {
     let previousAlarms = try manager.alarms.filter { previousSystemIDs.contains($0.id.uuidString) }
     let uuid = UUID()
     // Schedule first: a failed replacement must not erase the saved config.
-    _ = try await manager.schedule(id: uuid, configuration: configuration(config, systemID: uuid, schedule: .relative(relative)))
+    _ = try await manager.schedule(id: uuid, configuration: configuration(config, systemID: uuid, schedule: ((config["oneShotAt"] as? NSNumber)?.int64Value ?? 0) > 0 ? .fixed(next) : .relative(relative)))
     do {
       for old in previousAlarms { try manager.cancel(id: old.id) }
     } catch {
@@ -587,7 +602,9 @@ private final class FiveMoreAlarmEngine {
     let used = record["snoozesUsed"] as? Int ?? 0
     let maximum = config["maxSnoozes"] as? Int ?? 0
     guard used < maximum else { throw failure("Переносы закончились. Пора выполнить задание.") }
-    let next = Date().addingTimeInterval(TimeInterval((config["snoozeMinutes"] as? Int ?? 5) * 60))
+    let minutes = args["minutes"] as? Int ?? config["snoozeMinutes"] as? Int ?? 5
+    guard (1...30).contains(minutes) else { throw failure("Выбери перенос от 1 до 30 минут.") }
+    let next = Date().addingTimeInterval(TimeInterval(minutes * 60))
     let nextAt = Int64(next.timeIntervalSince1970 * 1000)
     let uuid = UUID()
     // A separate fixed alarm leaves the original weekly schedule intact.
@@ -759,3 +776,198 @@ private final class FiveMoreAlarmEngine {
   }
 }
 #endif
+
+// Optional local-only morning audio and bedtime notifications.
+import AVFoundation
+import UserNotifications
+import UniformTypeIdentifiers
+
+@MainActor
+final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNotificationCenterDelegate {
+  private var recorder: AVAudioRecorder?
+  private var player: AVAudioPlayer?
+  private var recordURL: URL?
+  private var startedAt = Date()
+  private var pickerResult: FlutterResult?
+  private var bedtimeOpen = false
+  private let channel: FlutterMethodChannel
+  private static var noteDirectory: URL {
+    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("MorningNotes", isDirectory: true)
+  }
+  private static var soundDirectory: URL {
+    FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Sounds", isDirectory: true)
+  }
+  init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(name: "five_more/extras", binaryMessenger: messenger)
+    super.init()
+    UNUserNotificationCenter.current().delegate = self
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self else { return }
+      Task { @MainActor in
+        do { try await self.handle(call, result: result) }
+        catch { result(FlutterError(code: "extras_error", message: error.localizedDescription, details: nil)) }
+      }
+    }
+  }
+  private func fail(_ text: String) -> NSError { NSError(domain: "FiveMoreExtras", code: 1, userInfo: [NSLocalizedDescriptionKey: text]) }
+  private func idleAudio() throws {
+    #if canImport(AlarmKit) && !targetEnvironment(macCatalyst)
+    if #available(iOS 26.0, *), FiveMoreAlarmStore.instances.values.contains(where: { $0["state"] as? String == "ringing" }) { throw fail("Сначала заверши подъём, затем запиши или послушай послание.") }
+    #endif
+  }
+  private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) async throws {
+    let args = call.arguments as? [String: Any] ?? [:]
+    switch call.method {
+    case "version":
+      result("\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"))")
+    case "listNotes":
+      let files = (try? FileManager.default.contentsOfDirectory(at: Self.noteDirectory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+      let notes: [[String: Any]] = files.compactMap { url in
+        guard url.pathExtension == "m4a", let audio = try? AVAudioFile(forReading: url), audio.length > 0 else { return nil }
+        let at = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date()
+        return ["file": url.lastPathComponent, "at": Int64(at.timeIntervalSince1970 * 1000), "seconds": min(30, Int(Double(audio.length) / audio.processingFormat.sampleRate))]
+      }
+      result(notes)
+    case "bedtimeState":
+      let center = UNUserNotificationCenter.current()
+      let requests = await center.pendingNotificationRequests()
+      let settings = await center.notificationSettings()
+      let scheduled = requests.contains { $0.identifier == "five-more-bedtime" }
+      let allowed = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
+      let error: Any = scheduled && !allowed ? "Разреши вечерние уведомления в настройках iOS." : NSNull()
+      result(["enabled": scheduled && allowed, "error": error])
+    case "takeBedtimeOpen": result(bedtimeOpen); bedtimeOpen = false
+    case "bedtime":
+      let enabled = args["enabled"] as? Bool == true
+      let hour = args["hour"] as? Int ?? 23, minute = args["minute"] as? Int ?? 0
+      guard (0...23).contains(hour), (0...59).contains(minute) else { throw fail("Проверь время напоминания.") }
+      let center = UNUserNotificationCenter.current()
+      if enabled {
+        guard try await center.requestAuthorization(options: [.alert, .sound]) else { throw fail("Разреши уведомления приложения в настройках iOS.") }
+        let content = UNMutableNotificationContent()
+        content.title = "Пора готовиться ко сну"
+        content.body = "Послушай своё утреннее послание — завтра будет легче вставать."
+        content.sound = .default
+        content.userInfo = ["bedtime": true]
+        try await center.add(UNNotificationRequest(identifier: "five-more-bedtime", content: content, trigger: UNCalendarNotificationTrigger(dateMatching: DateComponents(hour: hour, minute: minute), repeats: true)))
+      } else { center.removePendingNotificationRequests(withIdentifiers: ["five-more-bedtime"]) }
+      result(nil)
+    case "startRecording":
+      try idleAudio()
+      guard recorder == nil else { throw fail("Запись уже начата.") }
+      let allowed = await withCheckedContinuation { continuation in AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) } }
+      guard allowed else { throw fail("Разреши микрофон в настройках приложения.") }
+      try idleAudio()
+      player?.stop(); player = nil
+      try FileManager.default.createDirectory(at: Self.noteDirectory, withIntermediateDirectories: true)
+      var noteFolder = Self.noteDirectory
+      var protection = URLResourceValues(); protection.isExcludedFromBackup = true
+      try noteFolder.setResourceValues(protection)
+      let url = Self.noteDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
+      let session = AVAudioSession.sharedInstance()
+      try session.setCategory(.playAndRecord, options: [.defaultToSpeaker, .mixWithOthers])
+      try session.setActive(true)
+      let next = try AVAudioRecorder(url: url, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 22050, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 64000])
+      guard next.record(forDuration: 30) else { throw fail("Не удалось начать запись.") }
+      recorder = next; recordURL = url; startedAt = Date(); result(nil)
+    case "stopRecording":
+      guard let current = recorder, let url = recordURL else { result(nil); return }
+      current.stop(); recorder = nil
+      try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+      result(["file": url.lastPathComponent, "seconds": min(30, Int(Date().timeIntervalSince(startedAt)))])
+    case "stopAudio":
+      player?.stop(); player = nil
+      if recorder == nil { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
+      result(nil)
+    case "playNote": try play(try localNote(args["file"])); result(nil)
+    case "deleteNote":
+      player?.stop(); player = nil
+      try FileManager.default.removeItem(at: localNote(args["file"])); result(nil)
+    case "previewSound":
+      let sound = args["sound"] as? String ?? "classic"
+      try play(try Self.soundURL(sound == "system" ? "classic" : sound))
+      let preview = player
+      DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+        guard let self, self.player === preview else { return }
+        self.player?.stop(); self.player = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+      }
+      result(nil)
+    case "pickSound":
+      guard pickerResult == nil else { throw fail("Выбор файла уже открыт.") }
+      let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.audio], asCopy: true)
+      picker.delegate = self
+      guard let root = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.keyWindow?.rootViewController }).first else { throw fail("Не удалось открыть выбор файла.") }
+      var presenter = root
+      while let next = presenter.presentedViewController { presenter = next }
+      pickerResult = result; presenter.present(picker, animated: true)
+    default: result(FlutterMethodNotImplemented)
+    }
+  }
+  private func localNote(_ value: Any?) throws -> URL {
+    guard let name = value as? String, name.hasSuffix(".m4a"), UUID(uuidString: String(name.dropLast(4))) != nil else { throw fail("Запись не найдена.") }
+    return Self.noteDirectory.appendingPathComponent(name)
+  }
+  private func play(_ url: URL) throws {
+    try idleAudio()
+    player?.stop()
+    let session = AVAudioSession.sharedInstance()
+    try session.setCategory(.playback, options: [.mixWithOthers]); try session.setActive(true)
+    player = try AVAudioPlayer(contentsOf: url)
+    guard player?.play() == true else { throw fail("Не удалось воспроизвести запись.") }
+  }
+  static func soundName(_ sound: String) -> String {
+    sound.hasPrefix("file:") ? String(sound.dropFirst(5)) : "\(sound == "classic" ? "alarm_tone" : sound).wav"
+  }
+  static func soundURL(_ sound: String) throws -> URL {
+    let name = soundName(sound)
+    guard !name.contains("/"), !name.contains("..") else { throw NSError(domain: "sound", code: 1) }
+    try FileManager.default.createDirectory(at: soundDirectory, withIntermediateDirectories: true)
+    var soundFolder = soundDirectory
+    var protection = URLResourceValues(); protection.isExcludedFromBackup = true
+    try soundFolder.setResourceValues(protection)
+    let destination = soundDirectory.appendingPathComponent(name)
+    if FileManager.default.fileExists(atPath: destination.path) { return destination }
+    guard ["classic", "sunrise", "arcade", "pulse"].contains(sound), let source = Bundle.main.url(forResource: name, withExtension: nil, subdirectory: "Sounds") else { throw NSError(domain: "sound", code: 2, userInfo: [NSLocalizedDescriptionKey: "Мелодия недоступна. Выбери её снова."]) }
+    try FileManager.default.copyItem(at: source, to: destination)
+    try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: destination.path)
+    return destination
+  }
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { pickerResult?(nil); pickerResult = nil }
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    guard let result = pickerResult else { return }
+    pickerResult = nil
+    guard let source = urls.first else { result(nil); return }
+    let security = source.startAccessingSecurityScopedResource()
+    defer { if security { source.stopAccessingSecurityScopedResource() } }
+    var destination: URL?
+    do {
+      let size = try source.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+      guard size > 0, size <= 40 * 1024 * 1024 else { throw fail("Выбери аудиофайл до 40 МБ.") }
+      let input = try AVAudioFile(forReading: source)
+      guard (1...2).contains(input.processingFormat.channelCount), input.processingFormat.sampleRate > 0, input.processingFormat.sampleRate <= 192000 else { throw fail("Выбери обычную моно- или стереозапись.") }
+      let frames = min(input.length, AVAudioFramePosition(input.processingFormat.sampleRate * 29))
+      guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: AVAudioFrameCount(frames)) else { throw fail("Файл не содержит звука.") }
+      try input.read(into: buffer)
+      try FileManager.default.createDirectory(at: Self.soundDirectory, withIntermediateDirectories: true)
+      var soundFolder = Self.soundDirectory
+      var protection = URLResourceValues(); protection.isExcludedFromBackup = true
+      try soundFolder.setResourceValues(protection)
+      let target = Self.soundDirectory.appendingPathComponent("\(UUID().uuidString).caf")
+      destination = target
+      let output = try AVAudioFile(forWriting: target, settings: [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: input.processingFormat.sampleRate, AVNumberOfChannelsKey: input.processingFormat.channelCount, AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false], commonFormat: input.processingFormat.commonFormat, interleaved: input.processingFormat.isInterleaved)
+      try output.write(from: buffer)
+      result(["sound": "file:\(target.lastPathComponent)", "label": String(source.lastPathComponent.prefix(80))])
+    } catch { if let destination { try? FileManager.default.removeItem(at: destination) }; result(FlutterError(code: "audio_file", message: "Этот аудиофайл не удалось прочитать. Попробуй MP3, M4A или WAV.", details: nil)) }
+  }
+  nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+    Task { @MainActor in
+      if response.notification.request.content.userInfo["bedtime"] as? Bool == true {
+        self.bedtimeOpen = true
+        self.channel.invokeMethod("bedtimeOpened", arguments: nil)
+      }
+      completionHandler()
+    }
+  }
+  nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) { completionHandler([.banner, .sound]) }
+}

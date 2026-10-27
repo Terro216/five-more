@@ -6,6 +6,10 @@ import 'package:flutter/services.dart';
 
 import '../../app/theme.dart';
 import 'challenge_models.dart';
+import 'physical_tasks.dart';
+import 'flag_task.dart';
+import '../../services/phrase_library.dart';
+import '../../widgets/emergency_stop.dart';
 
 /// An offline challenge flow. The host owns alarm playback and dismissal.
 class ChallengeScreen extends StatefulWidget {
@@ -16,6 +20,8 @@ class ChallengeScreen extends StatefulWidget {
     required this.onComplete,
     this.onEmergencyExit,
     this.practice = false,
+    this.order = const [],
+    this.qrValue = '',
   });
 
   final ChallengeKind kind;
@@ -23,6 +29,8 @@ class ChallengeScreen extends StatefulWidget {
   final VoidCallback onComplete;
   final VoidCallback? onEmergencyExit;
   final bool practice;
+  final List<ChallengeKind> order;
+  final String qrValue;
 
   @override
   State<ChallengeScreen> createState() => _ChallengeScreenState();
@@ -47,6 +55,9 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   final _typedAnswer = TextEditingController();
   final _typedFocus = FocusNode();
   int _sequenceCompleted = 0;
+  int _roundSerial = 0;
+  String? _practiceQr;
+  bool get _hard => widget.difficulty.index >= 2;
   final _selected = <int>{};
   bool _showPattern = false;
   bool _accessibleNavigation = false;
@@ -66,6 +77,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       kind: widget.kind,
       difficulty: widget.difficulty,
       random: _random,
+      order: widget.order,
     );
     _prepareRound();
   }
@@ -91,6 +103,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   }
 
   void _prepareRound() {
+    _roundSerial++;
     _previewTimer?.cancel();
     _feedback = null;
     _transitioning = false;
@@ -113,7 +126,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       case ChallengeKind.sequence:
         _sequence = generateSequenceBoard(_random, widget.difficulty);
       case ChallengeKind.mirror:
-        _mirror = generateMirrorTextQuestion(
+        _mirror = PhraseLibrary.instance.next(
           _random,
           widget.difficulty,
           previous: _mirror?.text,
@@ -124,6 +137,11 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
           widget.difficulty,
           previous: _captcha?.code,
         );
+      case ChallengeKind.qr:
+      case ChallengeKind.shake:
+      case ChallengeKind.maze:
+      case ChallengeKind.flags:
+        break;
       case ChallengeKind.mixed:
         throw StateError('A mixed session contains concrete task types');
     }
@@ -143,9 +161,12 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     _previewTimer?.cancel();
     _previewTimer = null;
     if (_accessibleNavigation) return;
-    _previewTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) setState(() => _showPattern = false);
-    });
+    _previewTimer = Timer(
+      Duration(milliseconds: [5000, 4000, 2500, 1800][widget.difficulty.index]),
+      () {
+        if (mounted) setState(() => _showPattern = false);
+      },
+    );
   }
 
   void _answer(bool correct) {
@@ -153,9 +174,11 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     if (!correct) {
       setState(() {
         _session.submitIncorrect();
-        _feedback = 'Попробуй ещё раз. Пройденные шаги сохраняются.';
+        _prepareRound();
+        _feedback = _session.completedSteps == 0
+            ? 'Ошибка. Начни с первого этапа.'
+            : 'Ошибка. Один этап назад.';
         _feedbackCorrect = false;
-        if (_activeKind == ChallengeKind.memory) _selected.clear();
       });
       return;
     }
@@ -197,6 +220,9 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     }
     setState(() {
       _sequenceCompleted += 1;
+      if (_hard && _sequenceCompleted < board.cellCount) {
+        _sequence = board.reshuffleRemaining(_random, _sequenceCompleted);
+      }
       _feedback = null;
       _feedbackCorrect = false;
     });
@@ -209,28 +235,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     }
     _emergencyDialogOpen = true;
     _typedFocus.unfocus();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      useRootNavigator: false,
-      builder: (context) => AlertDialog(
-        scrollable: true,
-        title: const Text('Остановить без задания?'),
-        content: const Text(
-          'Если нужно срочно выключить звук, можно выйти сейчас. '
-          'Задание останется непройденным.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Продолжить задание'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Остановить'),
-          ),
-        ],
-      ),
-    );
+    final confirmed = await confirmEmergencyStop(context);
     _emergencyDialogOpen = false;
     if (!mounted || _finished) return;
     if (confirmed == true) {
@@ -342,7 +347,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                           Semantics(
                             liveRegion: true,
                             child: Text(
-                              _feedback ?? 'Без спешки. Ошибаться можно.',
+                              _feedback ?? '',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: _feedbackCorrect ? _accent : _muted,
@@ -365,7 +370,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                           minimumSize: const Size(48, 48),
                         ),
                         icon: const Icon(Icons.volume_off_outlined, size: 18),
-                        label: const Text('Нужно срочно выключить'),
+                        label: const Text('Не получается пройти'),
                       ),
                     ),
                 ],
@@ -384,6 +389,35 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     ChallengeKind.sequence => _buildSequence(),
     ChallengeKind.mirror => _buildTextTask(mirrored: true),
     ChallengeKind.captcha => _buildTextTask(mirrored: false),
+    ChallengeKind.qr =>
+      widget.qrValue.isEmpty && _practiceQr == null
+          ? QrTask(
+              key: ValueKey('qr-register-$_roundSerial'),
+              onMatched: (code) => setState(() => _practiceQr = code),
+            )
+          : QrTask(
+              key: ValueKey('qr-check-$_roundSerial'),
+              expected: widget.qrValue.isEmpty ? _practiceQr : widget.qrValue,
+              onMatched: (_) => _answer(true),
+              onMistake: () => _answer(false),
+            ),
+    ChallengeKind.shake => ShakeTask(
+      key: ValueKey('shake-$_roundSerial'),
+      difficulty: widget.difficulty,
+      onComplete: () => _answer(true),
+    ),
+    ChallengeKind.maze => MazeTask(
+      key: ValueKey('maze-$_roundSerial'),
+      difficulty: widget.difficulty,
+      practice: widget.practice,
+      onComplete: () => _answer(true),
+      onMistake: () => _answer(false),
+    ),
+    ChallengeKind.flags => FlagTask(
+      key: ValueKey('flags-$_roundSerial'),
+      difficulty: widget.difficulty,
+      onAnswer: _answer,
+    ),
     ChallengeKind.mixed => const SizedBox.shrink(),
   };
 
@@ -480,7 +514,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             ? TextCapitalization.none
             : TextCapitalization.characters,
         textInputAction: TextInputAction.done,
-        maxLength: mirrored ? 128 : 12,
+        maxLength: mirrored ? 160 : 12,
         inputFormatters: mirrored
             ? null
             : [FilteringTextInputFormatter.allow(RegExp('[a-zA-Z0-9]'))],
@@ -489,7 +523,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
           floatingLabelBehavior: FloatingLabelBehavior.never,
           helperText: 'Регистр не важен',
           errorText: _feedback != null && !_feedbackCorrect
-              ? 'Пока не совпало. Проверь картинку.'
+              ? 'Неверный ответ'
               : null,
           errorMaxLines: 3,
           counterText: '',
@@ -546,6 +580,48 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
 
   Widget _buildMath() {
     final question = _math!;
+    if (_hard) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Введи ответ',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: muted),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            question.expression,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 24),
+          TextField(
+            key: const ValueKey('math-answer-input'),
+            controller: _typedAnswer,
+            focusNode: _typedFocus,
+            keyboardType: const TextInputType.numberWithOptions(signed: true),
+            autocorrect: false,
+            enableSuggestions: false,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[-0-9]')),
+              LengthLimitingTextInputFormatter(8),
+            ],
+            decoration: const InputDecoration(labelText: 'Ответ'),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) =>
+                _answer(int.tryParse(_typedAnswer.text) == question.answer),
+          ),
+          const SizedBox(height: 12),
+          _answerButton(
+            label: 'Проверить',
+            accent: true,
+            onPressed: () =>
+                _answer(int.tryParse(_typedAnswer.text) == question.answer),
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -624,53 +700,61 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               : 'Выбрано ${_selected.length} из ${pattern.cells.length}',
         ),
         const SizedBox(height: 24),
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: pattern.cellCount,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: pattern.side,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
+        LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: max(
+                min(360.0, constraints.maxWidth),
+                pattern.side * 48.0 + (pattern.side - 1) * 6.0,
               ),
-              itemBuilder: (context, index) {
-                final marked = _showPattern
-                    ? pattern.cells.contains(index)
-                    : _selected.contains(index);
-                return Semantics(
-                  button: !_showPattern,
-                  selected: marked,
-                  label:
-                      'Ряд ${index ~/ pattern.side + 1}, '
-                      'столбец ${index % pattern.side + 1}',
-                  child: Material(
-                    color: marked ? _accent : _surface,
-                    borderRadius: BorderRadius.circular(16),
-                    child: InkWell(
+              child: GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: pattern.cellCount,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: pattern.side,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                ),
+                itemBuilder: (context, index) {
+                  final marked = _showPattern
+                      ? pattern.cells.contains(index)
+                      : _selected.contains(index);
+                  return Semantics(
+                    button: !_showPattern,
+                    selected: marked,
+                    label:
+                        'Ряд ${index ~/ pattern.side + 1}, '
+                        'столбец ${index % pattern.side + 1}',
+                    child: Material(
+                      color: marked ? _accent : _surface,
                       borderRadius: BorderRadius.circular(16),
-                      onTap: _showPattern
-                          ? null
-                          : () => setState(() {
-                              _feedback = null;
-                              if (!_selected.remove(index) &&
-                                  _selected.length < pattern.cells.length) {
-                                _selected.add(index);
-                              }
-                            }),
-                      child: marked
-                          ? Icon(
-                              _showPattern ? Icons.circle : Icons.check_rounded,
-                              color: _background,
-                              size: _showPattern ? 16 : 30,
-                            )
-                          : const SizedBox.expand(),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: _showPattern
+                            ? null
+                            : () => setState(() {
+                                _feedback = null;
+                                if (!_selected.remove(index) &&
+                                    _selected.length < pattern.cells.length) {
+                                  _selected.add(index);
+                                }
+                              }),
+                        child: marked
+                            ? Icon(
+                                _showPattern
+                                    ? Icons.circle
+                                    : Icons.check_rounded,
+                                color: _background,
+                                size: _showPattern ? 16 : 30,
+                              )
+                            : const SizedBox.expand(),
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -687,7 +771,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               ? () => _answer(pattern.accepts(_selected))
               : null,
         ),
-        if (!_showPattern)
+        if (!_showPattern && !_hard)
           TextButton(
             onPressed: () => setState(_startPreview),
             style: TextButton.styleFrom(
@@ -738,7 +822,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             padding: const EdgeInsets.only(bottom: 10),
             child: _answerButton(
               label: choice.label,
-              swatch: _inkColor(choice),
+              swatch: _hard ? null : _inkColor(choice),
               onPressed: () => _answer(question.accepts(choice)),
             ),
           ),

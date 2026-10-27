@@ -8,6 +8,7 @@ import android.os.Build
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val engine = AlarmEngine(context)
+        if (intent.action != AlarmEngine.ACTION_FIRE && intent.action != AlarmEngine.ACTION_SNOOZE) BedtimeReminder.restore(context)
         when (intent.action) {
             AlarmEngine.ACTION_FIRE -> {
                 val id = intent.getStringExtra("alarmId") ?: return

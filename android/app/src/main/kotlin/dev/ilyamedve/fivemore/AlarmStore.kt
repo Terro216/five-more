@@ -52,10 +52,7 @@ class AlarmStore(context: Context) {
             .put("enabled", alarm.optBoolean("enabled"))
         val all = jsonArray(prefs.getString("events", null))
         all.put(event)
-        // A bounded journal protects the tiny device-protected store when the UI is never opened.
-        val bounded = JSONArray()
-        for (i in maxOf(0, all.length() - 512) until all.length()) bounded.put(all.get(i))
-        check(prefs.edit().putString("events", bounded.toString()).commit())
+        check(prefs.edit().putString("events", all.toString()).commit())
     }
 
     fun drainEvents(): List<Map<String, Any?>> {

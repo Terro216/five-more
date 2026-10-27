@@ -34,7 +34,7 @@ class _FailingSnoozeGateway extends FakeAlarmGateway {
   bool reject = true;
 
   @override
-  Future<AlarmResult> snooze(String id) async {
+  Future<AlarmResult> snooze(String id, {int? minutes}) async {
     if (!reject) return super.snooze(id);
     snoozeCalls.add(id);
     return AlarmResult(
@@ -283,7 +283,7 @@ void main() {
       _expectControlsVisible(tester, size, insets);
       await tester.tap(find.byKey(const ValueKey('ringing-emergency')));
       await tester.pumpAndSettle();
-      expect(find.text('Отключить без задания?'), findsOneWidget);
+      expect(find.text('Нужна помощь с остановкой?'), findsOneWidget);
       expect(gateway.dismissCalls, isEmpty);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());

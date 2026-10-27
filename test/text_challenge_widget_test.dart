@@ -1,3 +1,5 @@
+import 'ui_helpers.dart';
+
 import 'package:five_more/app/theme.dart';
 import 'package:five_more/features/challenges/challenge_models.dart';
 import 'package:five_more/features/challenges/challenge_screen.dart';
@@ -114,7 +116,7 @@ void main() {
           expect(_submit.hitTestable(), findsOneWidget);
           expect(tester.getRect(_submit).bottom, lessThanOrEqualTo(380));
           expect(
-            find.text('Нужно срочно выключить').hitTestable(),
+            find.text('Не получается пройти').hitTestable(),
             findsOneWidget,
           );
           await tester.tap(_submit);
@@ -127,7 +129,7 @@ void main() {
     );
 
     testWidgets(
-      '${kind.name} keeps the same prompt and progress on wrong input and rebuild',
+      '${kind.name} rolls back one stage on error and survives rebuild',
       (tester) async {
         var completions = 0;
         final scale = await _mount(
@@ -149,27 +151,32 @@ void main() {
         expect(field.enableIMEPersonalizedLearning, isFalse);
         expect(field.autofillHints, isEmpty);
         await _typeAndSubmit(tester, 'WRONG');
-        expect(_shownAnswer(tester, kind), first);
+        final retry = _shownAnswer(tester, kind);
+        expect(retry, isNot(first));
         expect(find.text('1 / 2'), findsOneWidget);
         expect(completions, 0);
-        expect(find.text('Пока не совпало. Проверь картинку.'), findsOneWidget);
+        expect(find.text('Неверный ответ'), findsOneWidget);
         scale.value = 1.3;
         await tester.pumpAndSettle();
-        expect(_shownAnswer(tester, kind), first);
-        expect(tester.widget<TextField>(_answer).controller!.text, 'WRONG');
-        await _typeAndSubmit(tester, first.toUpperCase());
+        expect(_shownAnswer(tester, kind), retry);
+        expect(tester.widget<TextField>(_answer).controller!.text, isEmpty);
+        await _typeAndSubmit(tester, retry.toUpperCase());
         // Duplicate IME submissions during the transition must not solve another step.
         await tester.testTextInput.receiveAction(TextInputAction.done);
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.text('2 / 2'), findsOneWidget);
         final second = _shownAnswer(tester, kind);
-        expect(second, isNot(first));
+        expect(second, isNot(retry));
         expect(tester.widget<TextField>(_answer).controller!.text, isEmpty);
         await _typeAndSubmit(tester, 'WRONG');
-        expect(find.text('2 / 2'), findsOneWidget);
-        expect(_shownAnswer(tester, kind), second);
-        await _typeAndSubmit(tester, second.toLowerCase());
-        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text('1 / 2'), findsOneWidget);
+        for (var remaining = 0; remaining < 2; remaining++) {
+          await _typeAndSubmit(
+            tester,
+            _shownAnswer(tester, kind).toLowerCase(),
+          );
+          await tester.pump(const Duration(milliseconds: 500));
+        }
         expect(completions, 1);
         expect(tester.widget<FilledButton>(_submit).onPressed, isNull);
         await tester.pump(const Duration(seconds: 1));
@@ -224,19 +231,14 @@ void main() {
         await tester.pumpAndSettle();
         await tester.enterText(_answer, 'WRONG');
         await tester.pumpAndSettle();
-        final emergency = find.text('Нужно срочно выключить');
+        final emergency = find.text('Не получается пройти');
         expect(emergency.hitTestable(), findsOneWidget);
         expect(tester.getRect(emergency).bottom, lessThanOrEqualTo(380));
         expect(tester.takeException(), isNull);
         await tester.tap(emergency);
         await tester.pumpAndSettle();
         expect(exits, 0);
-        final stop = find.widgetWithText(FilledButton, 'Остановить');
-        await tester.ensureVisible(stop);
-        await tester.pumpAndSettle();
-        expect(stop.hitTestable(), findsOneWidget);
-        await tester.tap(stop);
-        await tester.pumpAndSettle();
+        await completeEmergencyHold(tester);
         expect(exits, 1);
         expect(completions, 0);
         expect(tester.takeException(), isNull);

@@ -1,3 +1,5 @@
+import 'ui_helpers.dart';
+
 import 'package:five_more/app/alarm_controller.dart';
 import 'package:five_more/app/theme.dart';
 import 'package:five_more/features/alarms/ringing_screen.dart';
@@ -24,7 +26,7 @@ class _FailingAlarmGateway extends FakeAlarmGateway {
   final emergencyFlags = <bool>[];
 
   @override
-  Future<AlarmResult> snooze(String id) async {
+  Future<AlarmResult> snooze(String id, {int? minutes}) async {
     if (rejectSnooze) {
       snoozeCalls.add(id);
       return const AlarmResult(ok: false, error: _longError);
@@ -149,14 +151,7 @@ void main() {
   Future<void> holdEmergency(WidgetTester tester) async {
     await tester.tap(control('ringing-emergency'));
     await tester.pumpAndSettle();
-    final hold = find.text('Удерживай, чтобы отключить');
-    await tester.ensureVisible(hold);
-    await tester.pumpAndSettle();
-    final gesture = await tester.startGesture(tester.getCenter(hold));
-    await tester.pump(const Duration(milliseconds: 600));
-    await tester.pump(const Duration(seconds: 2));
-    await gesture.up();
-    await tester.pumpAndSettle();
+    await completeEmergencyHold(tester);
   }
 
   testWidgets('failed snooze keeps controls and long error usable at 2x text', (

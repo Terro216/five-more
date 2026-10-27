@@ -72,8 +72,10 @@ def verify_identity(badging, certificate, version, code, expected_certificate):
         raise ValueError('A debuggable APK cannot be published')
     if "sdkVersion:'26'" not in badging:
         raise ValueError('Unexpected minimum Android version')
-    if 'android.permission.INTERNET' in badging:
-        raise ValueError('The offline pilot must not request network access')
+    # Network is limited to the explicitly enabled phrase source.
+    for permission in ('READ_CONTACTS', 'ACCESS_FINE_LOCATION', 'READ_PHONE_STATE'):
+        if f'android.permission.{permission}' in badging:
+            raise ValueError(f'Unexpected personal-data permission: {permission}')
     if "native-code: 'armeabi-v7a' 'arm64-v8a' 'x86_64'" not in badging:
         # aapt may change ABI order between build-tools versions.
         abi_line = next((line for line in badging.splitlines() if line.startswith('native-code:')), '')
@@ -115,7 +117,7 @@ def package(apk, output):
             f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}")
     (output / f'five-more-{version}-sha256.txt').write_text(f'{digest}  {name}\n')
     (output / f'five-more-{version}-build-info.json').write_text(json.dumps(metadata, indent=2) + '\n')
-    print(f'Verified {name}: package, version, certificate, offline permissions and ABIs')
+    print(f'Verified {name}: package, version, certificate, permissions and ABIs')
 
 
 def main():

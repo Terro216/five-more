@@ -1,3 +1,5 @@
+import 'ui_helpers.dart';
+
 import 'dart:math';
 
 import 'package:five_more/app/theme.dart';
@@ -10,10 +12,10 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('sequence boards are immutable shuffled permutations at each level', () {
     for (final difficulty in ChallengeDifficulty.values) {
-      final expectedCount = [6, 9, 12][difficulty.index];
+      final expectedCount = [6, 9, 16, 25][difficulty.index];
       for (var seed = 0; seed < 100; seed += 1) {
         final board = generateSequenceBoard(Random(seed), difficulty);
-        expect(board.columns, 3);
+        expect(board.columns, difficulty.index >= 2 ? difficulty.index + 2 : 3);
         expect(board.cellCount, expectedCount);
         expect(board.numbers.toSet(), {
           for (var number = 1; number <= expectedCount; number += 1) number,
@@ -50,7 +52,7 @@ void main() {
       );
       expect(
         session.totalSteps,
-        difficulty == ChallengeDifficulty.hard ? 3 : 2,
+        difficulty.index >= 2 ? difficulty.index + 1 : 2,
       );
       expect(
         session.rounds.every((kind) => kind == ChallengeKind.sequence),
@@ -104,30 +106,32 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('wrong and repeated numbers preserve completed progress', (
-    tester,
-  ) async {
-    var completions = 0;
-    await showSequence(tester, onComplete: () => completions += 1);
-    await tapNumber(tester, 3);
-    expect(find.text('Следующее: 1'), findsOneWidget);
-    expect(find.text('1 / 2'), findsOneWidget);
-    await tapNumber(tester, 1);
-    expect(find.text('Следующее: 2'), findsOneWidget);
-    final first = tester.widget<Semantics>(number(1));
-    expect(first.properties.label, 'Число 1');
-    expect(first.properties.selected, isTrue);
-    expect(first.properties.enabled, isFalse);
-    await tapNumber(tester, 1);
-    await tapNumber(tester, 4);
-    expect(find.text('Следующее: 2'), findsOneWidget);
-    expect(tester.widget<Semantics>(number(1)).properties.selected, isTrue);
-    await tapNumber(tester, 2);
-    expect(find.text('Следующее: 3'), findsOneWidget);
-    expect(completions, 0);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  testWidgets(
+    'wrong numbers reset the current board; repeated taps do not advance',
+    (tester) async {
+      var completions = 0;
+      await showSequence(tester, onComplete: () => completions += 1);
+      await tapNumber(tester, 3);
+      expect(find.text('Следующее: 1'), findsOneWidget);
+      expect(find.text('1 / 2'), findsOneWidget);
+      await tapNumber(tester, 1);
+      expect(find.text('Следующее: 2'), findsOneWidget);
+      final first = tester.widget<Semantics>(number(1));
+      expect(first.properties.label, 'Число 1');
+      expect(first.properties.selected, isTrue);
+      expect(first.properties.enabled, isFalse);
+      await tapNumber(tester, 1);
+      await tapNumber(tester, 4);
+      expect(find.text('Следующее: 1'), findsOneWidget);
+      expect(tester.widget<Semantics>(number(1)).properties.selected, isFalse);
+      await tapNumber(tester, 1);
+      await tapNumber(tester, 2);
+      expect(find.text('Следующее: 3'), findsOneWidget);
+      expect(completions, 0);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets('all numbers advance boards and rapid last taps complete once', (
     tester,
@@ -180,13 +184,13 @@ void main() {
         expect(size.width, greaterThanOrEqualTo(48));
         expect(size.height, greaterThanOrEqualTo(48));
       }
-      final emergency = find.text('Нужно срочно выключить');
+      final emergency = find.text('Не получается пройти');
       expect(emergency.hitTestable(), findsOneWidget);
       expect(tester.getBottomRight(emergency).dy, lessThanOrEqualTo(640));
       await tester.tap(emergency);
       await tester.pumpAndSettle();
       expect(exits, 0);
-      await tester.tap(find.text('Остановить'));
+      await completeEmergencyHold(tester);
       await tester.pumpAndSettle();
       expect(exits, 1);
       expect(tester.takeException(), isNull);
@@ -210,11 +214,11 @@ void main() {
       }
       if (board == 0) await tester.pump(const Duration(milliseconds: 500));
     }
-    await tester.tap(find.text('Нужно срочно выключить'));
+    await tester.tap(find.text('Не получается пройти'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 1));
     expect(completions, 0);
-    await tester.tap(find.text('Остановить'));
+    await completeEmergencyHold(tester);
     await tester.pumpAndSettle();
     expect(exits, 1);
     expect(completions, 0);
@@ -237,11 +241,11 @@ void main() {
         }
         if (board == 0) await tester.pump(const Duration(milliseconds: 500));
       }
-      await tester.tap(find.text('Нужно срочно выключить'));
+      await tester.tap(find.text('Не получается пройти'));
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 1));
       expect(completions, 0);
-      await tester.tap(find.text('Продолжить задание'));
+      await tester.tap(find.text('Вернуться к заданию'));
       await tester.pumpAndSettle();
       expect(exits, 0);
       expect(completions, 1);

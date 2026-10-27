@@ -66,6 +66,12 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Запишите короткое утреннее послание себе. Аудио остаётся на телефоне.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Камера сканирует ваш QR-код для задания будильника.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Движение телефона управляет заданиями «Тряска» и «Лабиринт».</string>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Будильники разбудят вас в выбранное время, даже когда приложение закрыто.</string>
 </dict>

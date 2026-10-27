@@ -10,11 +10,15 @@ challenge preview, never an actual background alarm.
 - iOS AlarmKit has a system stop control: do not claim mandatory captchas on iOS.
 - Emergency dismissal is always available and recorded separately.
 - Scheduling failures must reach the user; never show an unscheduled alarm as active.
-- No analytics, accounts, voice uploads, or external API calls in this pilot.
+- No tracking SDKs, accounts, or voice uploads. Statistics and recordings stay local.
+  Online mirror phrases require explicit opt-in; never fetch during an alarm.
 - Device-check success is an explicit user report, never inferred from a native event.
 - Test occurrences have preview-only IDs; cancellation must not change real schedules.
 - Snooze escalation uses the native occurrence counter; keep the saved base level unchanged.
-- Existing alarms never opt into escalation implicitly. Mistakes must not erase solved steps.
+- Existing alarms never opt into escalation implicitly. A wrong answer returns
+  exactly one challenge stage, bounded at the first stage.
+- Hard and extreme challenges must require materially greater effort; retain
+  accessible controls and the emergency exit at every difficulty.
 - Keep SDK version pinned in `.flutter-version` and CI. Commit `pubspec.lock`.
 - Run `dart format --output=none --set-exit-if-changed lib test`,
   `flutter analyze`, `flutter test`, and build Android APK after native changes.

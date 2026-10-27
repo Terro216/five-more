@@ -105,7 +105,9 @@ void main() {
     final gateway = FakeAlarmGateway();
     final controller = await showHome(tester, gateway: gateway);
     final card = find.byKey(const ValueKey('alarm-card-morning'));
-    await tester.tap(find.descendant(of: card, matching: find.text('07:30')));
+    await tester.tap(
+      find.descendant(of: card, matching: find.text('Рабочее утро')),
+    );
     await tester.pumpAndSettle();
     final editor = find.byType(AlarmEditor);
     expect(tester.widget<AlarmEditor>(editor).alarm?.id, 'morning');
@@ -158,7 +160,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('all seven training choices remain reachable above navigation', (
+  testWidgets('all training choices remain reachable above navigation', (
     tester,
   ) async {
     final gateway = FakeAlarmGateway();
@@ -182,8 +184,9 @@ void main() {
       );
     }
 
-    await tester.ensureVisible(
+    await tester.scrollUntilVisible(
       find.byKey(const ValueKey('practice-kind-sequence')),
+      -160,
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Порядок'));
@@ -209,17 +212,16 @@ void main() {
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
-      final menu = find.byKey(const ValueKey('alarm-menu-morning'));
-      await tester.scrollUntilVisible(menu, 160);
+      final time = find.byKey(const ValueKey('alarm-time-morning'));
+      await tester.scrollUntilVisible(time, 160);
+      await tester.ensureVisible(time);
       await tester.pumpAndSettle();
-      await tester.ensureVisible(menu);
+      await tester.tap(time);
       await tester.pumpAndSettle();
-      expect(menu.hitTestable(), findsOneWidget);
-      await tester.tap(menu);
-      await tester.pumpAndSettle();
-      expect(find.text('Настроить'), findsOneWidget);
-      expect(find.text('Удалить'), findsOneWidget);
-      Navigator.of(tester.element(find.text('Настроить'))).pop();
+      expect(find.byKey(const ValueKey('time-hour-input')), findsOneWidget);
+      expect(find.byType(AlarmEditor), findsNothing);
+      expect(find.byKey(const ValueKey('time-remaining')), findsOneWidget);
+      Navigator.of(tester.element(find.text('Готово'))).pop();
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Задания'));
