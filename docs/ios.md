@@ -18,11 +18,12 @@ build phase and provide `NSAlarmKitUsageDescription` in Info.plist.
   difficulty and preserved in snooze and preview configurations. Older saved
   alarms without it return `false`; reads do not rewrite the store. Flutter
   computes the current challenge from the native `snoozesUsed` count, one level
-  per snooze up to hard. Native code keeps the base difficulty unchanged and
+  per snooze up to extreme. Native code keeps the base difficulty unchanged and
   starts the next ordinary occurrence with a fresh count. New schedule requests
-  reject strings/numbers in this boolean and accept only `math`, `memory`,
-  `stroop`, `sequence`, `mixed` and the `easy`/`medium`/`hard` difficulty levels.
-- The system configuration, occurrence identifier, snooze budget and bounded
+  reject strings/numbers in this boolean and accept `math`, `memory`,
+  `stroop`, `sequence`, `mirror`, `captcha`, `qr`, `shake`, `maze`, `flags`,
+  `mixed` and the `easy`/`medium`/`hard`/`extreme` difficulty levels.
+- The system configuration, occurrence identifier, snooze budget and pending
   event queue live in native UserDefaults, independent of the Dart process.
   `LiveActivityIntent` runs in the app process, so no App Group is required.
   `drainEvents` peeks without deleting; `ackEvents` removes explicit event IDs
