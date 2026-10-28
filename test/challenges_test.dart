@@ -123,7 +123,7 @@ void main() {
     );
     expect(find.text('Пробный подъём'), findsOneWidget);
     expect(find.byType(FilledButton), findsNWidgets(4));
-    expect(find.text('Не получается пройти'), findsNothing);
+    expect(find.text('Проблема с заданием'), findsNothing);
     expect(completed, isFalse);
     expect(tester.takeException(), isNull);
   });
@@ -140,10 +140,10 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.text('Не получается пройти'));
+    await tester.tap(find.text('Проблема с заданием'));
     await tester.pumpAndSettle();
     expect(exited, isFalse);
-    expect(find.text('Остановить звонок?'), findsOneWidget);
+    expect(find.text('Аварийная остановка'), findsOneWidget);
     await completeEmergencyHold(tester);
     await tester.pumpAndSettle();
     expect(exited, isTrue);

@@ -92,10 +92,9 @@ class _BedtimeScreenState extends State<BedtimeScreen>
       _seconds = 0;
       _playing = null;
     });
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
-      setState(() => _seconds++);
-      if (_seconds >= 30) unawaited(_stop());
+      setState(() => _seconds = timer.tick);
     });
   });
   Future<void> _saveRecording() async {
@@ -152,8 +151,9 @@ class _BedtimeScreenState extends State<BedtimeScreen>
           icon: Icon(_recording ? Icons.stop_rounded : Icons.mic_rounded),
           label: Text(
             _recording
-                ? 'Сохранить · $_seconds / 30 сек'
-                : 'Записать до 30 секунд',
+                ? 'Сохранить · ${voiceDurationLabel(_seconds)}'
+                : 'Записать голосовое',
+            textAlign: TextAlign.center,
           ),
         ),
         const SizedBox(height: 8),
@@ -260,7 +260,7 @@ class _BedtimeScreenState extends State<BedtimeScreen>
             title: Text(
               '${note.at.day}.${note.at.month.toString().padLeft(2, '0')} · ${clockLabel(TimeOfDay.fromDateTime(note.at))}',
             ),
-            subtitle: Text('${note.seconds} сек'),
+            subtitle: Text(voiceDurationLabel(note.seconds)),
             trailing: IconButton(
               tooltip: 'Удалить запись',
               icon: const Icon(Icons.delete_outline_rounded),

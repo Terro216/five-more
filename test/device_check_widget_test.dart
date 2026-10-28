@@ -118,9 +118,9 @@ void main() {
       home: (controller) =>
           RingingScreen(controller: controller, ringing: ring),
     );
-    await tester.tap(find.text('Не получается пройти'));
+    await tester.tap(find.text('Проблема с заданием'));
     await tester.pumpAndSettle();
-    expect(find.text('Остановить звонок?'), findsOneWidget);
+    expect(find.text('Аварийная остановка'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

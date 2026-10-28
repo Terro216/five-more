@@ -1,21 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:five_more/widgets/emergency_stop.dart';
+
+Future<void> enterEmergencyCode(WidgetTester tester) async {
+  final code = tester
+      .widget<Text>(find.byKey(const ValueKey('emergency-code')))
+      .data!
+      .replaceAll(' ', '');
+  final input = find.byKey(const ValueKey('emergency-code-input'));
+  await tester.ensureVisible(input);
+  await tester.pumpAndSettle();
+  await tester.enterText(input, code);
+  await tester.pumpAndSettle();
+}
 
 Future<void> completeEmergencyHold(WidgetTester tester) async {
-  final acknowledgement = find.descendant(
-    of: find.byType(AlertDialog),
-    matching: find.byType(Checkbox),
-  );
-  await tester.ensureVisible(acknowledgement);
-  await tester.pumpAndSettle();
-  expect(acknowledgement.hitTestable(), findsOneWidget);
-  await tester.tap(acknowledgement);
-  await tester.pumpAndSettle();
-  final hold = find.text('Удерживай 5 секунд');
+  await enterEmergencyCode(tester);
+  final hold = find.byKey(const ValueKey('emergency-hold'));
   await tester.ensureVisible(hold);
   await tester.pumpAndSettle();
   final gesture = await tester.startGesture(tester.getCenter(hold));
-  await tester.pump(const Duration(seconds: 5));
+  await tester.pump(const Duration(seconds: emergencyHoldSeconds));
   await gesture.up();
   await tester.pumpAndSettle();
 }
