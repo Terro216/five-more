@@ -132,7 +132,7 @@ void main() {
         expect(
           bounds.bottom,
           lessThanOrEqualTo(
-            tester.getRect(find.text('Не получается пройти')).top,
+            tester.getRect(find.text('Проблема с заданием')).top,
           ),
         );
         final cells = find.descendant(
@@ -176,7 +176,7 @@ void main() {
           onComplete: () => completions += 1,
           onEmergencyExit: () => exits += 1,
         );
-        final emergency = find.text('Не получается пройти');
+        final emergency = find.text('Проблема с заданием');
         for (var step = 0; step < difficulty.index + 2; step += 1) {
           final expressionFinder = find.byWidgetPredicate(
             (widget) =>

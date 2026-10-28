@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'alarm_fakes.dart';
+import 'ui_helpers.dart';
 
 class _MinuteGateway extends FakeAlarmGateway {
   int? selected;
@@ -161,12 +162,88 @@ void main() {
     },
   );
 
+  testWidgets('emergency requires a fresh code and one uninterrupted minute', (
+    tester,
+  ) async {
+    bool? stopped;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async =>
+                  stopped = await confirmEmergencyStop(context),
+              child: const Text('Help'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Help'));
+    await tester.pumpAndSettle();
+    final firstCode = tester
+        .widget<Text>(find.byKey(const ValueKey('emergency-code')))
+        .data;
+    expect(find.byKey(const ValueKey('emergency-hold')), findsNothing);
+    await tester.enterText(
+      find.byKey(const ValueKey('emergency-code-input')),
+      '000000000000',
+    );
+    await tester.pump();
+    expect(find.text('Код не совпал'), findsOneWidget);
+    expect(stopped, isNull);
+    await tester.tap(find.text('Вернуться к заданию'));
+    await tester.pumpAndSettle();
+    expect(stopped, isFalse);
+    stopped = null;
+    await tester.tap(find.text('Help'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('emergency-code'))).data,
+      isNot(firstCode),
+    );
+    await enterEmergencyCode(tester);
+    final hold = find.byKey(const ValueKey('emergency-hold'));
+    var gesture = await tester.startGesture(tester.getCenter(hold));
+    await tester.pump(const Duration(seconds: 59));
+    expect(stopped, isNull);
+    await gesture.up();
+    await tester.pump();
+    expect(find.text('Удерживай 60 секунд'), findsOneWidget);
+    gesture = await tester.startGesture(tester.getCenter(hold));
+    await tester.pump(const Duration(seconds: 30));
+    await gesture.moveTo(tester.getTopLeft(hold) - const Offset(20, 20));
+    await tester.pump(const Duration(seconds: 40));
+    expect(stopped, isNull);
+    expect(find.text('Удерживай 60 секунд'), findsOneWidget);
+    await gesture.up();
+    gesture = await tester.startGesture(tester.getCenter(hold));
+    await tester.pump(const Duration(seconds: 30));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump(const Duration(seconds: 40));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await gesture.up();
+    await tester.pump();
+    expect(stopped, isNull);
+    gesture = await tester.startGesture(tester.getCenter(hold));
+    await tester.pump(const Duration(seconds: 59));
+    expect(stopped, isNull);
+    await tester.pump(const Duration(seconds: 1));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(stopped, isTrue);
+  });
+
   testWidgets(
-    'emergency requires acknowledgement and uninterrupted five-second hold',
+    'accessible emergency waits a minute and needs final confirmation',
     (tester) async {
       bool? stopped;
       await tester.pumpWidget(
         MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(accessibleNavigation: true),
+            child: child!,
+          ),
           home: Builder(
             builder: (context) => Scaffold(
               body: TextButton(
@@ -180,26 +257,18 @@ void main() {
       );
       await tester.tap(find.text('Help'));
       await tester.pumpAndSettle();
-      var gesture = await tester.startGesture(
-        tester.getCenter(find.text('Удерживай 5 секунд')),
+      await enterEmergencyCode(tester);
+      final confirm = find.byKey(
+        const ValueKey('emergency-accessible-confirm'),
       );
-      await tester.pump(const Duration(seconds: 6));
-      await gesture.up();
+      await tester.tap(confirm);
+      await tester.pump(const Duration(seconds: 59));
+      expect(tester.widget<OutlinedButton>(confirm).onPressed, isNull);
       expect(stopped, isNull);
-      await tester.tap(find.text('Остановить без задания'));
-      await tester.pump();
-      gesture = await tester.startGesture(
-        tester.getCenter(find.text('Удерживай 5 секунд')),
-      );
-      await tester.pump(const Duration(seconds: 4));
-      await gesture.up();
-      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Подтвердить остановку'), findsOneWidget);
       expect(stopped, isNull);
-      gesture = await tester.startGesture(
-        tester.getCenter(find.text('Удерживай 5 секунд')),
-      );
-      await tester.pump(const Duration(seconds: 5));
-      await gesture.up();
+      await tester.tap(confirm);
       await tester.pumpAndSettle();
       expect(stopped, isTrue);
     },

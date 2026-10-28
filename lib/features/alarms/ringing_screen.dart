@@ -146,7 +146,7 @@ class _RingingScreenState extends State<RingingScreen> {
                 style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                 onPressed: _finishing ? null : _emergencyStop,
                 child: const Text(
-                  'Не получается пройти',
+                  'Проблема с заданием',
                   style: TextStyle(color: muted),
                   textAlign: TextAlign.center,
                 ),

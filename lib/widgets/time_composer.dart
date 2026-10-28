@@ -40,6 +40,8 @@ class _TimeComposerState extends State<TimeComposer> {
     text: widget.time.minute.toString().padLeft(2, '0'),
   );
   double _drag = 0;
+  final _hourFocus = FocusNode();
+  final _minuteFocus = FocusNode();
   @override
   void didUpdateWidget(TimeComposer oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -57,6 +59,8 @@ class _TimeComposerState extends State<TimeComposer> {
   void dispose() {
     _hour.dispose();
     _minute.dispose();
+    _hourFocus.dispose();
+    _minuteFocus.dispose();
     super.dispose();
   }
 
@@ -105,9 +109,13 @@ class _TimeComposerState extends State<TimeComposer> {
         child: TextField(
           key: ValueKey(minutes ? 'time-minute-input' : 'time-hour-input'),
           controller: minutes ? _minute : _hour,
+          focusNode: minutes ? _minuteFocus : _hourFocus,
           enabled: widget.enabled,
           textAlign: TextAlign.center,
           keyboardType: TextInputType.number,
+          textInputAction: minutes
+              ? TextInputAction.done
+              : TextInputAction.next,
           inputFormatters: [
             FilteringTextInputFormatter.digitsOnly,
             LengthLimitingTextInputFormatter(2),
@@ -132,11 +140,20 @@ class _TimeComposerState extends State<TimeComposer> {
                     ? widget.time.replacing(minute: value)
                     : widget.time.replacing(hour: value),
               );
+              if (!minutes && text.length == 2) {
+                setState(() => _minutes = true);
+                _minuteFocus.requestFocus();
+              }
             }
           },
           onEditingComplete: () {
             _setTime(widget.time);
-            FocusScope.of(context).unfocus();
+            if (minutes) {
+              FocusScope.of(context).unfocus();
+            } else {
+              setState(() => _minutes = true);
+              _minuteFocus.requestFocus();
+            }
           },
         ),
       ),
@@ -209,8 +226,24 @@ class _TimeComposerState extends State<TimeComposer> {
           return Semantics(
             label: _minutes ? 'Циферблат минут' : 'Циферблат 24 часа',
             child: GestureDetector(
-              onTapDown: (e) => select(e.localPosition),
+              key: const ValueKey('time-dial'),
+              onTapUp: (e) {
+                if (!widget.enabled) return;
+                FocusScope.of(context).unfocus();
+                select(e.localPosition);
+                if (!_minutes) setState(() => _minutes = true);
+              },
+              onPanStart: (e) {
+                if (!widget.enabled) return;
+                FocusScope.of(context).unfocus();
+                select(e.localPosition);
+              },
               onPanUpdate: (e) => select(e.localPosition),
+              onPanEnd: (_) {
+                if (widget.enabled && !_minutes) {
+                  setState(() => _minutes = true);
+                }
+              },
               child: CustomPaint(
                 size: Size.square(size),
                 painter: _ClockPainter(

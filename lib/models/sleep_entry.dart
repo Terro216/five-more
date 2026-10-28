@@ -30,6 +30,15 @@ class SleepEntry {
   );
 }
 
+String voiceDurationLabel(int seconds) {
+  final duration = Duration(seconds: seconds < 0 ? 0 : seconds);
+  final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
+  final rest = (duration.inSeconds % 60).toString().padLeft(2, '0');
+  return duration.inHours > 0
+      ? '${duration.inHours}:$minutes:$rest'
+      : '${duration.inMinutes}:$rest';
+}
+
 class VoiceNote {
   const VoiceNote({
     required this.file,

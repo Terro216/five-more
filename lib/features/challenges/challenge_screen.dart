@@ -398,7 +398,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                           minimumSize: const Size(48, 48),
                         ),
                         icon: const Icon(Icons.volume_off_outlined, size: 18),
-                        label: const Text('Не получается пройти'),
+                        label: const Text('Проблема с заданием'),
                       ),
                     ),
                 ],

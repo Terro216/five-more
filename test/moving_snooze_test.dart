@@ -283,7 +283,7 @@ void main() {
       _expectControlsVisible(tester, size, insets);
       await tester.tap(find.byKey(const ValueKey('ringing-emergency')));
       await tester.pumpAndSettle();
-      expect(find.text('Остановить звонок?'), findsOneWidget);
+      expect(find.text('Аварийная остановка'), findsOneWidget);
       expect(gateway.dismissCalls, isEmpty);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());

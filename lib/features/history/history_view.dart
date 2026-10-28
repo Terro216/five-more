@@ -168,7 +168,7 @@ class _HistoryViewState extends State<HistoryView> {
             ),
             if (bucketDays > 1)
               Text(
-                'Один столбик — $bucketDays дней',
+                'Один столбик — $bucketDays ${_dayWord(bucketDays)}',
                 style: const TextStyle(color: muted, fontSize: 12),
               ),
             const SizedBox(height: 24),
@@ -484,4 +484,14 @@ class _PlotPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_PlotPainter old) => true;
+}
+
+String _dayWord(int count) {
+  final lastTwo = count.abs() % 100;
+  if (lastTwo >= 11 && lastTwo <= 14) return 'дней';
+  return switch (lastTwo % 10) {
+    1 => 'день',
+    2 || 3 || 4 => 'дня',
+    _ => 'дней',
+  };
 }

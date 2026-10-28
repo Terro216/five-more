@@ -302,11 +302,16 @@ class _ShakeTaskState extends State<ShakeTask> with WidgetsBindingObserver {
       ),
       const SizedBox(height: 24),
       Text(
-        '${_counter.count} / ${_counter.target}',
+        '${(_counter.count / _counter.target * 100).round()}%',
+        key: const ValueKey('shake-progress'),
         style: const TextStyle(fontSize: 32, color: morning),
       ),
       const SizedBox(height: 12),
-      LinearProgressIndicator(value: _counter.count / _counter.target),
+      LinearProgressIndicator(
+        value: _counter.count / _counter.target,
+        semanticsLabel: 'Прогресс тряски',
+        semanticsValue: '${(_counter.count / _counter.target * 100).round()}%',
+      ),
       if (_error != null)
         Padding(
           padding: const EdgeInsets.only(top: 16),
@@ -489,13 +494,28 @@ class _MazeTaskState extends State<MazeTask> with WidgetsBindingObserver {
         ),
       ),
       if (_error != null) Text(_error!),
-      TextButton(
+      const SizedBox(height: 16),
+      OutlinedButton.icon(
+        key: const ValueKey('calibrate-tilt'),
         onPressed: () {
           _neutral += _tilt * 4;
           _tilt = Offset.zero;
           _maze.velocity = Offset.zero;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Наклон настроен'),
+              duration: Duration(seconds: 2),
+            ),
+          );
         },
-        child: const Text('Этот наклон — нейтральный'),
+        icon: const Icon(Icons.screen_rotation_rounded),
+        label: const Text('Настроить наклон', textAlign: TextAlign.center),
+      ),
+      const SizedBox(height: 8),
+      const Text(
+        'Держи телефон удобно и нажми кнопку. Это положение станет исходным.',
+        style: TextStyle(color: muted, fontSize: 12),
+        textAlign: TextAlign.center,
       ),
     ],
   );

@@ -17,6 +17,7 @@ import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
+import android.os.SystemClock
 import android.os.Looper
 import android.provider.OpenableColumns
 import io.flutter.plugin.common.MethodChannel
@@ -54,7 +55,7 @@ class ExtrasBridge(private val activity: MainActivity, private val channel: Meth
                             try {
                                 metadata.setDataSource(file.absolutePath)
                                 val ms = metadata.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0
-                                if (ms < 300) null else mapOf("file" to file.name, "at" to file.lastModified(), "seconds" to (ms / 1000).coerceAtMost(30))
+                                if (ms < 300) null else mapOf("file" to file.name, "at" to file.lastModified(), "seconds" to (ms / 1000))
                             } catch (_: Exception) { null } finally { metadata.release() }
                         } ?: emptyList()
                         result.success(notes)
@@ -114,9 +115,8 @@ class ExtrasBridge(private val activity: MainActivity, private val channel: Meth
             candidate.setAudioSamplingRate(22050)
             candidate.setAudioEncodingBitRate(64000)
             candidate.setOutputFile(file.absolutePath)
-            candidate.setMaxDuration(31000)
             candidate.prepare(); candidate.start()
-            recorder = candidate; recordingFile = file; startedAt = System.currentTimeMillis()
+            recorder = candidate; recordingFile = file; startedAt = SystemClock.elapsedRealtime()
         } catch (e: Exception) { candidate.release(); file.delete(); throw e }
     }
     private fun stopRecording(): Map<String, Any>? {
@@ -125,7 +125,7 @@ class ExtrasBridge(private val activity: MainActivity, private val channel: Meth
         val file = recordingFile ?: error("Запись не найдена")
         try { active.stop() } catch (e: Exception) { file.delete(); throw IllegalStateException("Запись слишком короткая. Попробуй ещё раз.", e) }
         finally { active.release() }
-        return mapOf("file" to file.name, "seconds" to ((System.currentTimeMillis() - startedAt) / 1000).coerceAtMost(30))
+        return mapOf("file" to file.name, "seconds" to ((SystemClock.elapsedRealtime() - startedAt) / 1000).coerceAtLeast(0))
     }
     private fun play(uri: Uri) {
         check(AlarmEngine(activity).ringing() == null) { "Прослушай запись после отключения будильника." }

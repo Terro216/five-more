@@ -22,8 +22,10 @@ import 'package:five_more/models/device_alarm_check.dart';
 import 'package:five_more/models/sleep_entry.dart';
 import 'package:five_more/services/alarm_storage.dart';
 import 'package:five_more/services/sleep_journal.dart';
+import 'package:five_more/services/native_extras.dart';
 
 import '../test/alarm_fakes.dart';
+import '../test/ui_helpers.dart';
 
 void main() {
   setUpAll(() async {
@@ -57,6 +59,21 @@ void main() {
     // This capture harness runs as a Flutter widget test.
     // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({});
+    for (final channel in [
+      'dev.fluttercommunity.plus/sensors/method',
+      'dev.fluttercommunity.plus/sensors/accelerometer',
+      'dev.fluttercommunity.plus/sensors/user_accel',
+    ]) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(MethodChannel(channel), (_) async => null);
+    }
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(NativeExtras.channel, (call) async {
+          if (call.method == 'stopRecording') {
+            return {'file': 'capture-note.m4a', 'seconds': 95};
+          }
+          return null;
+        });
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -141,7 +158,7 @@ void main() {
     for (final width in [390.0, 320.0]) {
       tester.view.physicalSize = Size(width, width == 390 ? 844 : 640);
       final scale = width == 390 ? 1.0 : 1.5;
-      Future<GlobalKey> mount(Widget screen) async {
+      Future<GlobalKey> mount(Widget screen, {bool settle = true}) async {
         await tester.pumpWidget(const SizedBox.shrink());
         final boundary = GlobalKey();
         await tester.pumpWidget(
@@ -162,12 +179,21 @@ void main() {
             ),
           ),
         );
-        await tester.pumpAndSettle();
+        if (settle) {
+          await tester.pumpAndSettle();
+        } else {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
         return boundary;
       }
 
       var key = await mount(AlarmHome(controller: controller));
       await _capture(tester, key, 'update-home-${width.toInt()}');
+      await controller.setEnabled(alarm, false);
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'update-home-disabled-${width.toInt()}');
+      await controller.setEnabled(alarm, true);
+      await tester.pumpAndSettle();
       final quickTime = find.byKey(const ValueKey('alarm-time-capture'));
       await tester.scrollUntilVisible(quickTime, 180);
       await tester.ensureVisible(quickTime);
@@ -177,6 +203,24 @@ void main() {
       await _capture(tester, key, 'update-quick-time-${width.toInt()}');
       key = await mount(AlarmEditor(controller: controller));
       await _capture(tester, key, 'update-clock-${width.toInt()}');
+      final dial = find.byKey(const ValueKey('time-dial'));
+      await tester.ensureVisible(dial);
+      await tester.pumpAndSettle();
+      await tester.tapAt(
+        tester.getCenter(dial) + Offset(tester.getSize(dial).width * .4, 0),
+      );
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'update-clock-minutes-${width.toInt()}');
+      final title = find.byKey(const ValueKey('alarm-title'));
+      await tester.scrollUntilVisible(
+        title,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(title);
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'update-alarm-title-${width.toInt()}');
+      key = await mount(AlarmEditor(controller: controller));
       await tester.tap(find.text('Вздремнуть'));
       await tester.pumpAndSettle();
       await _capture(tester, key, 'update-nap-${width.toInt()}');
@@ -192,6 +236,15 @@ void main() {
       await _capture(tester, key, 'update-history-${width.toInt()}');
       key = await mount(Scaffold(body: BedtimeScreen(journal: journal)));
       await _capture(tester, key, 'update-bedtime-${width.toInt()}');
+      final record = find.byKey(const ValueKey('record-morning-note'));
+      await tester.ensureVisible(record);
+      await tester.pumpAndSettle();
+      await tester.tap(record);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 95));
+      await _capture(tester, key, 'update-long-recording-${width.toInt()}');
+      await tester.tap(record);
+      await tester.pumpAndSettle();
       for (var used = 0; used < 2; used++) {
         gateway.ringing = RingingAlarm(
           alarm: alarm,
@@ -211,6 +264,11 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('ringing-emergency')));
       await tester.pumpAndSettle();
       await _capture(tester, key, 'update-emergency-${width.toInt()}');
+      await enterEmergencyCode(tester);
+      final hold = find.byKey(const ValueKey('emergency-hold'));
+      await tester.ensureVisible(hold);
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'update-emergency-hold-${width.toInt()}');
       gateway.ringing = null;
       await controller.poll();
       for (final kind in [
@@ -219,6 +277,8 @@ void main() {
         ChallengeKind.flags,
         ChallengeKind.memory,
         ChallengeKind.sequence,
+        ChallengeKind.shake,
+        ChallengeKind.maze,
       ]) {
         key = await mount(
           ChallengeScreen(
@@ -227,8 +287,16 @@ void main() {
             practice: true,
             onComplete: () {},
           ),
+          settle: kind != ChallengeKind.maze,
         );
         await _capture(tester, key, 'update-${kind.name}-${width.toInt()}');
+        if (kind == ChallengeKind.maze) {
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('calibrate-tilt')),
+          );
+          await tester.pump();
+          await _capture(tester, key, 'update-maze-calibrate-${width.toInt()}');
+        }
       }
     }
     await tester.pumpWidget(const SizedBox.shrink());

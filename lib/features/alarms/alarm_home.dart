@@ -530,13 +530,13 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
             letterSpacing: -.6,
           ),
         ),
-        const SizedBox(height: 12),
-        Text(
-          controller.alarms.isEmpty
-              ? 'Выбери время, переносы и задание для пробуждения.'
-              : 'Включи один из будильников или добавь новый.',
-          style: const TextStyle(color: muted, height: 1.5, fontSize: 14),
-        ),
+        if (controller.alarms.isEmpty) ...[
+          const SizedBox(height: 12),
+          const Text(
+            'Выбери время, переносы и задание для пробуждения.',
+            style: TextStyle(color: muted, height: 1.5, fontSize: 14),
+          ),
+        ],
       ],
     ),
   );

@@ -519,7 +519,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Сложнее после переноса'),
                       subtitle: Text(
-                        _draft.maxSnoozes == 0 ? 'Сейчас переносы выключены.' : 'Каждый перенос поднимает уровень, максимум — «Сложно».',
+                        _draft.maxSnoozes == 0 ? 'Сейчас переносы выключены.' : 'Каждый перенос поднимает уровень, максимум — «Нереально».',
                         style: const TextStyle(
                           color: muted,
                           fontSize: 12,
@@ -584,24 +584,24 @@ class _AlarmEditorState extends State<AlarmEditor> {
                         label: const Text('Попробовать задание'),
                       ),
                     ),
-                    const _Heading('Название · необязательно'),
-                    TextField(
-                      key: const ValueKey('alarm-title'),
-                      controller: _title,
-                      maxLength: 50,
-                      enabled: !_saving,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        hintText: 'Например, утренняя прогулка',
-                        counterText: '',
-                      ),
-                    ),
                   ],
                 ),
               ],
             ),
             const _Heading('Мелодия'),
             _soundSettings(),
+            const _Heading('Название · необязательно'),
+            TextField(
+              key: const ValueKey('alarm-title'),
+              controller: _title,
+              maxLength: 50,
+              enabled: !_saving,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                hintText: 'Например, утренняя прогулка',
+                counterText: '',
+              ),
+            ),
             if (!widget.controller.device.challengeEnforced)
               const _Note(
                 icon: Icons.phone_iphone_rounded,

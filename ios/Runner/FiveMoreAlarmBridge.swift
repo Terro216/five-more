@@ -787,7 +787,6 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
   private var recorder: AVAudioRecorder?
   private var player: AVAudioPlayer?
   private var recordURL: URL?
-  private var startedAt = Date()
   private var pickerResult: FlutterResult?
   private var bedtimeOpen = false
   private let channel: FlutterMethodChannel
@@ -825,7 +824,7 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
       let notes: [[String: Any]] = files.compactMap { url in
         guard url.pathExtension == "m4a", let audio = try? AVAudioFile(forReading: url), audio.length > 0 else { return nil }
         let at = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date()
-        return ["file": url.lastPathComponent, "at": Int64(at.timeIntervalSince1970 * 1000), "seconds": min(30, Int(Double(audio.length) / audio.processingFormat.sampleRate))]
+        return ["file": url.lastPathComponent, "at": Int64(at.timeIntervalSince1970 * 1000), "seconds": Int(Double(audio.length) / audio.processingFormat.sampleRate)]
       }
       result(notes)
     case "bedtimeState":
@@ -868,13 +867,14 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
       try session.setCategory(.playAndRecord, options: [.defaultToSpeaker, .mixWithOthers])
       try session.setActive(true)
       let next = try AVAudioRecorder(url: url, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 22050, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 64000])
-      guard next.record(forDuration: 30) else { throw fail("Не удалось начать запись.") }
-      recorder = next; recordURL = url; startedAt = Date(); result(nil)
+      guard next.record() else { throw fail("Не удалось начать запись.") }
+      recorder = next; recordURL = url; result(nil)
     case "stopRecording":
       guard let current = recorder, let url = recordURL else { result(nil); return }
+      let seconds = max(0, Int(current.currentTime))
       current.stop(); recorder = nil
       try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-      result(["file": url.lastPathComponent, "seconds": min(30, Int(Date().timeIntervalSince(startedAt)))])
+      result(["file": url.lastPathComponent, "seconds": seconds])
     case "stopAudio":
       player?.stop(); player = nil
       if recorder == nil { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }

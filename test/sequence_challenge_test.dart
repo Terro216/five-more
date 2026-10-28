@@ -184,7 +184,7 @@ void main() {
         expect(size.width, greaterThanOrEqualTo(48));
         expect(size.height, greaterThanOrEqualTo(48));
       }
-      final emergency = find.text('Не получается пройти');
+      final emergency = find.text('Проблема с заданием');
       expect(emergency.hitTestable(), findsOneWidget);
       expect(tester.getBottomRight(emergency).dy, lessThanOrEqualTo(640));
       await tester.tap(emergency);
@@ -214,7 +214,7 @@ void main() {
       }
       if (board == 0) await tester.pump(const Duration(milliseconds: 500));
     }
-    await tester.tap(find.text('Не получается пройти'));
+    await tester.tap(find.text('Проблема с заданием'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 1));
     expect(completions, 0);
@@ -241,7 +241,7 @@ void main() {
         }
         if (board == 0) await tester.pump(const Duration(milliseconds: 500));
       }
-      await tester.tap(find.text('Не получается пройти'));
+      await tester.tap(find.text('Проблема с заданием'));
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 1));
       expect(completions, 0);

@@ -116,7 +116,7 @@ void main() {
           expect(_submit.hitTestable(), findsOneWidget);
           expect(tester.getRect(_submit).bottom, lessThanOrEqualTo(380));
           expect(
-            find.text('Не получается пройти').hitTestable(),
+            find.text('Проблема с заданием').hitTestable(),
             findsOneWidget,
           );
           await tester.tap(_submit);
@@ -231,7 +231,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.enterText(_answer, 'WRONG');
         await tester.pumpAndSettle();
-        final emergency = find.text('Не получается пройти');
+        final emergency = find.text('Проблема с заданием');
         expect(emergency.hitTestable(), findsOneWidget);
         expect(tester.getRect(emergency).bottom, lessThanOrEqualTo(380));
         expect(tester.takeException(), isNull);
