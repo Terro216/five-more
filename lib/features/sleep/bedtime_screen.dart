@@ -170,9 +170,7 @@ class _BedtimeScreenState extends State<BedtimeScreen>
         const SizedBox(height: 24),
         DropdownButtonFormField<int>(
           initialValue: journal.fallingAsleepMinutes,
-          decoration: const InputDecoration(
-            labelText: 'Примерное время на засыпание',
-          ),
+          decoration: const InputDecoration(labelText: 'На засыпание'),
           items: {0, 10, 20, 30, 45, 60, journal.fallingAsleepMinutes}
               .map((v) => DropdownMenuItem(value: v, child: Text('$v мин')))
               .toList(),

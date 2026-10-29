@@ -88,6 +88,7 @@ class _SleepReviewState extends State<SleepReview> {
       const SizedBox(height: 8),
       Wrap(
         spacing: 6,
+        runSpacing: 8,
         children: List.generate(
           5,
           (i) => ChoiceChip(
