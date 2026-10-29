@@ -7,6 +7,7 @@ import '../features/alarms/alarm_home.dart';
 import '../features/alarms/ringing_screen.dart';
 import 'alarm_controller.dart';
 import 'theme.dart';
+import '../services/sync_service.dart';
 
 class FiveMoreApp extends StatefulWidget {
   const FiveMoreApp({super.key, required this.controller});
@@ -26,6 +27,14 @@ class _FiveMoreAppState extends State<FiveMoreApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    SyncService.instance.setForeground(false);
+    if (state == AppLifecycleState.resumed) {
+      unawaited(
+        widget.controller.refreshStatus().then(
+          (_) => SyncService.instance.setForeground(true),
+        ),
+      );
+    }
     if (state == AppLifecycleState.resumed) {
       widget.controller.setForeground(true);
     } else if (state == AppLifecycleState.paused ||

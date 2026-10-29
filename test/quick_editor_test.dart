@@ -89,6 +89,40 @@ final _save = find.byKey(const ValueKey('save-alarm'));
 final _advanced = find.byKey(const ValueKey('alarm-advanced'));
 
 void main() {
+  for (final reject in [false, true]) {
+    testWidgets(
+      'back saves edits and ${reject ? "keeps a scheduling error visible" : "closes without a success toast"}',
+      (tester) async {
+        final gateway = FakeAlarmGateway()..rejectSchedule = reject;
+        final controller = AlarmController(
+          gateway: gateway,
+          storage: MemoryAlarmStorage(),
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize(startPolling: false);
+        await _openEditor(tester, controller);
+        final title = find.byKey(const ValueKey('alarm-title'));
+        await _reveal(tester, title);
+        await tester.enterText(title, 'Утро');
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        expect(gateway.scheduleCalls.single.title, 'Утро');
+        expect(find.text('Будильник сохранён'), findsNothing);
+        if (reject) {
+          expect(find.byType(AlarmEditor), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('alarm-save-error')).hitTestable(),
+            findsOneWidget,
+          );
+        } else {
+          expect(find.byType(AlarmEditor), findsNothing);
+          expect(controller.alarms.single.enabled, isTrue);
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets(
     'creates an alarm from a preset without opening manual settings',
     (tester) async {
@@ -189,8 +223,8 @@ void main() {
         await tester.tap(_save);
         await tester.pumpAndSettle();
         expect(
-          gateway.scheduleCalls.single.toJson(),
-          WakePreset.gradual.applyTo(initial).toJson(),
+          gateway.scheduleCalls.single.toJson()..remove('armedAt'),
+          WakePreset.gradual.applyTo(initial).toJson()..remove('armedAt'),
         );
 
         await _openEditor(tester, controller, alarm: controller.alarms.single);

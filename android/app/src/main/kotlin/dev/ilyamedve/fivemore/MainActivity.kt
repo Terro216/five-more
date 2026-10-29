@@ -144,6 +144,21 @@ class MainActivity : FlutterActivity() {
                         .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, getString(R.string.alarm_admin_explanation))
                 )
             }
+            "powerMenuGuard" -> {
+                PowerMenuProtection.setRequested(this, true)
+                try {
+                    // Optional OEM panel; the public accessibility overview is the fallback.
+                    startActivity(Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+                        .putExtra(Intent.EXTRA_COMPONENT_NAME, PowerMenuProtection.component(this)))
+                    true
+                } catch (_: Exception) {
+                    openSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }
+            }
+            "removePowerMenuGuard" -> {
+                PowerMenuProtection.setRequested(this, false)
+                true
+            }
             "removeDeviceAdmin" -> {
                 if (AlarmDeviceAdminReceiver.active(this) == null) false
                 else {

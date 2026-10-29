@@ -133,7 +133,7 @@ void main() {
   });
 
   test(
-    'every next native snooze changes side without process-local randomness',
+    'every next native snooze changes tile without process-local randomness',
     () {
       for (final occurrence in [
         'morning:2026-10-23',
@@ -142,12 +142,10 @@ void main() {
       ]) {
         final positions = List.generate(
           11,
-          (used) => snoozePositionFor(occurrence, used),
+          (used) => snoozeTileFor(occurrence, used),
         );
-        expect(positions.take(4).toSet(), hasLength(4));
         for (var used = 1; used < positions.length; used++) {
           expect(positions[used], isNot(positions[used - 1]));
-          expect(positions[used].onRight, isNot(positions[used - 1].onRight));
         }
         final restored = RingingAlarm.fromJson({
           'alarm': _alarm.toJson(),
@@ -156,11 +154,11 @@ void main() {
           'snoozesUsed': 5,
         });
         expect(
-          snoozePositionFor(restored.occurrenceId, restored.snoozesUsed),
+          snoozeTileFor(restored.occurrenceId, restored.snoozesUsed),
           positions[5],
         );
       }
-      expect(snoozePositionFor('morning', -1), snoozePositionFor('morning', 0));
+      expect(snoozeTileFor('morning', -1), snoozeTileFor('morning', 0));
     },
   );
 

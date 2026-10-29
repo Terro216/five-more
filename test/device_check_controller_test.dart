@@ -1,3 +1,5 @@
+import 'package:five_more/services/local_database.dart';
+
 import 'dart:convert';
 
 import 'package:five_more/app/alarm_controller.dart';
@@ -358,6 +360,8 @@ void main() {
   test(
     'v0.1 local state remains readable without inventing a device check',
     () async {
+      await LocalDatabase.instance.close();
+      LocalDatabase.instance = LocalDatabase(path: ':memory:');
       SharedPreferences.setMockInitialValues({
         'five_more.state.v1': jsonEncode({
           'version': 1,
@@ -380,6 +384,8 @@ void main() {
   );
 
   test('persisted feedback survives a real storage round trip', () async {
+    await LocalDatabase.instance.close();
+    LocalDatabase.instance = LocalDatabase(path: ':memory:');
     SharedPreferences.setMockInitialValues({});
     final localStorage = LocalAlarmStorage();
     final pending = DeviceAlarmCheck(
@@ -420,6 +426,8 @@ void main() {
   test(
     'a corrupt optional check cannot hide the existing alarm list',
     () async {
+      await LocalDatabase.instance.close();
+      LocalDatabase.instance = LocalDatabase(path: ':memory:');
       SharedPreferences.setMockInitialValues({
         'five_more.state.v1': jsonEncode({
           'version': 2,

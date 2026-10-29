@@ -5,7 +5,7 @@ import java.util.TimeZone
 
 /** Pure scheduling rules shared by the receiver/service and covered without an Android runtime. */
 object AlarmRules {
-    data class Snooze(val used: Int, val nextAt: Long)
+    data class Snooze(val used: Int, val nextAt: Long, val totalMinutes: Int = 0)
     data class ChallengeOptions(
         val kind: String,
         val difficulty: String,
@@ -15,9 +15,17 @@ object AlarmRules {
     enum class RecoveryAction { IGNORE, REARM, NEXT_OCCURRENCE, RESOLVE }
     data class RecoveryPlan(val action: RecoveryAction, val nextAt: Long = 0L, val event: String? = null)
 
-    /** Replaying an interrupted ring must not restart its fifteen-minute safety limit. */
+    const val PREVIEW_RING_LIMIT_MS = 15 * 60_000L
+    const val MISSED_ALARM_GRACE_MS = 15 * 60_000L
+
+    /** Keep the original start for statistics and for the bounded preview. */
     fun ringingSinceAfterFire(previousState: String, previousSince: Long, now: Long): Long =
         if (previousState == "ringing" && previousSince > 0L) previousSince else now
+
+    /** Real alarms, including naps, stop only through an explicit action. */
+    fun automaticStopDelay(alarmId: String, ringingSince: Long, now: Long): Long? =
+        if (isPreviewId(alarmId)) (PREVIEW_RING_LIMIT_MS - (now - ringingSince))
+            .coerceIn(1L, PREVIEW_RING_LIMIT_MS) else null
 
     /** Decisions only: the engine applies them without replacing the occurrence or snooze budget. */
     fun recoveryPlan(
@@ -26,21 +34,23 @@ object AlarmRules {
         nextAt: Long,
         ringingSince: Long,
         now: Long,
-        maximumRingMs: Long,
         clockChanged: Boolean = false,
         preview: Boolean = false,
         skipRinging: Boolean = false,
+        oneShot: Boolean = false,
     ): RecoveryPlan {
         if (!enabled) return RecoveryPlan(RecoveryAction.IGNORE)
         if (state == "ringing") {
-            if (now - ringingSince >= maximumRingMs) return RecoveryPlan(RecoveryAction.RESOLVE, event = "timed_out")
+            if (preview && now - ringingSince >= PREVIEW_RING_LIMIT_MS) return RecoveryPlan(RecoveryAction.RESOLVE, event = "timed_out")
             if (skipRinging) return RecoveryPlan(RecoveryAction.IGNORE)
             return RecoveryPlan(RecoveryAction.REARM, now + 2_000L)
         }
         if (state !in setOf("scheduled", "snoozed")) return RecoveryPlan(RecoveryAction.IGNORE)
-        if (state == "scheduled" && clockChanged && !preview) return RecoveryPlan(RecoveryAction.NEXT_OCCURRENCE)
+        if (state == "scheduled" && clockChanged && !preview && !oneShot) return RecoveryPlan(RecoveryAction.NEXT_OCCURRENCE)
         if (nextAt > now) return RecoveryPlan(RecoveryAction.REARM, nextAt)
-        return if (now - nextAt <= maximumRingMs) RecoveryPlan(RecoveryAction.REARM, now + 2_000L)
+        // Snoozing is part of an already started wake-up, not a missed schedule.
+        if (state == "snoozed" && !preview) return RecoveryPlan(RecoveryAction.REARM, now + 2_000L)
+        return if (now - nextAt <= MISSED_ALARM_GRACE_MS) RecoveryPlan(RecoveryAction.REARM, now + 2_000L)
             else RecoveryPlan(RecoveryAction.RESOLVE, event = "missed")
     }
 
@@ -79,6 +89,11 @@ object AlarmRules {
     fun nextSnooze(now: Long, used: Int, minutes: Int, limit: Int): Snooze? {
         if (used < 0 || minutes !in 1..30 || limit !in 0..10 || used >= limit) return null
         return Snooze(used + 1, now + minutes * 60_000L)
+    }
+
+    fun nextBudgetSnooze(now: Long, used: Int, spentMinutes: Int, minutes: Int, budget: Int): Snooze? {
+        if (used < 0 || spentMinutes < 0 || budget !in 0..300 || minutes !in 1..30 || minutes > budget - spentMinutes) return null
+        return Snooze(used + 1, now + minutes * 60_000L, spentMinutes + minutes)
     }
 
     /** Calendar days, not 24-hour additions, preserve selected wall time across DST. */

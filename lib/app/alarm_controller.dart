@@ -26,6 +26,7 @@ class AlarmController extends ChangeNotifier {
   AlarmDeviceStatus device = const AlarmDeviceStatus();
   RingingAlarm? ringing;
   bool loading = true;
+  bool nativeStateKnown = false;
   bool busy = false;
   bool storageHealthy = true;
   String? error;
@@ -66,6 +67,10 @@ class AlarmController extends ChangeNotifier {
   void setForeground(bool foreground) {
     _timer?.cancel();
     _timer = null;
+    if (!foreground) {
+      nativeStateKnown = false;
+      _notify();
+    }
     if (foreground && !_disposed) {
       unawaited(refreshStatus());
       _timer = Timer.periodic(const Duration(seconds: 1), (_) => poll());
@@ -138,6 +143,7 @@ class AlarmController extends ChangeNotifier {
     Alarm alarm, {
     bool allowPreviewDraft = true,
   }) => _mutate(() async {
+    if (alarm.enabled) alarm = alarm.copyWith(armedAt: now);
     Alarm saved;
     if (!device.supported) {
       if (!allowPreviewDraft) {
@@ -160,6 +166,19 @@ class AlarmController extends ChangeNotifier {
       _alarms.add(saved);
     } else {
       _alarms[index] = saved;
+    }
+    if (saved.enabled && !saved.id.startsWith('preview:')) {
+      final id = newAlarmId();
+      _events.add(
+        AlarmEvent(
+          eventId: id,
+          alarmId: saved.id,
+          occurrenceId: 'setup:$id',
+          type: 'armed',
+          at: now,
+          nextAt: saved.nextAt,
+        ),
+      );
     }
     await _persist();
     return AlarmResult(ok: true, alarm: saved, nextAt: saved.nextAt);
@@ -197,19 +216,20 @@ class AlarmController extends ChangeNotifier {
           error: 'Этот подъём уже завершён. Проверьте текущий будильник.',
         );
       }
-      if (active.snoozesRemaining <= 0) {
+      if (active.minutesRemaining <= 0) {
+        return const AlarmResult(ok: false, error: 'Запас минут закончился.');
+      }
+      if (minutes != null &&
+          (minutes < 1 || minutes > active.minutesRemaining || minutes > 30)) {
         return const AlarmResult(
           ok: false,
-          error: 'На этот подъём переносов больше нет.',
+          error: 'Выбери перенос в пределах оставшегося запаса минут.',
         );
       }
-      if (minutes != null && (minutes < 1 || minutes > 30)) {
-        return const AlarmResult(
-          ok: false,
-          error: 'Выбери перенос от 1 до 30 минут.',
-        );
-      }
-      final result = await gateway.snooze(active.alarm.id, minutes: minutes);
+      final result = await gateway.snooze(
+        active.alarm.id,
+        minutes: minutes ?? active.defaultSnoozeMinutes,
+      );
       if (result.ok) {
         ringing = null;
         await _refreshNative();
@@ -286,6 +306,7 @@ class AlarmController extends ChangeNotifier {
       );
     }
     ringing = await gateway.getRingingAlarm();
+    nativeStateKnown = true;
     if (ringing != null) {
       return const AlarmResult(
         ok: false,
@@ -367,6 +388,7 @@ class AlarmController extends ChangeNotifier {
       );
       deviceCheck = confirmed;
       ringing = await gateway.getRingingAlarm();
+      nativeStateKnown = true;
       return const AlarmResult(ok: true);
     });
   }
@@ -388,6 +410,7 @@ class AlarmController extends ChangeNotifier {
       // Silence/cancellation succeeds even when saving the UI record does not.
       deviceCheck = null;
       ringing = await gateway.getRingingAlarm();
+      nativeStateKnown = true;
       if (!storageHealthy) {
         return const AlarmResult(
           ok: false,
@@ -480,6 +503,7 @@ class AlarmController extends ChangeNotifier {
     // Alarm controls must remain usable even if local history cannot be read or
     // written. Native scheduling/audio are independent of this UI storage.
     ringing = await gateway.getRingingAlarm();
+    nativeStateKnown = true;
     if (!storageHealthy) return;
     // Native keeps pending entries until local storage succeeds. Replays after
     // process death or a failed acknowledgement are deduplicated by event ID.

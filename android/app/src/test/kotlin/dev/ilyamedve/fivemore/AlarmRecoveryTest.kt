@@ -16,7 +16,8 @@ class AlarmRecoveryTest {
         clockChanged: Boolean = false,
         preview: Boolean = false,
         skipRinging: Boolean = false,
-    ) = AlarmRules.recoveryPlan(enabled, state, nextAt, ringingSince, now, maximumRing, clockChanged, preview, skipRinging)
+        oneShot: Boolean = false,
+    ) = AlarmRules.recoveryPlan(enabled, state, nextAt, ringingSince, now, clockChanged, preview, skipRinging, oneShot)
 
     @Test fun futureScheduledAndSnoozedRingsKeepTheirOriginalDueTime() {
         for (state in listOf("scheduled", "snoozed")) {
@@ -38,24 +39,27 @@ class AlarmRecoveryTest {
         }
     }
 
-    @Test fun oldScheduledOrSnoozedRingsResolveAsMissed() {
+    @Test fun oldUnstartedSchedulesAndPreviewSnoozesResolveAsMissed() {
         for (state in listOf("scheduled", "snoozed")) {
-            val recovered = plan(state, nextAt = now - maximumRing - 1L)
+            val recovered = plan(state, nextAt = now - maximumRing - 1L, preview = state == "snoozed")
             assertEquals(AlarmRules.RecoveryAction.RESOLVE, recovered.action)
             assertEquals("missed", recovered.event)
         }
     }
 
-    @Test fun interruptedRingingIsRearmedWithinItsOriginalSafetyWindow() {
-        val recovered = plan("ringing", ringingSince = now - maximumRing + 1L)
-        assertEquals(AlarmRules.RecoveryAction.REARM, recovered.action)
-        assertEquals(now + 2_000L, recovered.nextAt)
+    @Test fun interruptedRealRingingNeverExpiresAcrossReboot() {
+        for (elapsed in listOf(maximumRing - 1L, maximumRing, 24 * 60 * 60_000L)) {
+            val recovered = plan("ringing", ringingSince = now - elapsed)
+            assertEquals(AlarmRules.RecoveryAction.REARM, recovered.action)
+            assertEquals(now + 2_000L, recovered.nextAt)
+            assertNull(recovered.event)
+        }
         val started = now - 80_000L
         assertEquals(started, AlarmRules.ringingSinceAfterFire("ringing", started, now))
     }
 
-    @Test fun ringingAtItsSafetyDeadlineTimesOutInsteadOfRestarting() {
-        val recovered = plan("ringing", ringingSince = now - maximumRing)
+    @Test fun previewAtItsSafetyDeadlineTimesOutInsteadOfRestarting() {
+        val recovered = plan("ringing", ringingSince = now - maximumRing, preview = true)
         assertEquals(AlarmRules.RecoveryAction.RESOLVE, recovered.action)
         assertEquals("timed_out", recovered.event)
     }
@@ -65,8 +69,8 @@ class AlarmRecoveryTest {
         assertEquals(AlarmRules.RecoveryAction.REARM, plan("snoozed", skipRinging = true).action)
     }
 
-    @Test fun foregroundRestoreStillResolvesAnExpiredSavedRing() {
-        val recovered = plan("ringing", ringingSince = now - maximumRing, skipRinging = true)
+    @Test fun foregroundRestoreStillResolvesAnExpiredPreview() {
+        val recovered = plan("ringing", ringingSince = now - maximumRing, skipRinging = true, preview = true)
         assertEquals(AlarmRules.RecoveryAction.RESOLVE, recovered.action)
         assertEquals("timed_out", recovered.event)
     }
@@ -76,9 +80,30 @@ class AlarmRecoveryTest {
         val preview = plan(clockChanged = true, preview = true)
         assertEquals(AlarmRules.RecoveryAction.REARM, preview.action)
         assertEquals(now + 60_000L, preview.nextAt)
+        val nap = plan(clockChanged = true, oneShot = true)
+        assertEquals(AlarmRules.RecoveryAction.REARM, nap.action)
+        assertEquals(now + 60_000L, nap.nextAt)
         val snoozed = plan("snoozed", clockChanged = true)
         assertEquals(AlarmRules.RecoveryAction.REARM, snoozed.action)
         assertEquals(now + 60_000L, snoozed.nextAt)
+    }
+
+    @Test fun lateRealSnoozeContinuesTheExistingWakeUp() {
+        val recovered = plan("snoozed", nextAt = now - 24 * 60 * 60_000L)
+        assertEquals(AlarmRules.RecoveryAction.REARM, recovered.action)
+        assertEquals(now + 2_000L, recovered.nextAt)
+        assertNull(recovered.event)
+    }
+
+    @Test fun realAndNapPlaybackHaveNoAutomaticStop() {
+        for (id in listOf("morning", "nap")) {
+            assertNull(AlarmRules.automaticStopDelay(id, now - maximumRing, now))
+        }
+        assertEquals(1L, AlarmRules.automaticStopDelay("preview:test", now - maximumRing, now))
+        assertEquals(maximumRing - 60_000L, AlarmRules.automaticStopDelay("preview:test", now - 60_000L, now))
+        assertEquals(maximumRing, AlarmRules.automaticStopDelay("preview:test", now + maximumRing, now))
+        assertEquals(AlarmRules.RecoveryAction.IGNORE,
+            plan("ringing", ringingSince = now - 24 * 60 * 60_000L, skipRinging = true).action)
     }
 
     @Test fun disabledAndResolvedAlarmsCannotBeResurrectedByBoot() {

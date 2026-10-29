@@ -30,6 +30,14 @@ class ExtrasBridge(private val activity: MainActivity, private val channel: Meth
     private var recorder: MediaRecorder? = null
     private var recordingFile: File? = null
     private var startedAt = 0L
+    private var recordingLimitMs = 300_000L
+    private var completedRecording: Map<String, Any>? = null
+    private val recordingHandler = Handler(Looper.getMainLooper())
+    private val stopAtLimit = Runnable { try { completedRecording = stopRecording() } catch (_: Exception) {} }
+    private fun scheduleRecordingLimit() {
+        recordingHandler.removeCallbacks(stopAtLimit)
+        recordingHandler.postDelayed(stopAtLimit, (recordingLimitMs - (SystemClock.elapsedRealtime() - startedAt)).coerceAtLeast(1L))
+    }
     private var player: MediaPlayer? = null
     private var pendingPermission: MethodChannel.Result? = null
     private var pendingFile: MethodChannel.Result? = null
@@ -78,8 +86,29 @@ class ExtrasBridge(private val activity: MainActivity, private val channel: Meth
                         } else { startRecording(); result.success(null) }
                     }
                     "stopRecording" -> result.success(stopRecording())
+                    "extendRecording" -> {
+                        check(recorder != null) { "Запись уже завершена" }
+                        recordingLimitMs += 300_000L; scheduleRecordingLimit(); result.success(null)
+                    }
+                    "timeZone" -> result.success(java.util.TimeZone.getDefault().id)
+                    "readNote" -> {
+                        val file = localNote(args["file"])
+                        check(file.length() <= 20_000_000L) { "Запись слишком большая для загрузки" }
+                        result.success(file.readBytes())
+                    }
+                    "writeNote" -> {
+                        val data = args["bytes"] as? ByteArray ?: error("Нет записи")
+                        require(data.size <= 20_000_000) { "Запись слишком большая" }
+                        val file = localNote(args["file"])
+                        if (!file.exists()) {
+                            val temporary = File(file.parentFile, "${file.name}.part")
+                            try { temporary.writeBytes(data); check(temporary.renameTo(file)) { "Не удалось сохранить запись" } }
+                            finally { temporary.delete() }
+                        }
+                        result.success(null)
+                    }
                     "playNote" -> { play(Uri.fromFile(localNote(args["file"]))); result.success(null) }
-                    "deleteNote" -> { stopPlayer(); check(localNote(args["file"]).delete()) { "Не удалось удалить запись" }; result.success(null) }
+                    "deleteNote" -> { stopPlayer(); val file = localNote(args["file"]); check(!file.exists() || file.delete()) { "Не удалось удалить запись" }; result.success(null) }
                     "stopAudio" -> { stopPlayer(); result.success(null) }
                     "previewSound" -> {
                         val sound = args["sound"] as? String ?: "system"
@@ -117,10 +146,12 @@ class ExtrasBridge(private val activity: MainActivity, private val channel: Meth
             candidate.setOutputFile(file.absolutePath)
             candidate.prepare(); candidate.start()
             recorder = candidate; recordingFile = file; startedAt = SystemClock.elapsedRealtime()
+            completedRecording = null; recordingLimitMs = 300_000L; scheduleRecordingLimit()
         } catch (e: Exception) { candidate.release(); file.delete(); throw e }
     }
     private fun stopRecording(): Map<String, Any>? {
-        val active = recorder ?: return null
+        val active = recorder ?: return completedRecording.also { completedRecording = null }
+        recordingHandler.removeCallbacks(stopAtLimit)
         recorder = null
         val file = recordingFile ?: error("Запись не найдена")
         try { active.stop() } catch (e: Exception) { file.delete(); throw IllegalStateException("Запись слишком короткая. Попробуй ещё раз.", e) }
@@ -177,6 +208,7 @@ class ExtrasBridge(private val activity: MainActivity, private val channel: Meth
         return true
     }
     fun dispose() {
+        recordingHandler.removeCallbacksAndMessages(null)
         recorder?.let { try { it.stop() } catch (_: Exception) {} ; it.release() }; recorder = null
         stopPlayer()
         pendingPermission?.error("closed", "Окно записи закрыто", null); pendingPermission = null

@@ -7,12 +7,19 @@ class SleepEntry {
     required this.bedAt,
     required this.sleepQuality,
     required this.wakeQuality,
+    this.occurrences = const [],
+    this.bedSource = 'manual',
+    this.wakeSource = 'alarm',
+    this.separate = false,
   });
   final String occurrenceId;
   final DateTime wokeAt;
   final DateTime bedAt;
   final int sleepQuality;
   final int wakeQuality;
+  final List<String> occurrences;
+  final String bedSource, wakeSource;
+  final bool separate;
   double get hours => wokeAt.difference(bedAt).inMinutes / 60;
   Map<String, Object?> toJson() => {
     'occurrenceId': occurrenceId,
@@ -20,6 +27,10 @@ class SleepEntry {
     'bedAt': bedAt.millisecondsSinceEpoch,
     'sleepQuality': sleepQuality,
     'wakeQuality': wakeQuality,
+    'occurrences': occurrences,
+    'bedSource': bedSource,
+    'wakeSource': wakeSource,
+    'separate': separate,
   };
   factory SleepEntry.fromJson(Map<String, dynamic> json) => SleepEntry(
     occurrenceId: json['occurrenceId'] as String,
@@ -27,6 +38,12 @@ class SleepEntry {
     bedAt: parseTimestamp(json['bedAt'])!,
     sleepQuality: intValue(json['sleepQuality'], 3).clamp(1, 5),
     wakeQuality: intValue(json['wakeQuality'], 3).clamp(1, 5),
+    occurrences: (json['occurrences'] as List? ?? [])
+        .whereType<String>()
+        .toList(),
+    bedSource: json['bedSource'] as String? ?? 'manual',
+    wakeSource: json['wakeSource'] as String? ?? 'alarm',
+    separate: json['separate'] == true,
   );
 }
 

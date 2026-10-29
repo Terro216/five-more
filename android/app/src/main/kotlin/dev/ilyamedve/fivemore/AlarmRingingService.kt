@@ -28,6 +28,15 @@ class AlarmRingingService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var currentOccurrence: String? = null
     private var currentId: String? = null
+    private val renewWakeLock = object : Runnable {
+        override fun run() {
+            if (currentOccurrence == null) return
+            // Bounded acquisitions renew while this foreground alarm owns playback.
+            // Process death releases the lock; onDestroy removes this callback.
+            wakeLock?.acquire(10 * 60_000L)
+            handler.postDelayed(this, 5 * 60_000L)
+        }
+    }
     private val vibration: Vibrator by lazy {
         if (Build.VERSION.SDK_INT >= 31) getSystemService(VibratorManager::class.java).defaultVibrator
         else @Suppress("DEPRECATION") (getSystemService(VIBRATOR_SERVICE) as Vibrator)
@@ -45,7 +54,9 @@ class AlarmRingingService : Service() {
             enableVibration(false)
         }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "five_more:ringing")
+        wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "five_more:ringing").apply {
+            setReferenceCounted(false)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -62,16 +73,15 @@ class AlarmRingingService : Service() {
             currentId = alarm.getString("id")
             handler.removeCallbacksAndMessages(null)
             stopSound()
-            wakeLock?.let {
-                if (it.isHeld) it.release()
-                it.acquire(AlarmEngine.MAX_RING_MS + 60_000L)
-            }
+            wakeLock?.let { if (it.isHeld) it.release() }
+            renewWakeLock.run()
             startSound(alarm)
-            val remaining = (AlarmEngine.MAX_RING_MS - (System.currentTimeMillis() - alarm.optLong("ringingSince"))).coerceAtLeast(1L)
-            handler.postDelayed({
-                val id = currentId ?: return@postDelayed
-                AlarmEngine(this).dismiss(id, timedOut = true)
-            }, remaining)
+            AlarmRules.automaticStopDelay(alarm.getString("id"), alarm.optLong("ringingSince"), System.currentTimeMillis())?.let { remaining ->
+                handler.postDelayed({
+                    val id = currentId ?: return@postDelayed
+                    AlarmEngine(this).dismiss(id, timedOut = true)
+                }, remaining)
+            }
         }
         return START_STICKY
     }
@@ -95,14 +105,15 @@ class AlarmRingingService : Service() {
             .setContentIntent(open)
             .setFullScreenIntent(open, true)
             .addAction(Notification.Action.Builder(null, "Проснуться", open).build())
-        if (!alarm.optBoolean("moveSnoozeButton") && alarm.optInt("snoozesUsed") < alarm.optInt("maxSnoozes", 3)) {
+        if (!alarm.optBoolean("moveSnoozeButton") && alarm.optInt("snoozedMinutes", alarm.optInt("snoozesUsed") * alarm.optInt("snoozeMinutes", 5)) < alarm.optInt("snoozeBudgetMinutes", alarm.optInt("maxSnoozes", 3) * alarm.optInt("snoozeMinutes", 5))) {
             val snooze = PendingIntent.getBroadcast(this, 0,
                 Intent(this, AlarmReceiver::class.java).setAction(AlarmEngine.ACTION_SNOOZE)
                     .setData(Uri.parse("fivemore://snooze/${Uri.encode(id)}"))
                     .putExtra("alarmId", id)
                     .putExtra("occurrenceId", alarm.optString("occurrenceId")),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            builder.addAction(Notification.Action.Builder(null, "Ещё ${alarm.optInt("snoozeMinutes", 5)} мин", snooze).build())
+            val remaining = alarm.optInt("snoozeBudgetMinutes", alarm.optInt("maxSnoozes", 3) * alarm.optInt("snoozeMinutes", 5)) - alarm.optInt("snoozedMinutes", alarm.optInt("snoozesUsed") * alarm.optInt("snoozeMinutes", 5))
+            builder.addAction(Notification.Action.Builder(null, "Ещё ${minOf(alarm.optInt("snoozeMinutes", 5), remaining)} мин", snooze).build())
         }
         return builder.build()
     }
@@ -123,7 +134,8 @@ class AlarmRingingService : Service() {
                 candidate.setAudioAttributes(attributes)
                 candidate.setDataSource(this, uri)
                 candidate.isLooping = true
-                candidate.setVolume(0.08f, 0.08f)
+                val initialVolume = if (alarm.optInt("volumeRampSeconds", 10) == 0) 1f else 0.08f
+                candidate.setVolume(initialVolume, initialVolume)
                 candidate.prepare()
                 candidate.start()
                 player = candidate
@@ -132,11 +144,12 @@ class AlarmRingingService : Service() {
                 candidate.release()
             }
         }
-        // Ten-second gentle ramp; never modify the user's global alarm volume setting.
+        // Per-player ramp; never modify the system alarm volume.
+        val rampMs = alarm.optInt("volumeRampSeconds", 10).coerceIn(0, 60) * 1000L
         for (step in 1..20) handler.postDelayed({
             val volume = (0.08f + 0.92f * step / 20f).coerceAtMost(1f)
             player?.setVolume(volume, volume)
-        }, step * 500L)
+        }, step * rampMs / 20L)
         handler.postDelayed({
             vibration.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 650, 500, 1500), 0), attributes)
         }, 5_000L)
@@ -152,6 +165,8 @@ class AlarmRingingService : Service() {
     }
 
     override fun onDestroy() {
+        currentOccurrence = null
+        currentId = null
         handler.removeCallbacksAndMessages(null)
         stopSound()
         wakeLock?.let { if (it.isHeld) it.release() }

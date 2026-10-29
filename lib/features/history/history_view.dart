@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -6,9 +7,11 @@ import '../../app/theme.dart';
 import '../../models/alarm.dart';
 import '../../models/sleep_entry.dart';
 import '../../services/sleep_journal.dart';
+import '../../services/local_database.dart';
+import '../../services/sync_service.dart';
 
 class MorningStats {
-  MorningStats(List<AlarmEvent> source) {
+  MorningStats(List<AlarmEvent> source, {DateTime? from, DateTime? until}) {
     final groups = <String, List<AlarmEvent>>{};
     for (final e in source) {
       if (e.alarmId.startsWith('preview:') || e.occurrenceId.isEmpty) continue;
@@ -30,7 +33,9 @@ class MorningStats {
             ].contains(e.type),
           )
           .lastOrNull;
-      if (end != null) {
+      if (end != null &&
+          (from == null || !end.at.isBefore(from)) &&
+          (until == null || end.at.isBefore(until))) {
         final category = end.type == 'dismissed'
             ? 0
             : const ['emergency', 'emergency_dismissed'].contains(end.type)
@@ -57,101 +62,358 @@ class HistoryView extends StatefulWidget {
     required this.events,
     required this.journal,
     required this.now,
+    this.archive = false,
   });
   final List<AlarmEvent> events;
   final SleepJournal journal;
   final DateTime now;
+  final bool archive;
   @override
   State<HistoryView> createState() => _HistoryViewState();
 }
 
 class _HistoryViewState extends State<HistoryView> {
-  int _days = 30, _limit = 50;
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.journal,
-    builder: (context, _) {
-      final cutoff = _days == 0
-          ? DateTime(1970)
+  int _days = 30, _limit = 50, _requestId = 0;
+  DateTimeRange? _range;
+  List<AlarmEvent>? _local;
+  final List<AlarmEvent> _remote = [];
+  Map<String, dynamic>? _summary;
+  bool _loading = false, _olderLoading = false, _more = false, _cached = false;
+  int? _beforeAt;
+  String? _beforeId, _error;
+
+  DateTime get _from =>
+      _range?.start ??
+      (_days == 0
+          ? DateTime.fromMillisecondsSinceEpoch(0)
           : DateTime(
               widget.now.year,
               widget.now.month,
               widget.now.day - _days + 1,
-            );
-      final events = widget.events
-          .where(
-            (e) => !e.at.isBefore(cutoff) && !e.alarmId.startsWith('preview:'),
-          )
-          .toList();
-      final stats = MorningStats(events);
+            ));
+  DateTime get _until => _range == null
+      ? DateTime(widget.now.year, widget.now.month, widget.now.day + 1)
+      : DateTime(_range!.end.year, _range!.end.month, _range!.end.day + 1);
+  bool get _cloud =>
+      widget.archive &&
+      SyncService.instance.enabled &&
+      SyncService.instance.signedIn;
+  String get _periodKey =>
+      '${_from.millisecondsSinceEpoch}:${_until.millisecondsSinceEpoch}';
+  @override
+  void initState() {
+    super.initState();
+    if (widget.archive) unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
+    final request = ++_requestId;
+    final from = _from, until = _until, key = _periodKey;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _summary = null;
+      _cached = false;
+      _remote.clear();
+      _more = false;
+      _beforeAt = null;
+      _beforeId = null;
+      _local = null;
+      _limit = 50;
+    });
+    try {
+      if (usesSqlite) {
+        final rows = await LocalDatabase.instance.records(
+          'event',
+          from: from.subtract(const Duration(days: 1)),
+          until: until,
+        );
+        if (!mounted || request != _requestId) return;
+        setState(() => _local = rows.map(AlarmEvent.fromJson).toList());
+      }
+      if (_cloud) {
+        final cache = await LocalDatabase.instance.setting('history_summary');
+        if (!mounted || request != _requestId) return;
+        if (cache?['period'] == key) {
+          setState(() {
+            _summary = Map<String, dynamic>.from(cache!['summary'] as Map);
+            _cached = true;
+          });
+        }
+        final summary = await SyncService.instance.summary(from, until);
+        if (!mounted || request != _requestId) return;
+        setState(() {
+          _summary = summary;
+          _cached = false;
+        });
+        await LocalDatabase.instance.setSetting('history_summary', {
+          'period': key,
+          'summary': summary,
+        });
+        if (!mounted || request != _requestId) return;
+        await _loadPage(request, from, until);
+      }
+    } catch (_) {
+      if (mounted && request == _requestId) {
+        setState(
+          () => _error =
+              'Не удалось обновить историю. Сохранённые данные доступны.',
+        );
+      }
+    } finally {
+      if (mounted && request == _requestId) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadPage(int request, DateTime from, DateTime until) async {
+    final page = await SyncService.instance.history(
+      from,
+      until,
+      beforeAt: _beforeAt,
+      beforeId: _beforeId,
+    );
+    if (!mounted || request != _requestId) return;
+    final records = (page['records'] as List)
+        .map((r) => Map<String, dynamic>.from(r as Map))
+        .toList();
+    // Cache downloaded pages without marking them as new local events.
+    for (final row in records) {
+      await LocalDatabase.instance.receive(row);
+    }
+    if (!mounted || request != _requestId) return;
+    setState(() {
+      _remote.addAll(
+        records.map(
+          (r) =>
+              AlarmEvent.fromJson(Map<String, dynamic>.from(r['data'] as Map)),
+        ),
+      );
+      _more = page['more'] == true;
+      if (records.isNotEmpty) {
+        _beforeAt = records.last['at'] as int;
+        _beforeId = records.last['id'] as String;
+      }
+    });
+  }
+
+  Future<void> _older() async {
+    if (_olderLoading) return;
+    setState(() => _olderLoading = true);
+    final request = _requestId;
+    try {
+      if (_more && _remote.length <= _limit + 50) {
+        await _loadPage(request, _from, _until);
+      }
+      if (mounted && request == _requestId) setState(() => _limit += 50);
+    } catch (_) {
+      if (mounted && request == _requestId) {
+        setState(
+          () =>
+              _error = 'Старые события пока не загрузились. Попробуй ещё раз.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _olderLoading = false);
+    }
+  }
+
+  void _select(int days) {
+    setState(() {
+      _days = days;
+      _range = null;
+      _limit = 50;
+    });
+    if (widget.archive) unawaited(_refresh());
+  }
+
+  List<({String label, double value})> _daily(
+    List<dynamic> rows,
+    String field,
+  ) => rows.map((raw) {
+    final row = raw as Map;
+    final day = DateTime.parse(row['day'] as String);
+    return (
+      label: '${day.day}.${day.month}',
+      value: (row[field] as num).toDouble(),
+    );
+  }).toList();
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: widget.journal,
+    builder: (context, _) {
+      final cutoff = _from, until = _until;
+      final all = <String, AlarmEvent>{
+        for (final e in [...?_local, ...widget.events, ..._remote])
+          e.eventId: e,
+      }.values.where((e) => !e.alarmId.startsWith('preview:')).toList();
+      final events =
+          all
+              .where((e) => !e.at.isBefore(cutoff) && e.at.isBefore(until))
+              .toList()
+            ..sort((a, b) => b.at.compareTo(a.at));
+      final stats = MorningStats(all, from: cutoff, until: until);
       final sleep =
           widget.journal.entries
-              .where((e) => !e.wokeAt.isBefore(cutoff))
+              .where(
+                (e) => !e.wokeAt.isBefore(cutoff) && e.wokeAt.isBefore(until),
+              )
               .toList()
             ..sort((a, b) => a.wokeAt.compareTo(b.wokeAt));
-      final insight = SleepInsight.fromEntries(widget.journal.entries);
-      final snoozes = events.where((e) => e.type == 'snoozed').length;
-      final buckets = <DateTime, double>{};
-      final start = _days == 0 && events.isNotEmpty
-          ? events.map((e) => e.at).reduce((a, b) => a.isBefore(b) ? a : b)
+      final insight = SleepInsight.fromEntries(sleep);
+      final summary = _summary;
+      final snoozes =
+          summary?['snoozes'] as int? ??
+          events.where((e) => e.type == 'snoozed').length;
+      final outcomes = summary == null
+          ? stats.outcomes
+          : (summary['outcomes'] as List).cast<int>();
+      final snoozeDays = <DateTime, double>{};
+      if (summary == null) {
+        for (final event in events.where((e) => e.type == 'snoozed')) {
+          final day = DateTime(event.at.year, event.at.month, event.at.day);
+          snoozeDays[day] = (snoozeDays[day] ?? 0) + 1;
+        }
+      } else {
+        for (final raw in summary['snoozeDays'] as List) {
+          snoozeDays[DateTime.parse(raw['day'] as String)] =
+              (raw['value'] as num).toDouble();
+        }
+      }
+      final first = _days == 0 && _range == null
+          ? (snoozeDays.keys.toList()..sort()).firstOrNull ??
+                until.subtract(const Duration(days: 1))
           : cutoff;
-      final span = max(
-        1,
-        DateTime(
-              widget.now.year,
-              widget.now.month,
-              widget.now.day,
-            ).difference(DateTime(start.year, start.month, start.day)).inDays +
-            1,
-      );
+      final span = max(1, until.difference(first).inDays);
       final bucketDays = max(1, (span / 14).ceil());
-      for (var i = 0; i < span; i += bucketDays) {
-        buckets[DateTime(start.year, start.month, start.day + i)] = 0;
-      }
-      for (final event in events.where((e) => e.type == 'snoozed')) {
-        final index =
-            DateTime(
-              event.at.year,
-              event.at.month,
-              event.at.day,
-            ).difference(DateTime(start.year, start.month, start.day)).inDays ~/
-            bucketDays;
-        final key = DateTime(
-          start.year,
-          start.month,
-          start.day + index * bucketDays,
+      final buckets = <DateTime, double>{
+        for (var i = 0; i < span; i += bucketDays)
+          DateTime(first.year, first.month, first.day + i): 0,
+      };
+      for (final row in snoozeDays.entries) {
+        final index = row.key.difference(first).inDays ~/ bucketDays;
+        final day = DateTime(
+          first.year,
+          first.month,
+          first.day + index * bucketDays,
         );
-        if (buckets.containsKey(key)) buckets[key] = buckets[key]! + 1;
+        if (buckets.containsKey(day)) buckets[day] = buckets[day]! + row.value;
       }
+      final wakePoints = summary == null
+          ? stats.wakeMinutes
+                .map(
+                  (p) => (label: '${p.at.day}.${p.at.month}', value: p.value),
+                )
+                .toList()
+          : _daily(summary['wakeDays'] as List, 'value');
+      final sleepPoints = summary == null
+          ? sleep
+                .map(
+                  (e) => (
+                    label: '${e.wokeAt.day}.${e.wokeAt.month}',
+                    value: e.hours,
+                  ),
+                )
+                .toList()
+          : _daily(summary['sleepDays'] as List, 'hours');
+      final ratingPoints = summary == null
+          ? sleep
+                .map(
+                  (e) => (
+                    label: '${e.wokeAt.day}.${e.wokeAt.month}',
+                    value: (e.sleepQuality + e.wakeQuality) / 2,
+                  ),
+                )
+                .toList()
+          : _daily(
+              (summary['sleepDays'] as List)
+                  .map(
+                    (r) => {
+                      ...r as Map,
+                      'rating':
+                          ((r['sleepQuality'] as num) +
+                              (r['wakeQuality'] as num)) /
+                          2,
+                    },
+                  )
+                  .toList(),
+              'rating',
+            );
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
         children: [
-          const Text(
-            'Как прошло утро',
-            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Как прошло утро',
+                  style: TextStyle(fontSize: 30, fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (widget.archive)
+                IconButton(
+                  onPressed: _loading ? null : _refresh,
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Обновить историю',
+                ),
+            ],
           ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: [7, 30, 90, 0]
-                .map(
-                  (days) => ChoiceChip(
-                    label: Text(days == 0 ? 'Всё время' : '$days дней'),
-                    selected: _days == days,
-                    onSelected: (_) => setState(() {
-                      _days = days;
+            children: [
+              ...[7, 30, 90, 0].map(
+                (days) => ChoiceChip(
+                  label: Text(days == 0 ? 'Всё время' : '$days дней'),
+                  selected: _range == null && _days == days,
+                  onSelected: (_) => _select(days),
+                ),
+              ),
+              ActionChip(
+                label: Text(
+                  _range == null
+                      ? 'Период…'
+                      : '${_range!.start.day}.${_range!.start.month}.${_range!.start.year} — ${_range!.end.day}.${_range!.end.month}.${_range!.end.year}',
+                ),
+                onPressed: () async {
+                  final range = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2020),
+                    lastDate: widget.now,
+                    initialDateRange: _range,
+                  );
+                  if (range != null && mounted) {
+                    setState(() {
+                      _range = range;
                       _limit = 50;
-                    }),
-                  ),
-                )
-                .toList(),
+                    });
+                    if (widget.archive) unawaited(_refresh());
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_loading) const LinearProgressIndicator(),
+          if (_error != null)
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          Text(
+            summary == null
+                ? 'История, сохранённая на этом телефоне'
+                : _cached
+                ? 'Сохранённый расчёт с сервера · обновление недоступно'
+                : 'Графики по всем синхронизированным данным периода',
+            style: const TextStyle(color: muted, fontSize: 12),
           ),
           const SizedBox(height: 24),
-          if (events.isEmpty)
+          if (events.isEmpty && outcomes.every((n) => n == 0) && snoozes == 0)
             const Text(
-              'Первое утро ещё впереди. Здесь появятся графики переносов и подъёмов. Тренировки в статистику не входят.',
-              style: TextStyle(color: muted, height: 1.5),
+              'Пока нет утренних событий.',
+              style: TextStyle(color: muted),
             )
           else ...[
             _heading('Переносы', '$snoozes за выбранный период'),
@@ -173,76 +435,53 @@ class _HistoryViewState extends State<HistoryView> {
               ),
             const SizedBox(height: 24),
             _heading('Чем закончился звонок', 'По отдельным подъёмам'),
-            _outcomes(stats.outcomes),
+            _outcomes(outcomes),
             const SizedBox(height: 24),
             _heading(
               'От звонка до отключения',
-              'Минуты · только завершённые задания',
+              summary == null
+                  ? 'Минуты · только завершённые задания'
+                  : 'Среднее за день · только завершённые задания',
             ),
-            if (stats.wakeMinutes.isEmpty)
+            if (wakePoints.isEmpty)
               const Text(
                 'Пока нет пары «звонок — задание пройдено».',
                 style: TextStyle(color: muted),
               )
             else
               DataPlot(
-                points: stats.wakeMinutes
-                    .map(
-                      (p) =>
-                          (label: '${p.at.day}.${p.at.month}', value: p.value),
-                    )
-                    .toList(),
+                points: wakePoints,
                 unit: 'мин',
                 color: const Color(0xFF8EDDAB),
               ),
           ],
           const SizedBox(height: 28),
-          _heading('Сон и самочувствие', 'Твои утренние оценки'),
-          if (sleep.isEmpty)
-            const Text(
-              'После подъёма оцени сон и пробуждение на главной. Здесь появятся продолжительность и оценки.',
-              style: TextStyle(color: muted, height: 1.5),
-            )
+          _heading('Сон и самочувствие', 'Расчётное время сна и твои оценки'),
+          if (sleepPoints.isEmpty)
+            const Text('Пока нет оценок сна.', style: TextStyle(color: muted))
           else ...[
             DataPlot(
-              points: sleep
-                  .map(
-                    (e) => (
-                      label: '${e.wokeAt.day}.${e.wokeAt.month}',
-                      value: e.hours,
-                    ),
-                  )
-                  .toList(),
-              unit: 'ч в постели',
+              points: sleepPoints,
+              unit: 'ч · расчётный сон',
               color: const Color(0xFF7FBFFF),
             ),
             const SizedBox(height: 16),
             DataPlot(
-              points: sleep
-                  .map(
-                    (e) => (
-                      label: '${e.wokeAt.day}.${e.wokeAt.month}',
-                      value: (e.sleepQuality + e.wakeQuality) / 2,
-                    ),
-                  )
-                  .toList(),
+              points: ratingPoints,
               unit: 'средняя оценка из 5',
               color: morning,
               ceiling: 5,
             ),
           ],
-          const SizedBox(height: 12),
-          Text(
-            insight == null
-                ? 'Для личного ориентира нужны хотя бы 7 оценок и два диапазона длительности с 3 ночами в каждом.'
-                : 'Пока лучшие оценки — после примерно ${insight.hours.toStringAsFixed(1)} ч в постели: ${insight.rating.toStringAsFixed(1)} из 5, Наблюдений: ${insight.samples}. Это наблюдение по твоим ответам, а не рассчитанная норма сна.',
-            style: const TextStyle(color: muted, height: 1.5),
-          ),
+          if (insight != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Лучшие оценки за период — после примерно ${insight.hours.toStringAsFixed(1)} ч: ${insight.rating.toStringAsFixed(1)} из 5, наблюдений: ${insight.samples}. Это наблюдение по твоим ответам.',
+              style: const TextStyle(color: muted, height: 1.5),
+            ),
+          ],
           const SizedBox(height: 28),
-          _heading(
-            'События',
-            '${events.length} за период · всего ${widget.events.length}',
-          ),
+          _heading('События', '${events.length} загружено за период'),
           ...events
               .take(_limit)
               .map(
@@ -265,15 +504,15 @@ class _HistoryViewState extends State<HistoryView> {
                   ),
                 ),
               ),
-          if (events.length > _limit)
+          if (events.length > _limit || _more)
             TextButton(
-              onPressed: () => setState(() => _limit += 50),
-              child: const Text('Показать ещё 50'),
+              onPressed: _olderLoading ? null : _older,
+              child: Text(_olderLoading ? 'Загружаю…' : 'Показать ещё 50'),
             ),
           const SizedBox(height: 16),
           const Text(
-            'Вся история остаётся на этом устройстве. Тренировки в неё не попадают.',
-            style: TextStyle(color: muted, fontSize: 12, height: 1.5),
+            'Тренировки в историю не попадают.',
+            style: TextStyle(color: muted, fontSize: 12),
           ),
         ],
       );

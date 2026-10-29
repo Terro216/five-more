@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +11,7 @@ import '../../app/theme.dart';
 import '../../models/alarm.dart';
 import '../../models/wake_preset.dart';
 import '../challenges/challenge_models.dart';
+import '../challenges/phrase_settings.dart';
 import '../challenges/challenge_screen.dart';
 import '../challenges/physical_tasks.dart';
 import '../../services/native_extras.dart';
@@ -22,7 +26,13 @@ class AlarmEditor extends StatefulWidget {
   State<AlarmEditor> createState() => _AlarmEditorState();
 }
 
-class _AlarmEditorState extends State<AlarmEditor> {
+class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
+  bool _allowPop = false;
+  late String _initial;
+  String get _draftKey => 'five_more.editor.${widget.alarm?.id ?? "new"}';
+  bool get _dirty =>
+      jsonEncode(_draft.toJson()) != _initial ||
+      _title.text != (widget.alarm?.title ?? '');
   late Alarm _draft;
   late final TextEditingController _title;
   bool _saving = false;
@@ -40,13 +50,74 @@ class _AlarmEditorState extends State<AlarmEditor> {
     super.initState();
     _draft = widget.alarm ?? Alarm.fresh();
     _title = TextEditingController(text: _draft.title);
+    _initial = jsonEncode(_draft.toJson());
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_restoreDraft());
     _clock = Timer.periodic(const Duration(seconds: 20), (_) {
       if (mounted) setState(() {});
     });
   }
 
+  Future<void> _restoreDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftKey);
+      if (raw == null || !mounted || _dirty) return;
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      // A draft cannot overwrite edits made since it was saved.
+      if (widget.alarm != null && data['base'] != _initial) return;
+      final restored = Alarm.fromJson(
+        Map<String, dynamic>.from(data['alarm'] as Map),
+      );
+      if (widget.alarm == null &&
+          widget.controller.alarms.any((a) => a.id == restored.id)) {
+        return;
+      }
+      setState(() {
+        _draft = restored;
+        _title.text = _draft.title;
+        _nap = data['nap'] == true;
+        _napMinutes = data['napMinutes'] as int? ?? 20;
+      });
+    } catch (_) {
+      /* Leave the saved draft untouched. */
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused && _dirty) {
+      unawaited(
+        SharedPreferences.getInstance()
+            .then(
+              (prefs) => prefs.setString(
+                _draftKey,
+                jsonEncode({
+                  'base': _initial,
+                  'alarm': _draft.copyWith(title: _title.text).toJson(),
+                  'nap': _nap,
+                  'napMinutes': _napMinutes,
+                }),
+              ),
+            )
+            .catchError((Object _) => false),
+      );
+    }
+  }
+
+  Future<void> _leave() async {
+    if (_saving) return;
+    if (_dirty || _nap) {
+      await _save();
+    } else {
+      setState(() => _allowPop = true);
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _title.dispose();
     _advanced.dispose();
     _clock?.cancel();
@@ -57,6 +128,11 @@ class _AlarmEditorState extends State<AlarmEditor> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
+    if (!_nap && !_timeValid) {
+      setState(() => _error = 'Закончи ввод времени.');
+      return;
+    }
     if ((_draft.challengeKind == ChallengeKind.qr ||
             (_draft.challengeKind == ChallengeKind.mixed &&
                 _draft.mixOrder.contains(ChallengeKind.qr))) &&
@@ -85,6 +161,13 @@ class _AlarmEditorState extends State<AlarmEditor> {
     );
     if (!mounted) return;
     if (result.ok) {
+      try {
+        await (await SharedPreferences.getInstance()).remove(_draftKey);
+      } catch (_) {
+        /* Native scheduling has already succeeded. */
+      }
+      if (!mounted) return;
+      setState(() => _allowPop = true);
       Navigator.of(context).pop(true);
     } else {
       setState(() {
@@ -111,373 +194,359 @@ class _AlarmEditorState extends State<AlarmEditor> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(
-        widget.alarm == null ? 'Новый будильник' : 'Настроить подъём',
-      ),
-    ),
-    bottomNavigationBar: SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_error != null)
-              Semantics(
-                liveRegion: true,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    _error!,
-                    key: const ValueKey('alarm-save-error'),
-                    style: const TextStyle(
-                      color: Color(0xFFFFB4AB),
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ),
-            FilledButton(
-              key: const ValueKey('save-alarm'),
-              onPressed: _saving || (!_nap && !_timeValid) ? null : _save,
-              child: _saving
-                  ? const SizedBox.square(
-                      dimension: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      widget.controller.device.supported
-                          ? 'Сохранить будильник'
-                          : 'Сохранить черновик',
-                      textAlign: TextAlign.center,
-                    ),
-            ),
-          ],
+  Widget build(BuildContext context) => PopScope(
+    canPop: _allowPop,
+    onPopInvokedWithResult: (didPop, result) {
+      if (!didPop) unawaited(_leave());
+    },
+    child: Scaffold(
+      appBar: AppBar(
+        leading: BackButton(onPressed: _leave),
+        title: Text(
+          widget.alarm == null ? 'Новый будильник' : 'Настроить подъём',
         ),
       ),
-    ),
-    body: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
-          children: [
-            if (!widget.controller.device.supported)
-              const _Note(
-                icon: Icons.info_outline_rounded,
-                text: 'Режим знакомства: настройки сохранятся, но будильник не зазвонит.',
-              ),
-            SegmentedButton<bool>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: false, label: Text('Будильник')),
-                ButtonSegment(value: true, label: Text('Вздремнуть')),
-              ],
-              selected: {_nap},
-              onSelectionChanged: _saving
-                  ? null
-                  : (v) => setState(() {
-                      _nap = v.single;
-                      if (!_nap) _draft = _draft.copyWith(clearOneShotAt: true);
-                    }),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                _nap
-                    ? 'Звонок в ${clockLabel(TimeOfDay.fromDateTime(widget.controller.now.add(Duration(minutes: _napMinutes))))} · через $_napMinutes мин'
-                    : 'До звонка ${remainingLabel(_draft.nextOccurrence(widget.controller.now), widget.controller.now)}',
-                key: const ValueKey('alarm-time-remaining'),
-                style: const TextStyle(color: morning, fontSize: 16),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            if (_nap) ...[
-              Text(
-                '$_napMinutes минут',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 36, color: morning),
-              ),
-              Slider(
-                value: _napMinutes.toDouble(),
-                min: 1,
-                max: 180,
-                divisions: 179,
-                label: '$_napMinutes мин',
-                onChanged: _saving
-                    ? null
-                    : (v) => setState(() => _napMinutes = v.round()),
-              ),
-              Wrap(
-                spacing: 8,
-                children: [10, 20, 30, 60, 90]
-                    .map(
-                      (n) => ChoiceChip(
-                        label: Text('$n мин'),
-                        selected: _napMinutes == n,
-                        onSelected: _saving
-                            ? null
-                            : (_) => setState(() => _napMinutes = n),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_error != null)
+                Semantics(
+                  liveRegion: true,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      _error!,
+                      key: const ValueKey('alarm-save-error'),
+                      style: const TextStyle(
+                        color: Color(0xFFFFB4AB),
+                        height: 1.4,
                       ),
-                    )
-                    .toList(),
-              ),
-            ] else
-              TimeComposer(
-                time: TimeOfDay(hour: _draft.hour, minute: _draft.minute),
-                enabled: !_saving,
-                onValidityChanged: (valid) =>
-                    setState(() => _timeValid = valid),
-                onChanged: (time) => setState(
-                  () => _draft = _draft.copyWith(
-                    hour: time.hour,
-                    minute: time.minute,
-                    clearOneShotAt: true,
+                    ),
                   ),
                 ),
+              FilledButton(
+                key: const ValueKey('save-alarm'),
+                onPressed: _saving || (!_nap && !_timeValid) ? null : _save,
+                child: _saving
+                    ? const SizedBox.square(
+                        dimension: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        widget.controller.device.supported
+                            ? 'Готово'
+                            : 'Сохранить черновик',
+                        textAlign: TextAlign.center,
+                      ),
               ),
-            if (!_nap) ...[
-              const _Heading('Когда повторять'),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _preset('Один раз', const []),
-                  _preset('Будни', const [1, 2, 3, 4, 5]),
-                  _preset('Каждый день', const [1, 2, 3, 4, 5, 6, 7]),
+            ],
+          ),
+        ),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
+            children: [
+              if (!widget.controller.device.supported)
+                const _Note(
+                  icon: Icons.info_outline_rounded,
+                  text: 'Режим знакомства: настройки сохранятся, но будильник не зазвонит.',
+                ),
+              SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Будильник')),
+                  ButtonSegment(value: true, label: Text('Вздремнуть')),
                 ],
+                selected: {_nap},
+                onSelectionChanged: _saving
+                    ? null
+                    : (v) => setState(() {
+                        _nap = v.single;
+                        if (!_nap) {
+                          _draft = _draft.copyWith(clearOneShotAt: true);
+                        }
+                      }),
               ),
-              const SizedBox(height: 12),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final columns = constraints.maxWidth >= 348 ? 7 : 4;
-                  final gap = columns == 7 ? 2.0 : 6.0;
-                  return Wrap(
-                    spacing: gap,
-                    runSpacing: 6,
-                    children: List.generate(7, (index) {
-                      final selected = _draft.weekdays.contains(index + 1);
-                      return SizedBox(
-                        width:
-                            ((constraints.maxWidth - gap * (columns - 1)) /
-                                    columns)
-                                .clamp(48.0, 80.0),
-                        child: Semantics(
-                          label: '${shortWeekdays[index]}, повторять',
-                          button: true,
-                          enabled: !_saving,
-                          selected: selected,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(14),
-                            onTap: _saving
-                                ? null
-                                : () {
-                                    final days = [..._draft.weekdays];
-                                    selected
-                                        ? days.remove(index + 1)
-                                        : days.add(index + 1);
-                                    days.sort();
-                                    setState(
-                                      () => _draft = _draft.copyWith(
-                                        weekdays: days,
-                                      ),
-                                    );
-                                  },
-                            child: Container(
-                              height: 48,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: selected ? morning : panel,
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Text(
-                                shortWeekdays[index],
-                                style: TextStyle(
-                                  color: selected ? ink : muted,
-                                  fontWeight: FontWeight.w700,
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  _nap
+                      ? 'Звонок в ${clockLabel(TimeOfDay.fromDateTime(widget.controller.now.add(Duration(minutes: _napMinutes))))} · через $_napMinutes мин'
+                      : 'До звонка ${remainingLabel(_draft.nextOccurrence(widget.controller.now), widget.controller.now)}',
+                  key: const ValueKey('alarm-time-remaining'),
+                  style: const TextStyle(color: morning, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              if (_nap) ...[
+                Text(
+                  '$_napMinutes минут',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 36, color: morning),
+                ),
+                Slider(
+                  value: _napMinutes.toDouble(),
+                  min: 1,
+                  max: 180,
+                  divisions: 179,
+                  label: '$_napMinutes мин',
+                  onChanged: _saving
+                      ? null
+                      : (v) => setState(() => _napMinutes = v.round()),
+                ),
+                Wrap(
+                  spacing: 8,
+                  children: [10, 20, 30, 60, 90]
+                      .map(
+                        (n) => ChoiceChip(
+                          label: Text('$n мин'),
+                          selected: _napMinutes == n,
+                          onSelected: _saving
+                              ? null
+                              : (_) => setState(() => _napMinutes = n),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ] else
+                TimeComposer(
+                  time: TimeOfDay(hour: _draft.hour, minute: _draft.minute),
+                  enabled: !_saving,
+                  onValidityChanged: (valid) =>
+                      setState(() => _timeValid = valid),
+                  onChanged: (time) => setState(
+                    () => _draft = _draft.copyWith(
+                      hour: time.hour,
+                      minute: time.minute,
+                      clearOneShotAt: true,
+                    ),
+                  ),
+                ),
+              if (!_nap) ...[
+                const _Heading('Когда повторять'),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _preset('Один раз', const []),
+                    _preset('Будни', const [1, 2, 3, 4, 5]),
+                    _preset('Каждый день', const [1, 2, 3, 4, 5, 6, 7]),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns = constraints.maxWidth >= 348 ? 7 : 4;
+                    final gap = columns == 7 ? 2.0 : 6.0;
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: 6,
+                      children: List.generate(7, (index) {
+                        final selected = _draft.weekdays.contains(index + 1);
+                        return SizedBox(
+                          width:
+                              ((constraints.maxWidth - gap * (columns - 1)) /
+                                      columns)
+                                  .clamp(48.0, 80.0),
+                          child: Semantics(
+                            label: '${shortWeekdays[index]}, повторять',
+                            button: true,
+                            enabled: !_saving,
+                            selected: selected,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: _saving
+                                  ? null
+                                  : () {
+                                      final days = [..._draft.weekdays];
+                                      selected
+                                          ? days.remove(index + 1)
+                                          : days.add(index + 1);
+                                      days.sort();
+                                      setState(
+                                        () => _draft = _draft.copyWith(
+                                          weekdays: days,
+                                        ),
+                                      );
+                                    },
+                              child: Container(
+                                height: 48,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: selected ? morning : panel,
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Text(
+                                  shortWeekdays[index],
+                                  style: TextStyle(
+                                    color: selected ? ink : muted,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      );
-                    }),
-                  );
-                },
+                        );
+                      }),
+                    );
+                  },
+                ),
+              ],
+              const _Heading('Как просыпаться'),
+              ...WakePreset.values.map(_wakePreset),
+              ListTile(
+                key: const ValueKey('preset-custom'),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                leading: Icon(
+                  WakePreset.matching(_draft) == null
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.tune_rounded,
+                  color: morning,
+                ),
+                title: const Text('Свои настройки'),
+                onTap: _saving ? null : () => _advanced.expand(),
               ),
-            ],
-            const _Heading('Как просыпаться'),
-            ...WakePreset.values.map(_wakePreset),
-            ListTile(
-              key: const ValueKey('preset-custom'),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-              leading: Icon(
-                WakePreset.matching(_draft) == null
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.tune_rounded,
-                color: morning,
-              ),
-              title: const Text('Свои настройки'),
-              onTap: _saving ? null : () => _advanced.expand(),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              WakePreset.matching(_draft) == null
-                  ? 'Свои настройки'
-                  : 'Выбрано: ${WakePreset.matching(_draft)!.label}',
-              key: const ValueKey('wake-preset-summary'),
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            if (WakePreset.matching(_draft) == null) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: 12),
               Text(
-                _activeSummary(),
-                key: const ValueKey('wake-configuration-summary'),
-                style: const TextStyle(color: muted, height: 1.4),
+                WakePreset.matching(_draft) == null
+                    ? 'Свои настройки'
+                    : 'Выбрано: ${WakePreset.matching(_draft)!.label}',
+                key: const ValueKey('wake-preset-summary'),
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
-            ],
-            const SizedBox(height: 12),
-            ExpansionTile(
-              key: const ValueKey('alarm-advanced'),
-              controller: _advanced,
-              initiallyExpanded: WakePreset.matching(_draft) == null,
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: 16),
-              shape: const Border(),
-              collapsedShape: const Border(),
-              title: const Text('Настроить вручную'),
-              subtitle: const Text('Переносы, задания и порядок'),
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const _Heading('Сколько переносов разрешить'),
-                    const Text(
-                      'Сколько раз можно отложить звонок перед заданием.',
-                      style: TextStyle(color: muted, height: 1.5),
-                    ),
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [0, 1, 3]
-                          .map(
-                            (count) => ChoiceChip(
-                              label: Text(
-                                count == 0
-                                    ? 'Без переносов'
-                                    : count == 1
-                                    ? '1 перенос'
-                                    : '3 переноса',
-                              ),
-                              selected: _draft.maxSnoozes == count,
-                              onSelected: _saving
-                                  ? null
-                                  : (_) => setState(
-                                      () => _updateDraft(
-                                        _draft.copyWith(maxSnoozes: count),
-                                      ),
-                                    ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    if (_draft.maxSnoozes > 0) ...[
-                      const SizedBox(height: 12),
-                      Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 10,
-                        children: [
-                          const Text(
-                            'Каждый на',
-                            style: TextStyle(color: muted),
-                          ),
-                          ...[5, 10].map(
-                            (minutes) => ChoiceChip(
-                              label: Text('$minutes минут'),
-                              selected: _draft.snoozeMinutes == minutes,
-                              onSelected: _saving
-                                  ? null
-                                  : (_) => setState(
-                                      () => _draft = _draft.copyWith(
-                                        snoozeMinutes: minutes,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ],
+              if (WakePreset.matching(_draft) == null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _activeSummary(),
+                  key: const ValueKey('wake-configuration-summary'),
+                  style: const TextStyle(color: muted, height: 1.4),
+                ),
+              ],
+              const SizedBox(height: 12),
+              ExpansionTile(
+                key: const ValueKey('alarm-advanced'),
+                controller: _advanced,
+                initiallyExpanded: WakePreset.matching(_draft) == null,
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 16),
+                shape: const Border(),
+                collapsedShape: const Border(),
+                title: const Text('Настроить вручную'),
+                subtitle: const Text('Переносы, задания и порядок'),
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _Heading('Запас минут на переносы'),
+                      const Text(
+                        'Раздели запас на любые переносы от одной минуты.',
+                        style: TextStyle(color: muted, height: 1.5),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: Text(
-                          'Бюджет переносов: ${_draft.maxSnoozes * _draft.snoozeMinutes} мин. '
-                          'Если нажимать сразу, последний звонок — в ${_lastRingLabel()}. '
-                          'Если отвечать позже, он тоже сдвинется.',
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: {0, 5, 15, 30, _draft.snoozeBudget}
+                            .map(
+                              (count) => ChoiceChip(
+                                label: Text(
+                                  count == 0 ? 'Без переносов' : '$count мин',
+                                ),
+                                selected: _draft.snoozeBudget == count,
+                                onSelected: _saving
+                                    ? null
+                                    : (_) => setState(
+                                        () => _updateDraft(
+                                          _draft.copyWith(
+                                            snoozeBudgetMinutes: count,
+                                          ),
+                                        ),
+                                      ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      if (_draft.snoozeBudget > 0) ...[
+                        const SizedBox(height: 12),
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 10,
+                          children: [
+                            const Text(
+                              'Обычный перенос',
+                              style: TextStyle(color: muted),
+                            ),
+                            ...[5, 10].map(
+                              (minutes) => ChoiceChip(
+                                label: Text('$minutes минут'),
+                                selected: _draft.snoozeMinutes == minutes,
+                                onSelected: _saving
+                                    ? null
+                                    : (_) => setState(
+                                        () => _draft = _draft.copyWith(
+                                          snoozeMinutes: minutes,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Text(
+                            'Всего ${_draft.snoozeBudget} мин. Количество переносов не ограничено.',
+                            style: const TextStyle(
+                              color: morning,
+                              fontSize: 12,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                      SwitchListTile.adaptive(
+                        key: const ValueKey('move-snooze-button'),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Найти кнопку переноса'),
+                        subtitle: Text(
+                          _draft.snoozeBudget == 0
+                              ? 'Сейчас переносы выключены.'
+                              : 'Найди «ЕЩЁ» среди одинаковых плиток. После переноса её место изменится.',
                           style: const TextStyle(
-                            color: morning,
+                            color: muted,
                             fontSize: 12,
                             height: 1.5,
                           ),
                         ),
-                      ),
-                    ],
-                    SwitchListTile.adaptive(
-                      key: const ValueKey('move-snooze-button'),
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Кнопка переноса меняет место'),
-                      subtitle: Text(
-                        _draft.maxSnoozes == 0 ? 'Сейчас переносы выключены.' : 'После переноса меняются место, размер, цвет и форма. Во время нажатия кнопка остаётся на месте.',
-                        style: const TextStyle(
-                          color: muted,
-                          fontSize: 12,
-                          height: 1.5,
-                        ),
-                      ),
-                      value: _draft.moveSnoozeButton,
-                      onChanged: _saving || _draft.maxSnoozes == 0
-                          ? null
-                          : (value) => setState(
-                              () => _draft = _draft.copyWith(
-                                moveSnoozeButton: value,
-                              ),
-                            ),
-                    ),
-                    const _Heading('Задание для пробуждения'),
-                    ...ChallengeKind.values.map(
-                      (kind) => Semantics(
-                        key: ValueKey('challenge-kind-${kind.name}'),
-                        button: true,
-                        selected: _draft.challengeKind == kind,
-                        enabled: !_saving,
-                        label: '${kind.label}. ${kind.description}',
-                        excludeSemantics: true,
-                        onTap: _saving
+                        value: _draft.moveSnoozeButton,
+                        onChanged: _saving || _draft.snoozeBudget == 0
                             ? null
-                            : () => setState(
-                                () => _updateDraft(
-                                  _draft.copyWith(challengeKind: kind),
+                            : (value) => setState(
+                                () => _draft = _draft.copyWith(
+                                  moveSnoozeButton: value,
                                 ),
                               ),
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(challengeIcon(kind), color: muted),
-                          title: Text(kind.label),
-                          subtitle: Text(
-                            kind.description,
-                            style: const TextStyle(color: muted, height: 1.4),
-                          ),
-                          trailing: Icon(
-                            _draft.challengeKind == kind
-                                ? Icons.radio_button_checked_rounded
-                                : Icons.radio_button_unchecked_rounded,
-                            color: _draft.challengeKind == kind
-                                ? morning
-                                : muted,
-                          ),
+                      ),
+                      const _Heading('Задание для пробуждения'),
+                      if (_draft.challengeKind == ChallengeKind.mirror ||
+                          _draft.challengeKind == ChallengeKind.mixed)
+                        const PhraseSettings(),
+                      ...ChallengeKind.values.map(
+                        (kind) => Semantics(
+                          key: ValueKey('challenge-kind-${kind.name}'),
+                          button: true,
+                          selected: _draft.challengeKind == kind,
+                          enabled: !_saving,
+                          label: '${kind.label}. ${kind.description}',
+                          excludeSemantics: true,
                           onTap: _saving
                               ? null
                               : () => setState(
@@ -485,131 +554,158 @@ class _AlarmEditorState extends State<AlarmEditor> {
                                     _draft.copyWith(challengeKind: kind),
                                   ),
                                 ),
-                        ),
-                      ),
-                    ),
-                    if (_draft.challengeKind == ChallengeKind.mixed)
-                      _mixSettings(),
-                    if (_draft.challengeKind == ChallengeKind.qr ||
-                        _draft.mixOrder.contains(ChallengeKind.qr))
-                      _qrSettings(),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: ChallengeDifficulty.values
-                          .map(
-                            (level) => ChoiceChip(
-                              label: Text(level.label),
-                              selected: _draft.difficulty == level,
-                              onSelected: _saving
-                                  ? null
-                                  : (_) => setState(
-                                      () => _updateDraft(
-                                        _draft.copyWith(difficulty: level),
-                                      ),
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(challengeIcon(kind), color: muted),
+                            title: Text(kind.label),
+                            subtitle: Text(
+                              kind.description,
+                              style: const TextStyle(color: muted, height: 1.4),
+                            ),
+                            trailing: Icon(
+                              _draft.challengeKind == kind
+                                  ? Icons.radio_button_checked_rounded
+                                  : Icons.radio_button_unchecked_rounded,
+                              color: _draft.challengeKind == kind
+                                  ? morning
+                                  : muted,
+                            ),
+                            onTap: _saving
+                                ? null
+                                : () => setState(
+                                    () => _updateDraft(
+                                      _draft.copyWith(challengeKind: kind),
                                     ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    const SizedBox(height: 10),
-                    SwitchListTile.adaptive(
-                      key: const ValueKey('escalate-on-snooze'),
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Сложнее после переноса'),
-                      subtitle: Text(
-                        _draft.maxSnoozes == 0 ? 'Сейчас переносы выключены.' : 'Каждый перенос поднимает уровень, максимум — «Нереально».',
-                        style: const TextStyle(
-                          color: muted,
-                          fontSize: 12,
-                          height: 1.5,
-                        ),
-                      ),
-                      value: _draft.escalateOnSnooze,
-                      onChanged: _saving || _draft.maxSnoozes == 0
-                          ? null
-                          : (value) => setState(
-                              () => _updateDraft(
-                                _draft.copyWith(escalateOnSnooze: value),
-                              ),
-                            ),
-                    ),
-                    if (_draft.escalateOnSnooze && _draft.maxSnoozes > 0) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        _difficultyPlan(),
-                        key: const ValueKey('escalation-plan'),
-                        style: const TextStyle(
-                          color: morning,
-                          fontSize: 12,
-                          height: 1.5,
-                        ),
-                      ),
-                      if (_practiceStages.length > 1) ...[
-                        const SizedBox(height: 18),
-                        DropdownButtonFormField<int>(
-                          key: ValueKey('practice-stage-$_practiceSnoozes'),
-                          initialValue: _practiceSnoozes,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Какой звонок попробовать',
-                          ),
-                          items: _practiceStages
-                              .map(
-                                (used) => DropdownMenuItem(
-                                  value: used,
-                                  child: Text(
-                                    '${_stageLabel(used)} · ${_draft.difficultyForSnoozes(used).label}',
-                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: _saving
-                              ? null
-                              : (value) => setState(
-                                  () => _practiceSnoozes = value ?? 0,
-                                ),
+                          ),
                         ),
-                      ],
-                    ],
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        key: const ValueKey('practice-alarm'),
-                        onPressed: _saving ? null : _practice,
-                        icon: const Icon(Icons.play_arrow_rounded),
-                        label: const Text('Попробовать задание'),
                       ),
-                    ),
-                  ],
+                      if (_draft.challengeKind == ChallengeKind.mixed)
+                        _mixSettings(),
+                      if (_draft.challengeKind == ChallengeKind.qr ||
+                          _draft.mixOrder.contains(ChallengeKind.qr))
+                        _qrSettings(),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: ChallengeDifficulty.values
+                            .map(
+                              (level) => ChoiceChip(
+                                label: Text(level.label),
+                                selected: _draft.difficulty == level,
+                                onSelected: _saving
+                                    ? null
+                                    : (_) => setState(
+                                        () => _updateDraft(
+                                          _draft.copyWith(difficulty: level),
+                                        ),
+                                      ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      const SizedBox(height: 10),
+                      SwitchListTile.adaptive(
+                        key: const ValueKey('escalate-on-snooze'),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Сложнее после переноса'),
+                        subtitle: Text(
+                          _draft.snoozeBudget == 0
+                              ? 'Сейчас переносы выключены.'
+                              : 'Каждый перенос поднимает уровень, максимум — «Нереально».',
+                          style: const TextStyle(
+                            color: muted,
+                            fontSize: 12,
+                            height: 1.5,
+                          ),
+                        ),
+                        value: _draft.escalateOnSnooze,
+                        onChanged: _saving || _draft.snoozeBudget == 0
+                            ? null
+                            : (value) => setState(
+                                () => _updateDraft(
+                                  _draft.copyWith(escalateOnSnooze: value),
+                                ),
+                              ),
+                      ),
+                      if (_draft.escalateOnSnooze &&
+                          _draft.snoozeBudget > 0) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _difficultyPlan(),
+                          key: const ValueKey('escalation-plan'),
+                          style: const TextStyle(
+                            color: morning,
+                            fontSize: 12,
+                            height: 1.5,
+                          ),
+                        ),
+                        if (_practiceStages.length > 1) ...[
+                          const SizedBox(height: 18),
+                          DropdownButtonFormField<int>(
+                            key: ValueKey('practice-stage-$_practiceSnoozes'),
+                            initialValue: _practiceSnoozes,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Какой звонок попробовать',
+                            ),
+                            items: _practiceStages
+                                .map(
+                                  (used) => DropdownMenuItem(
+                                    value: used,
+                                    child: Text(
+                                      '${_stageLabel(used)} · ${_draft.difficultyForSnoozes(used).label}',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: _saving
+                                ? null
+                                : (value) => setState(
+                                    () => _practiceSnoozes = value ?? 0,
+                                  ),
+                          ),
+                        ],
+                      ],
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          key: const ValueKey('practice-alarm'),
+                          onPressed: _saving ? null : _practice,
+                          icon: const Icon(Icons.play_arrow_rounded),
+                          label: const Text('Попробовать задание'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const _Heading('Мелодия'),
+              _soundSettings(),
+              const _Heading('Название · необязательно'),
+              TextField(
+                key: const ValueKey('alarm-title'),
+                controller: _title,
+                maxLength: 50,
+                enabled: !_saving,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  hintText: 'Например, утренняя прогулка',
+                  counterText: '',
                 ),
-              ],
-            ),
-            const _Heading('Мелодия'),
-            _soundSettings(),
-            const _Heading('Название · необязательно'),
-            TextField(
-              key: const ValueKey('alarm-title'),
-              controller: _title,
-              maxLength: 50,
-              enabled: !_saving,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                hintText: 'Например, утренняя прогулка',
-                counterText: '',
               ),
-            ),
-            if (!widget.controller.device.challengeEnforced)
-              const _Note(
-                icon: Icons.phone_iphone_rounded,
-                text:
-                    'На iPhone системный будильник можно остановить без задания. '
-                    'Задания доступны после открытия приложения.',
-              ),
-          ],
+              if (!widget.controller.device.challengeEnforced)
+                const _Note(
+                  icon: Icons.phone_iphone_rounded,
+                  text:
+                      'На iPhone системный будильник можно остановить без задания. '
+                      'Задания доступны после открытия приложения.',
+                ),
+            ],
+          ),
         ),
       ),
     ),
@@ -719,6 +815,35 @@ class _AlarmEditorState extends State<AlarmEditor> {
   Widget _soundSettings() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      if (widget.controller.device.platform != 'ios') ...[
+        DropdownButtonFormField<int>(
+          key: const ValueKey('volume-ramp'),
+          isExpanded: true,
+          initialValue: _draft.volumeRampSeconds,
+          decoration: const InputDecoration(labelText: 'Нарастание громкости'),
+          items: [0, 10, 30, 60]
+              .map(
+                (seconds) => DropdownMenuItem(
+                  value: seconds,
+                  child: Text(
+                    seconds == 0 ? 'Без нарастания' : '$seconds секунд',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: _saving
+              ? null
+              : (value) {
+                  if (value != null) {
+                    setState(
+                      () => _draft = _draft.copyWith(volumeRampSeconds: value),
+                    );
+                  }
+                },
+        ),
+        const SizedBox(height: 16),
+      ],
       DropdownButtonFormField<String>(
         key: ValueKey('sound-${_draft.sound}'),
         initialValue: _draft.sound,
@@ -855,10 +980,10 @@ class _AlarmEditorState extends State<AlarmEditor> {
   }
 
   String _activeSummary() {
-    final snoozes = _draft.maxSnoozes == 0
+    final snoozes = _draft.snoozeBudget == 0
         ? 'Без переносов'
-        : '${_draft.maxSnoozes} × ${_draft.snoozeMinutes} мин';
-    final escalation = _draft.escalateOnSnooze && _draft.maxSnoozes > 0
+        : '${_draft.snoozeBudget} мин на переносы';
+    final escalation = _draft.escalateOnSnooze && _draft.snoozeBudget > 0
         ? ' · сложнее после переноса'
         : '';
     return '${_draft.challengeKind.label} · ${_draft.difficulty.label.toLowerCase()} · $snoozes$escalation';
@@ -872,7 +997,7 @@ class _AlarmEditorState extends State<AlarmEditor> {
   List<int> get _practiceStages {
     final stages = [0];
     if (!_draft.escalateOnSnooze) return stages;
-    for (var used = 1; used <= _draft.maxSnoozes; used++) {
+    for (var used = 1; used <= _draft.snoozeBudget.clamp(0, 3); used++) {
       if (_draft.difficultyForSnoozes(used) !=
           _draft.difficultyForSnoozes(stages.last)) {
         stages.add(used);
@@ -897,21 +1022,9 @@ class _AlarmEditorState extends State<AlarmEditor> {
           return '$label: ${_draft.difficultyForSnoozes(used).label}';
         })
         .join(' · ');
-    return stages.last < _draft.maxSnoozes
+    return stages.last < _draft.snoozeBudget
         ? '$plan. Дальше сложность не растёт.'
         : '$plan.';
-  }
-
-  String _lastRingLabel() {
-    final total =
-        _draft.hour * 60 +
-        _draft.minute +
-        _draft.maxSnoozes * _draft.snoozeMinutes;
-    final hour = (total ~/ 60) % 24;
-    final minute = total % 60;
-    final clock =
-        '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
-    return total >= 24 * 60 ? '$clock следующего дня' : clock;
   }
 
   Widget _preset(String label, List<int> days) => ChoiceChip(

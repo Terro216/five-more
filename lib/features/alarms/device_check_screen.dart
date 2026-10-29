@@ -98,6 +98,11 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
       _acting = false;
       _error = controller.error;
     });
+    if (_error != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
+      });
+    }
   }
 
   Future<void> _createAlarm() async {
@@ -148,6 +153,42 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
         _watchAdminRemoval();
       }
     }
+  }
+
+  Future<void> _changePowerMenuGuard() async {
+    if (_acting || controller.busy) return;
+    if (controller.device.powerMenuGuardActive == true) {
+      await _permission('removePowerMenuGuard');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: const Text('Закрывать меню питания?'),
+        content: const Text(
+          'Включи службу «Ещё пять — меню питания» в специальных возможностях Android. '
+          'Она закрывает распознанное меню питания только во время настоящего звонка.\n\n'
+          'Служба получает сведения о системных окнах. Содержимое приложений '
+          'не читается, не сохраняется и не передаётся. Защиту можно отключить здесь '
+          'или в настройках Android.\n\n'
+          'Работает не на всех телефонах. Принудительную перезагрузку кнопками '
+          'не блокирует; аварийный выход из будильника остаётся доступен.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            key: const ValueKey('power-menu-confirm'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Открыть настройки Android'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) await _permission('powerMenuGuard');
   }
 
   void _watchAdminRemoval() {
@@ -276,8 +317,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Разрешения — первый шаг. Затем проверим настоящий звонок '
-                    'с заблокированным экраном, как утром.',
+                    'Запусти тест и заблокируй экран.',
                     style: TextStyle(color: muted, height: 1.5),
                   ),
                   if (check?.pending == true) ...[
@@ -422,11 +462,6 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     ],
                   ],
                   const SizedBox(height: 24),
-                  const Text(
-                    'Результат отмечаешь ты. Даже успешная проверка не гарантирует '
-                    'будущие звонки после изменения настроек телефона.',
-                    style: TextStyle(color: muted, fontSize: 12, height: 1.5),
-                  ),
                   if (!device.challengeEnforced)
                     const Padding(
                       padding: EdgeInsets.only(top: 12),
@@ -459,7 +494,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
     shape: const Border(),
     collapsedShape: const Border(),
     title: const Text('Надёжность и защита'),
-    subtitle: const Text('Перезагрузка, батарея и удаление'),
+    subtitle: const Text('Перезагрузка и системные настройки'),
     children: [
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -471,13 +506,37 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
           const SizedBox(height: 8),
           Text(
             device.bootRecoverySupported == true
-                ? 'Расписание восстанавливается после загрузки Android, в том числе '
-                      'до первого разблокирования. Использованные переносы сохраняются. '
-                      'Проверь это на своём телефоне отдельным звонком после перезагрузки.'
+                ? 'Начавшийся подъём продолжается после загрузки Android без ограничения '
+                      'по времени. Расписание и потраченные минуты переноса сохраняются. '
+                      'Проверь восстановление звонка на своём телефоне.'
                 : 'Поддержку восстановления на этом устройстве не удалось подтвердить. '
                       'Обнови статус и проверь звонок после перезагрузки.',
             style: const TextStyle(color: muted, height: 1.5),
           ),
+          if (device.powerMenuGuardActive != null) ...[
+            const SizedBox(height: 20),
+            const Text(
+              'Меню питания',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              device.powerMenuGuardActive == true
+                  ? 'Защита включена. Во время звонка приложение закрывает распознанное меню питания. Проверь на своём телефоне.'
+                  : 'Закрывать меню выключения во время звонка. Требуется отдельное разрешение Android; работает не на всех телефонах.',
+              key: const ValueKey('power-menu-status'),
+              style: const TextStyle(color: muted, height: 1.5),
+            ),
+            TextButton(
+              key: const ValueKey('power-menu-change'),
+              onPressed: blocked ? null : _changePowerMenuGuard,
+              child: Text(
+                device.powerMenuGuardActive == true
+                    ? 'Выключить защиту меню'
+                    : 'Включить защиту меню',
+              ),
+            ),
+          ],
           _advice(
             icon: Icons.battery_saver_outlined,
             title: switch (device.batteryOptimized) {
@@ -542,7 +601,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
             ),
           const SizedBox(height: 12),
           const Text(
-            'Защита не запрещает выключение телефона или принудительную остановку. '
+            'Принудительная перезагрузка кнопками и остановка через настройки Android остаются доступны. '
             'После принудительной остановки открой приложение и восстанови расписание. '
             'В режиме «Не беспокоить» разреши будильники в настройках звука телефона.',
             style: TextStyle(color: muted, height: 1.5),

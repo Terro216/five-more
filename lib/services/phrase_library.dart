@@ -13,7 +13,17 @@ class PhraseLibrary {
   List<String> phrases = [];
   final Set<String> _seen = {};
   DateTime? refreshedAt;
-  bool _loaded = false;
+  bool _loaded = false, _ringing = false;
+  int _generation = 0;
+  http.Client? _active;
+  void setAlarmRinging(bool value) {
+    _ringing = value;
+    if (value) {
+      _generation++;
+      _active?.close();
+    }
+  }
+
   Future<void> load() async {
     if (_loaded) return;
     final prefs = await SharedPreferences.getInstance();
@@ -25,6 +35,10 @@ class PhraseLibrary {
   }
 
   Future<void> setEnabled(bool value) async {
+    if (!value) {
+      _generation++;
+      _active?.close();
+    }
     if (!await (await SharedPreferences.getInstance()).setBool(
       'phrases.enabled',
       value,
@@ -36,24 +50,30 @@ class PhraseLibrary {
 
   Future<int> refresh({http.Client? client}) async {
     await load();
-    if (!enabled) return 0;
+    if (!enabled || _ringing || _active != null) return 0;
+    final generation = _generation;
     if (refreshedAt != null &&
         DateTime.now().difference(refreshedAt!) < const Duration(hours: 24)) {
       return 0;
     }
     final owned = client == null;
     final transport = client ?? http.Client();
+    _active = transport;
+    bool allowed() => enabled && !_ringing && generation == _generation;
     final fresh = <String>{};
     try {
       // A small bounded batch. No identifiers, audio, or diary data leave the device.
       for (var i = 0; i < 6; i++) {
+        if (!allowed()) return 0;
         final phrase = await _fetch(transport)
             .timeout(const Duration(seconds: 5));
+        if (!allowed()) return 0;
         if (phrase != null) fresh.add(phrase);
       }
       if (fresh.isEmpty) throw StateError('Источник не вернул подходящих фраз');
       final next = {...fresh, ...phrases}.take(200).toList();
       final prefs = await SharedPreferences.getInstance();
+      if (!allowed()) return 0;
       if (!await prefs.setStringList('phrases.cache', next)) {
         throw StateError('Не удалось сохранить фразы');
       }
@@ -65,6 +85,7 @@ class PhraseLibrary {
       );
       return phrases.length;
     } finally {
+      _active = null;
       if (owned) transport.close();
     }
   }
