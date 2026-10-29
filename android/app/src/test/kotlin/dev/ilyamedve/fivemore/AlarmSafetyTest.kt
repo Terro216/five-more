@@ -6,12 +6,12 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class AlarmSafetyTest {
-    @Test fun backgroundClockRecoveryStopsAudioAfterResolvingTheLastExpiredRing() {
+    @Test fun backgroundClockRecoveryStopsAudioAfterResolvingTheLastExpiredPreview() {
         val now = 10_000_000L
         val recovery = AlarmRules.recoveryPlan(
             enabled = true, state = "ringing", nextAt = 0L,
             ringingSince = now - 16 * 60_000L, now = now,
-            maximumRingMs = 15 * 60_000L, clockChanged = true,
+            preview = true, clockChanged = true,
         )
         assertEquals(AlarmRules.RecoveryAction.RESOLVE, recovery.action)
         assertEquals("timed_out", recovery.event)

@@ -31,6 +31,7 @@ class AlarmEngine(private val context: Context) {
             "alarmVolume" to context.getSystemService(AudioManager::class.java).getStreamVolume(AudioManager.STREAM_ALARM),
             "alarmMaxVolume" to context.getSystemService(AudioManager::class.java).getStreamMaxVolume(AudioManager.STREAM_ALARM),
             "deviceAdminActive" to AlarmDeviceAdminReceiver.active(context),
+            "powerMenuGuardActive" to PowerMenuProtection.active(context),
             "bootRecoverySupported" to true,
             "recoveryError" to (recoveryFailure ?: store.recoveryError),
             "scheduledCount" to alarms.count { it.optBoolean("enabled") },
@@ -288,9 +289,9 @@ class AlarmEngine(private val context: Context) {
                         nextAt = alarm.optLong("nextAt"),
                         ringingSince = alarm.optLong("ringingSince", now),
                         now = now,
-                        maximumRingMs = MAX_RING_MS,
                         clockChanged = clockChanged,
-                        preview = AlarmRules.isPreviewId(alarm.optString("id")) || alarm.optLong("oneShotAt") > 0L,
+                        preview = AlarmRules.isPreviewId(alarm.optString("id")),
+                        oneShot = alarm.optLong("oneShotAt") > 0L,
                         skipRinging = skipRinging,
                     )
                     when (plan.action) {
@@ -317,7 +318,7 @@ class AlarmEngine(private val context: Context) {
                 }
             }
             // TIME_SET may resolve the last playing occurrence while no Activity is open.
-            // Its old service timeout would otherwise see not_ringing and leave audio running.
+            // A preview's old timeout would otherwise see not_ringing and leave audio running.
             // A fresh successful store read is required; read failure leaves existing audio alone.
             AlarmSafety.stopRecoveredPlaybackIfIdle(
                 hasRingingAlarm = { ringing() != null },
@@ -401,7 +402,6 @@ class AlarmEngine(private val context: Context) {
     companion object {
         const val ACTION_FIRE = "dev.ilyamedve.fivemore.FIRE"
         const val ACTION_SNOOZE = "dev.ilyamedve.fivemore.SNOOZE"
-        const val MAX_RING_MS = 15 * 60_000L
         private val silencedAlarmIds = mutableSetOf<String>()
         private var safetyError: String? = null
         private var recoveryFailure: String? = null

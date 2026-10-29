@@ -23,10 +23,12 @@ const _source = Alarm(
 class _ProtectionGateway extends FakeAlarmGateway {
   String platform = 'android';
   bool? adminActive = false;
+  bool? powerGuardActive = false;
   bool? bootSupported = true;
   bool? batteryOptimized = true;
   String? recoveryError;
   bool rejectRestore = false;
+  bool rejectPermission = false;
   bool keepRecoveryErrorOnSuccess = false;
   int restoreCalls = 0;
   DeviceAlarmCheck? activeTest;
@@ -42,6 +44,7 @@ class _ProtectionGateway extends FakeAlarmGateway {
     challengeEnforced: platform != 'ios',
     alarms: nativeAlarms.values.toList(),
     deviceAdminActive: adminActive,
+    powerMenuGuardActive: powerGuardActive,
     bootRecoverySupported: bootSupported,
     batteryOptimized: batteryOptimized,
     recoveryError: recoveryError,
@@ -51,6 +54,7 @@ class _ProtectionGateway extends FakeAlarmGateway {
   @override
   Future<void> requestPermissions({String? target}) async {
     permissionTargets.add(target);
+    if (rejectPermission) throw PlatformException(code: 'settings_unavailable');
     // Opening the native system request does not prove that the user accepted
     // it. Activation and removal are reported independently by status().
   }
@@ -165,10 +169,12 @@ void main() {
           'notifications': true,
           'fullScreenIntent': true,
           'deviceAdminActive': value,
+          'powerMenuGuardActive': value,
           'bootRecoverySupported': value,
         });
         final expected = value is bool ? value : null;
         expect(status.deviceAdminActive, expected);
+        expect(status.powerMenuGuardActive, expected);
         expect(status.bootRecoverySupported, expected);
         expect(status.canSchedule, isTrue);
         expect(
@@ -300,6 +306,74 @@ void main() {
     },
   );
 
+  testWidgets(
+    'power menu guard requires consent and actual Android activation',
+    (tester) async {
+      final gateway = _ProtectionGateway();
+      final state = await showScreen(
+        tester,
+        gateway,
+        width: 320,
+        textScale: 1.5,
+      );
+      await _expandProtection(tester);
+      await _tap(tester, _key('power-menu-change'));
+      expect(find.text('Закрывать меню питания?'), findsOneWidget);
+      expect(_key('power-menu-confirm').hitTestable(), findsOneWidget);
+      expect(gateway.permissionTargets, isEmpty);
+      await tester.tap(find.text('Отмена'));
+      await tester.pumpAndSettle();
+      expect(gateway.permissionTargets, isEmpty);
+      await _tap(tester, _key('power-menu-change'));
+      await tester.tap(_key('power-menu-confirm'));
+      await tester.pumpAndSettle();
+      expect(gateway.permissionTargets, ['powerMenuGuard']);
+      expect(state.controller.device.powerMenuGuardActive, isFalse);
+      expect(find.text('Включить защиту меню'), findsOneWidget);
+      gateway.powerGuardActive = true;
+      await state.controller.refreshStatus();
+      await tester.pumpAndSettle();
+      await _reveal(tester, _key('power-menu-change'));
+      expect(find.text('Выключить защиту меню'), findsOneWidget);
+      await tester.tap(_key('power-menu-change'));
+      await tester.pumpAndSettle();
+      expect(gateway.permissionTargets, [
+        'powerMenuGuard',
+        'removePowerMenuGuard',
+      ]);
+      gateway.powerGuardActive = false;
+      await state.controller.refreshStatus();
+      await tester.pumpAndSettle();
+      expect(find.text('Включить защиту меню'), findsOneWidget);
+      expect(gateway.scheduleCalls, isEmpty);
+      expect(gateway.dismissCalls, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('failed power menu settings are brought into view', (
+    tester,
+  ) async {
+    final gateway = _ProtectionGateway()..rejectPermission = true;
+    final state = await showScreen(tester, gateway, width: 320, textScale: 1.5);
+    await _expandProtection(tester);
+    await _tap(tester, _key('power-menu-change'));
+    await tester.tap(_key('power-menu-confirm'));
+    await tester.pumpAndSettle();
+    expect(gateway.permissionTargets, ['powerMenuGuard']);
+    expect(
+      find
+          .textContaining('Не удалось открыть системные разрешения')
+          .hitTestable(),
+      findsOneWidget,
+    );
+    expect(state.controller.device.powerMenuGuardActive, isFalse);
+    expect(gateway.scheduleCalls, isEmpty);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   for (final platform in ['ios', 'preview']) {
     testWidgets('$platform does not expose Android protection actions', (
       tester,
@@ -310,6 +384,7 @@ void main() {
       final state = await showScreen(tester, gateway);
       expect(_key('device-reliability'), findsNothing);
       expect(_key('device-admin-change'), findsNothing);
+      expect(_key('power-menu-change'), findsNothing);
       expect(_key('alarm-recovery-manual'), findsNothing);
       expect(gateway.permissionTargets, isEmpty);
       if (platform == 'preview') {

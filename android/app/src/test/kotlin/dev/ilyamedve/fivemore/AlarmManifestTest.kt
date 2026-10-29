@@ -65,15 +65,23 @@ class AlarmManifestTest {
         assertEquals("false", service.getAttributeNS(androidNamespace, "exported"))
     }
 
-    @Test fun protectionDoesNotIntroduceAccessibilityOverlayOrDestructivePermissions() {
+    @Test fun protectionDoesNotIntroduceOverlayOrDestructivePermissions() {
         val manifest = root("AndroidManifest.xml")
         val permissions = elements(manifest, "uses-permission").map { it.getAttributeNS(androidNamespace, "name") }
         assertTrue(permissions.contains("android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"))
         for (permission in listOf("SYSTEM_ALERT_WINDOW", "BIND_ACCESSIBILITY_SERVICE", "MASTER_CLEAR", "MANAGE_DEVICE_ADMINS", "ACCESS_NOTIFICATION_POLICY")) {
             assertFalse(permissions.contains("android.permission.$permission"))
         }
-        assertFalse(elements(manifest, "service").any {
+        val service = elements(manifest, "service").single {
             it.getAttributeNS(androidNamespace, "permission") == "android.permission.BIND_ACCESSIBILITY_SERVICE"
-        })
+        }
+        assertEquals(".PowerMenuGuardService", service.getAttributeNS(androidNamespace, "name"))
+        val config = root("res/xml/power_menu_guard.xml")
+        assertEquals("com.android.systemui", config.getAttributeNS(androidNamespace, "packageNames"))
+        assertEquals("typeWindowStateChanged", config.getAttributeNS(androidNamespace, "accessibilityEventTypes"))
+        assertEquals("flagRetrieveInteractiveWindows", config.getAttributeNS(androidNamespace, "accessibilityFlags"))
+        for (capability in listOf("canPerformGestures", "canRequestFilterKeyEvents", "canTakeScreenshot", "isAccessibilityTool")) {
+            assertEquals("false", config.getAttributeNS(androidNamespace, capability))
+        }
     }
 }

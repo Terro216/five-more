@@ -19,6 +19,7 @@ class AlarmDeviceStatus {
     this.alarmMaxVolume,
     this.activeTest,
     this.deviceAdminActive,
+    this.powerMenuGuardActive,
     this.bootRecoverySupported,
     this.recoveryError,
   });
@@ -37,6 +38,7 @@ class AlarmDeviceStatus {
   final int? alarmMaxVolume;
   final DeviceAlarmCheck? activeTest;
   final bool? deviceAdminActive;
+  final bool? powerMenuGuardActive;
   final bool? bootRecoverySupported;
   final String? recoveryError;
   bool get canSchedule => supported && exactAlarms && notifications;
@@ -61,6 +63,9 @@ class AlarmDeviceStatus {
         activeTest: DeviceAlarmCheck.tryFromJson(json['activeTest']),
         deviceAdminActive: json['deviceAdminActive'] is bool
             ? json['deviceAdminActive'] as bool
+            : null,
+        powerMenuGuardActive: json['powerMenuGuardActive'] is bool
+            ? json['powerMenuGuardActive'] as bool
             : null,
         bootRecoverySupported: json['bootRecoverySupported'] is bool
             ? json['bootRecoverySupported'] as bool

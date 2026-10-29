@@ -28,6 +28,15 @@ class AlarmRingingService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var currentOccurrence: String? = null
     private var currentId: String? = null
+    private val renewWakeLock = object : Runnable {
+        override fun run() {
+            if (currentOccurrence == null) return
+            // Bounded acquisitions renew while this foreground alarm owns playback.
+            // Process death releases the lock; onDestroy removes this callback.
+            wakeLock?.acquire(10 * 60_000L)
+            handler.postDelayed(this, 5 * 60_000L)
+        }
+    }
     private val vibration: Vibrator by lazy {
         if (Build.VERSION.SDK_INT >= 31) getSystemService(VibratorManager::class.java).defaultVibrator
         else @Suppress("DEPRECATION") (getSystemService(VIBRATOR_SERVICE) as Vibrator)
@@ -45,7 +54,9 @@ class AlarmRingingService : Service() {
             enableVibration(false)
         }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "five_more:ringing")
+        wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "five_more:ringing").apply {
+            setReferenceCounted(false)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -62,16 +73,15 @@ class AlarmRingingService : Service() {
             currentId = alarm.getString("id")
             handler.removeCallbacksAndMessages(null)
             stopSound()
-            wakeLock?.let {
-                if (it.isHeld) it.release()
-                it.acquire(AlarmEngine.MAX_RING_MS + 60_000L)
-            }
+            wakeLock?.let { if (it.isHeld) it.release() }
+            renewWakeLock.run()
             startSound(alarm)
-            val remaining = (AlarmEngine.MAX_RING_MS - (System.currentTimeMillis() - alarm.optLong("ringingSince"))).coerceAtLeast(1L)
-            handler.postDelayed({
-                val id = currentId ?: return@postDelayed
-                AlarmEngine(this).dismiss(id, timedOut = true)
-            }, remaining)
+            AlarmRules.automaticStopDelay(alarm.getString("id"), alarm.optLong("ringingSince"), System.currentTimeMillis())?.let { remaining ->
+                handler.postDelayed({
+                    val id = currentId ?: return@postDelayed
+                    AlarmEngine(this).dismiss(id, timedOut = true)
+                }, remaining)
+            }
         }
         return START_STICKY
     }
@@ -155,6 +165,8 @@ class AlarmRingingService : Service() {
     }
 
     override fun onDestroy() {
+        currentOccurrence = null
+        currentId = null
         handler.removeCallbacksAndMessages(null)
         stopSound()
         wakeLock?.let { if (it.isHeld) it.release() }

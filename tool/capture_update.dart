@@ -19,6 +19,8 @@ import 'package:five_more/app/alarm_controller.dart';
 import 'package:five_more/app/theme.dart';
 import 'package:five_more/features/alarms/alarm_home.dart';
 import 'package:five_more/features/alarms/alarm_editor.dart';
+import 'package:five_more/features/alarms/device_check_screen.dart';
+import 'package:five_more/services/alarm_gateway.dart';
 import 'package:five_more/features/alarms/ringing_screen.dart';
 import 'package:five_more/features/challenges/challenge_models.dart';
 import 'package:five_more/features/challenges/challenge_screen.dart';
@@ -318,6 +320,68 @@ void main() {
       await _capture(tester, key, 'update-emergency-hold-${width.toInt()}');
       gateway.ringing = null;
       await controller.poll();
+      final protectionGateway = _PowerCaptureGateway()
+        ..nativeAlarms[alarm.id] = alarm;
+      final protectionController = AlarmController(
+        gateway: protectionGateway,
+        storage: MemoryAlarmStorage()
+          ..snapshot = AlarmSnapshot(alarms: [alarm]),
+        now: () => now,
+      );
+      await protectionController.initialize(startPolling: false);
+      key = await mount(DeviceCheckScreen(controller: protectionController));
+      await tester.scrollUntilVisible(
+        find.text('Надёжность и защита'),
+        220,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Надёжность и защита'));
+      await tester.pumpAndSettle();
+      final menuChange = find.byKey(const ValueKey('power-menu-change'));
+      await Scrollable.ensureVisible(
+        tester.element(find.text('Меню питания')),
+        alignment: .1,
+      );
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'update-protection-off-${width.toInt()}');
+      await tester.tap(menuChange);
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'update-protection-consent-${width.toInt()}');
+      final dialogScrollable = find
+          .descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      final dialogPosition = tester
+          .state<ScrollableState>(dialogScrollable)
+          .position;
+      dialogPosition.jumpTo(dialogPosition.maxScrollExtent);
+      await tester.pumpAndSettle();
+      await _capture(
+        tester,
+        key,
+        'update-protection-consent-end-${width.toInt()}',
+      );
+      await tester.tap(find.text('Отмена'));
+      await tester.pumpAndSettle();
+      protectionGateway.active = true;
+      await protectionController.refreshStatus();
+      await tester.pumpAndSettle();
+      await Scrollable.ensureVisible(
+        tester.element(find.text('Меню питания')),
+        alignment: .1,
+      );
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'update-protection-on-${width.toInt()}');
+      protectionGateway.rejectPermission = true;
+      await tester.tap(menuChange);
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'update-protection-error-${width.toInt()}');
+      await tester.pumpWidget(const SizedBox.shrink());
+      protectionController.dispose();
+
       for (final kind in [
         ChallengeKind.math,
         ChallengeKind.stroop,
@@ -348,6 +412,29 @@ void main() {
     }
     await tester.pumpWidget(const SizedBox.shrink());
   });
+}
+
+class _PowerCaptureGateway extends FakeAlarmGateway {
+  bool active = false;
+  bool rejectPermission = false;
+  @override
+  Future<void> requestPermissions({String? target}) async {
+    if (rejectPermission) throw PlatformException(code: 'settings_unavailable');
+  }
+
+  @override
+  Future<AlarmDeviceStatus> status() async => AlarmDeviceStatus(
+    platform: 'android',
+    supported: true,
+    exactAlarms: true,
+    notifications: true,
+    fullScreenIntent: true,
+    alarms: nativeAlarms.values.toList(),
+    powerMenuGuardActive: active,
+    bootRecoverySupported: true,
+    deviceAdminActive: false,
+    batteryOptimized: false,
+  );
 }
 
 Future<void> _capture(

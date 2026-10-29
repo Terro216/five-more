@@ -7,6 +7,10 @@ challenge preview, never an actual background alarm.
 - Keep alarm creation short; put advanced choices behind explicit controls.
 - Preserve native occurrence IDs and snooze counts across process death.
 - Never silence a real Android alarm just because a challenge screen opens.
+- Real Android wake-ups never expire by timer or reboot; previews remain bounded.
+  Optional power-menu protection requires explicit consent and Android activation.
+  Intercept only recognized, focused SystemUI power windows while a real alarm
+  rings; never inspect app content or close settings, calls, or unknown windows.
 - iOS AlarmKit has a system stop control: do not claim mandatory captchas on iOS.
 - Emergency dismissal is always available and recorded separately.
 - Scheduling failures must reach the user; never show an unscheduled alarm as active.

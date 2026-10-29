@@ -72,7 +72,7 @@ def verify_identity(badging, certificate, version, code, expected_certificate):
         raise ValueError('A debuggable APK cannot be published')
     if "sdkVersion:'26'" not in badging:
         raise ValueError('Unexpected minimum Android version')
-    # Network is limited to the explicitly enabled phrase source.
+    # Optional phrases and account sync use network only after explicit consent.
     for permission in ('READ_CONTACTS', 'ACCESS_FINE_LOCATION', 'READ_PHONE_STATE'):
         if f'android.permission.{permission}' in badging:
             raise ValueError(f'Unexpected personal-data permission: {permission}')

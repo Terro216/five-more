@@ -50,8 +50,10 @@ Dockerfile. Python dependencies are pinned in `requirements.txt`.
 Terminate TLS at the deployment's proxy; do not expose port 8080 directly to the
 internet. Preserve Authorization headers, set a request body limit of 20 MB and
 request timeouts, and disable body/header logging. Serve the two `.well-known`
-association files without redirects. Use the existing backup system for SQLite
-and audio, with the encryption key kept separately. A deployment is not ready
+association files without redirects. Keep SQLite and audio backups separate,
+with the encryption key kept independently. Audio archives stay on the same
+server; exclude both live audio and its backup objects from offsite jobs.
+A deployment is not ready
 until an isolated restore has been verified. Site-specific addresses, keys and
 recovery instructions must remain outside this public repository.
 
@@ -60,6 +62,17 @@ the key read-only. Use a read-only root filesystem, a temporary `/tmp`, dropped
 capabilities, `no-new-privileges`, and explicit memory/process limits. Keep one
 worker for this SQLite service. There is no production Compose file or automatic
 deployment in this repository.
+
+`backup.py` creates consistent SQLite snapshots with a matching encrypted-audio
+manifest. It holds a SQLite writer lock while copying the inventory, publishes
+the manifest last, and keeps 14 successful snapshots by default. Immutable audio
+objects are deduplicated across snapshots. Old objects are removed only after
+the last retained reference expires. An incomplete snapshot or overlapping
+backup does not prune previous snapshots. The database snapshots contain no audio bytes.
+Verification checks SQLite integrity, foreign keys, encrypted record payloads,
+and decrypted audio checksums. Restore refuses an existing destination and
+requires the separately held server key. Scheduling, independent key storage,
+and recovery procedures belong in private deployment configuration.
 
 Build the mobile app with `--dart-define=FIVE_MORE_SYNC_URL=https://<hostname>`.
 Android also requires the matching signing certificate in Digital Asset Links.
