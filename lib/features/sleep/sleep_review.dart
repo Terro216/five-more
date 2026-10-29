@@ -3,27 +3,65 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../models/alarm.dart';
 import '../../models/sleep_entry.dart';
+import '../../models/sleep_session.dart';
 import '../../services/sleep_journal.dart';
 import '../../widgets/time_composer.dart';
 
 class SleepReview extends StatefulWidget {
-  const SleepReview({super.key, required this.journal, required this.event});
+  const SleepReview({
+    super.key,
+    required this.journal,
+    required this.event,
+    this.session,
+  });
   final SleepJournal journal;
   final AlarmEvent event;
+  final SleepSession? session;
   @override
   State<SleepReview> createState() => _SleepReviewState();
 }
 
 class _SleepReviewState extends State<SleepReview> {
   int _sleep = 3, _wake = 3;
-  bool _saving = false;
-  late TimeOfDay _bed = TimeOfDay(
-    hour: widget.journal.bedHour,
-    minute: widget.journal.bedMinute,
-  );
+  bool _saving = false, _separate = false;
+  bool _bedEdited = false, _wakeEdited = false;
+  late DateTime _wakeAt = widget.event.at;
+  late TimeOfDay _bed = widget.session?.bedtimeCandidate == null
+      ? TimeOfDay(
+          hour: widget.journal.bedHour,
+          minute: widget.journal.bedMinute,
+        )
+      : TimeOfDay.fromDateTime(
+          widget.session!.bedtimeCandidate!.add(
+            Duration(minutes: widget.journal.fallingAsleepMinutes),
+          ),
+        );
   String? _error;
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.journal.entries
+        .where(
+          (e) =>
+              e.occurrenceId ==
+              (widget.session?.id ?? widget.event.occurrenceId),
+        )
+        .firstOrNull;
+    if (existing != null) {
+      _sleep = existing.sleepQuality;
+      _wake = existing.wakeQuality;
+      _bed = TimeOfDay.fromDateTime(existing.bedAt);
+      _bedEdited = existing.bedSource == 'manual';
+      if (existing.wakeSource == 'manual') {
+        _wakeAt = existing.wokeAt;
+        _wakeEdited = true;
+      }
+      _separate = existing.separate;
+    }
+  }
+
   DateTime get _bedAt {
-    final wake = widget.event.at;
+    final wake = _wakeAt;
     var value = DateTime(
       wake.year,
       wake.month,
@@ -77,8 +115,14 @@ class _SleepReviewState extends State<SleepReview> {
         const SizedBox(height: 24),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Во сколько лёг / легла?'),
-          subtitle: Text('По твоим воспоминаниям · ${clockLabel(_bed)}'),
+          title: const Text('Примерное время засыпания'),
+          subtitle: Text(
+            '${clockLabel(_bed)} · ${_bedEdited
+                ? "указано вручную"
+                : widget.session?.bedtimeCandidate == null
+                ? "обычное время"
+                : "настройка будильника + ${widget.journal.fallingAsleepMinutes} мин"}',
+          ),
           trailing: const Icon(Icons.edit_outlined),
           onTap: _saving
               ? null
@@ -86,18 +130,59 @@ class _SleepReviewState extends State<SleepReview> {
                   final value = await editClock(
                     context,
                     _bed,
-                    title: 'Когда лёг / легла',
+                    title: 'Когда примерно заснул(а)',
                   );
-                  if (value != null && mounted) setState(() => _bed = value);
+                  if (value != null && mounted) {
+                    setState(() {
+                      _bed = value;
+                      _bedEdited = true;
+                    });
+                  }
                 },
         ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Время подъёма'),
+          subtitle: Text(clockLabel(TimeOfDay.fromDateTime(_wakeAt))),
+          trailing: const Icon(Icons.edit_outlined),
+          onTap: _saving
+              ? null
+              : () async {
+                  final value = await editClock(
+                    context,
+                    TimeOfDay.fromDateTime(_wakeAt),
+                    title: 'Когда проснулся / проснулась',
+                  );
+                  if (value != null && mounted) {
+                    setState(() {
+                      _wakeAt = DateTime(
+                        _wakeAt.year,
+                        _wakeAt.month,
+                        _wakeAt.day,
+                        value.hour,
+                        value.minute,
+                      );
+                      _wakeEdited = true;
+                    });
+                  }
+                },
+        ),
+        if ((widget.session?.occurrences.length ?? 0) > 1)
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Последний звонок — отдельный сон'),
+            value: _separate,
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _separate = value),
+          ),
         Text(
-          'В постели до отключения будильника: ${remainingLabel(widget.event.at, _bedAt)}',
+          'Расчётный сон: ${remainingLabel(_wakeAt, _bedAt)}',
           style: const TextStyle(color: morning),
         ),
         const SizedBox(height: 16),
         const Text(
-          'Это оценка времени в постели. Приложение не измеряет момент засыпания и ночные пробуждения.',
+          'Время можно уточнить. Отключение будильника не подтверждает пробуждение.',
           style: TextStyle(color: muted, height: 1.5),
         ),
         if (_error != null)
@@ -114,8 +199,21 @@ class _SleepReviewState extends State<SleepReview> {
                   try {
                     await widget.journal.saveEntry(
                       SleepEntry(
-                        occurrenceId: widget.event.occurrenceId,
-                        wokeAt: widget.event.at,
+                        occurrenceId: _separate
+                            ? widget.event.occurrenceId
+                            : widget.session?.id ?? widget.event.occurrenceId,
+                        occurrences: _separate
+                            ? [widget.event.occurrenceId]
+                            : widget.session?.occurrences ??
+                                  [widget.event.occurrenceId],
+                        separate: _separate,
+                        bedSource: _bedEdited
+                            ? 'manual'
+                            : widget.session?.bedtimeCandidate == null
+                            ? 'habit'
+                            : 'alarm_setup',
+                        wakeSource: _wakeEdited ? 'manual' : 'alarm',
+                        wokeAt: _wakeAt,
                         bedAt: _bedAt,
                         sleepQuality: _sleep,
                         wakeQuality: _wake,

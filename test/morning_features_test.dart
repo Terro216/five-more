@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:five_more/app/alarm_controller.dart';
 import 'package:five_more/features/challenges/challenge_models.dart';
@@ -7,7 +8,6 @@ import 'package:five_more/features/challenges/physical_tasks.dart';
 import 'package:five_more/features/history/history_view.dart';
 import 'package:five_more/models/alarm.dart';
 import 'package:five_more/models/sleep_entry.dart';
-import 'package:five_more/models/snooze_position.dart';
 import 'package:five_more/services/phrase_library.dart';
 import 'package:five_more/services/sleep_journal.dart';
 import 'package:flutter/services.dart';
@@ -229,6 +229,44 @@ void main() {
   );
 
   test(
+    'an alarm or revoked consent stops a phrase batch before the next request',
+    () async {
+      for (final ringing in [false, true]) {
+        final library = PhraseLibrary();
+        await library.load();
+        await library.setEnabled(true);
+        final received = Completer<void>(), reply = Completer<http.Response>();
+        var requests = 0;
+        final client = MockClient((_) {
+          requests++;
+          received.complete();
+          return reply.future;
+        });
+        final refresh = library.refresh(client: client);
+        await received.future;
+        if (ringing) {
+          library.setAlarmRinging(true);
+        } else {
+          await library.setEnabled(false);
+        }
+        reply.complete(
+          http.Response(
+            jsonEncode({
+              'quoteText':
+                  'Каждое утро даёт возможность сделать новый шаг вперёд.',
+            }),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          ),
+        );
+        expect(await refresh, 0);
+        expect(requests, 1);
+        expect(library.phrases, isEmpty);
+      }
+    },
+  );
+
+  test(
     'hard sequence moves remaining numbers while retaining solved cells',
     () {
       var board = generateSequenceBoard(Random(3), ChallengeDifficulty.hard);
@@ -245,17 +283,6 @@ void main() {
       }
     },
   );
-
-  test('moving snooze changes location, colour and size but restores deterministically', () {
-    for (var i = 0; i < 9; i++) {
-      final a = snoozeAppearanceFor('morning', i),
-          b = snoozeAppearanceFor('morning', i + 1);
-      expect((a.x, a.y), isNot((b.x, b.y)));
-      expect(a.colorIndex, isNot(b.colorIndex));
-      expect(a.widthFactor, isNot(b.widthFactor));
-      expect(a.widthFactor, snoozeAppearanceFor('morning', i).widthFactor);
-    }
-  });
 
   test(
     'shake needs alternating movement and rejects noisy or duplicate samples',

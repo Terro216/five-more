@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/sleep_entry.dart';
 import 'native_extras.dart';
+import 'local_database.dart';
 
 class SleepJournal extends ChangeNotifier {
   static const _key = 'five_more.sleep.v1';
@@ -14,6 +15,7 @@ class SleepJournal extends ChangeNotifier {
   bool reminder = false;
   int bedHour = 23;
   int bedMinute = 0;
+  int fallingAsleepMinutes = 20;
   bool ready = false;
   String? error;
   bool _disposed = false;
@@ -23,7 +25,16 @@ class SleepJournal extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      final raw = (await SharedPreferences.getInstance()).getString(_key);
+      final stored = usesSqlite
+          ? await LocalDatabase.instance.setting('journal')
+          : null;
+      final raw = usesSqlite
+          ? jsonEncode({
+              ...?stored,
+              'entries': await LocalDatabase.instance.records('sleep'),
+              'notes': await LocalDatabase.instance.records('note'),
+            })
+          : (await SharedPreferences.getInstance()).getString(_key);
       if (raw != null) {
         final data = jsonDecode(raw) as Map<String, dynamic>;
         entries = (data['entries'] as List? ?? [])
@@ -38,6 +49,8 @@ class SleepJournal extends ChangeNotifier {
         reminder = data['reminder'] == true;
         bedHour = (data['bedHour'] as int? ?? 23).clamp(0, 23);
         bedMinute = (data['bedMinute'] as int? ?? 0).clamp(0, 59);
+        fallingAsleepMinutes = (data['fallingAsleepMinutes'] as int? ?? 20)
+            .clamp(0, 120);
       }
       ready = true;
       if (NativeExtras.available) {
@@ -47,9 +60,27 @@ class SleepJournal extends ChangeNotifier {
           final recovered = <VoiceNote>[];
           for (final raw in nativeNotes.whereType<Map>()) {
             final note = VoiceNote.fromJson(Map<String, dynamic>.from(raw));
+            if (usesSqlite &&
+                await LocalDatabase.instance.isDeleted('note', note.file)) {
+              continue;
+            }
             recovered.add(known[note.file] ?? note);
+            if (usesSqlite && !known.containsKey(note.file)) {
+              await LocalDatabase.instance.put(
+                'note',
+                note.file,
+                note.toJson(),
+                note.at.millisecondsSinceEpoch,
+              );
+            }
           }
-          notes = recovered;
+          // Remote notes may not have been downloaded to this device yet.
+          notes = [
+            ...recovered,
+            ...known.values.where(
+              (n) => !recovered.any((r) => r.file == n.file),
+            ),
+          ];
           notes.sort((a, b) => a.at.compareTo(b.at));
           final state = await NativeExtras.call<Map>('bedtimeState');
           if (state != null) {
@@ -74,6 +105,18 @@ class SleepJournal extends ChangeNotifier {
 
   Future<void> _persist() async {
     if (!ready) throw StateError('Дневник недоступен');
+    if (usesSqlite) {
+      final db = LocalDatabase.instance;
+      await db.setSetting('journal', {
+        'skipped': skipped.toList(),
+        'reminder': reminder,
+        'bedHour': bedHour,
+        'bedMinute': bedMinute,
+        'fallingAsleepMinutes': fallingAsleepMinutes,
+      });
+      _notify();
+      return;
+    }
     final ok = await (await SharedPreferences.getInstance()).setString(
       _key,
       jsonEncode({
@@ -83,6 +126,7 @@ class SleepJournal extends ChangeNotifier {
         'reminder': reminder,
         'bedHour': bedHour,
         'bedMinute': bedMinute,
+        'fallingAsleepMinutes': fallingAsleepMinutes,
       }),
     );
     if (!ok) throw StateError('Не удалось сохранить дневник');
@@ -90,6 +134,15 @@ class SleepJournal extends ChangeNotifier {
   }
 
   Future<void> saveEntry(SleepEntry entry) async {
+    if (!ready) throw StateError('Дневник недоступен');
+    if (usesSqlite) {
+      await LocalDatabase.instance.put(
+        'sleep',
+        entry.occurrenceId,
+        entry.toJson(),
+        entry.wokeAt.millisecondsSinceEpoch,
+      );
+    }
     final old = entries;
     entries = [
       ...entries.where((e) => e.occurrenceId != entry.occurrenceId),
@@ -114,6 +167,15 @@ class SleepJournal extends ChangeNotifier {
   }
 
   Future<void> addNote(VoiceNote note) async {
+    if (!ready) throw StateError('Дневник недоступен');
+    if (usesSqlite) {
+      await LocalDatabase.instance.put(
+        'note',
+        note.file,
+        note.toJson(),
+        note.at.millisecondsSinceEpoch,
+      );
+    }
     notes = [...notes, note];
     try {
       await _persist();
@@ -128,6 +190,7 @@ class SleepJournal extends ChangeNotifier {
     final old = notes;
     notes = notes.where((n) => n.file != note.file).toList();
     try {
+      if (usesSqlite) await LocalDatabase.instance.remove('note', note.file);
       await _persist();
     } catch (_) {
       notes = old;
@@ -161,9 +224,23 @@ class SleepJournal extends ChangeNotifier {
     }
   }
 
+  Future<void> setFallingAsleepMinutes(int value) async {
+    final previous = fallingAsleepMinutes;
+    fallingAsleepMinutes = value.clamp(0, 120);
+    try {
+      await _persist();
+    } catch (_) {
+      fallingAsleepMinutes = previous;
+      rethrow;
+    }
+  }
+
   bool reported(String occurrence) =>
       skipped.contains(occurrence) ||
-      entries.any((e) => e.occurrenceId == occurrence);
+      entries.any(
+        (e) =>
+            e.occurrenceId == occurrence || e.occurrences.contains(occurrence),
+      );
   @override
   void dispose() {
     _disposed = true;

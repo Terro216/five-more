@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/alarm.dart';
+import 'local_database.dart';
 import '../models/device_alarm_check.dart';
 
 class AlarmSnapshot {
@@ -26,6 +27,20 @@ class LocalAlarmStorage implements AlarmStorage {
 
   @override
   Future<AlarmSnapshot> load() async {
+    if (usesSqlite) {
+      final db = LocalDatabase.instance;
+      final state = await db.setting('alarm_state') ?? {};
+      return AlarmSnapshot(
+        alarms: (state['alarms'] as List? ?? [])
+            .map((e) => Alarm.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        events: (await db.records(
+          'event',
+          limit: 500,
+        )).reversed.map(AlarmEvent.fromJson).toList(),
+        deviceCheck: DeviceAlarmCheck.tryFromJson(state['deviceCheck']),
+      );
+    }
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
     if (raw == null) return const AlarmSnapshot();
@@ -45,6 +60,13 @@ class LocalAlarmStorage implements AlarmStorage {
 
   @override
   Future<void> save(AlarmSnapshot snapshot) async {
+    if (usesSqlite) {
+      await LocalDatabase.instance.saveAlarmState({
+        'alarms': snapshot.alarms.map((a) => a.toJson()).toList(),
+        'deviceCheck': snapshot.deviceCheck?.toJson(),
+      }, snapshot.events.map((e) => e.toJson()));
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     final saved = await prefs.setString(
       _key,

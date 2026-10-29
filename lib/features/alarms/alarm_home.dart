@@ -1,3 +1,7 @@
+import '../challenges/phrase_settings.dart';
+import '../sync/sync_screen.dart';
+import '../../services/sync_service.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -6,6 +10,7 @@ import 'package:flutter/semantics.dart';
 import '../../app/alarm_controller.dart';
 import '../../app/theme.dart';
 import '../../models/alarm.dart';
+import '../../models/sleep_session.dart';
 import '../challenges/challenge_models.dart';
 import '../challenges/challenge_screen.dart';
 import 'alarm_editor.dart';
@@ -81,31 +86,23 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
       ),
     );
     if (mounted) {
-      _message(
-        result.ok
-            ? 'Время изменено'
-            : result.error ?? 'Не удалось изменить время',
-      );
+      if (!result.ok) _message(result.error ?? 'Не удалось изменить время');
     }
   }
 
   Widget _morningReview() {
-    final event = controller.events
-        .where(
-          (e) =>
-              const [
-                'dismissed',
-                'emergency',
-                'emergency_dismissed',
-              ].contains(e.type) &&
-              !e.alarmId.startsWith('preview:') &&
-              !e.at.isAfter(controller.now) &&
-              controller.now.difference(e.at) < const Duration(hours: 18),
-        )
-        .firstOrNull;
+    final session = SleepSession.fromEvents(
+      controller.events,
+      separateOccurrences: _journal.entries
+          .where((e) => e.separate)
+          .map((e) => e.occurrenceId)
+          .toSet(),
+    ).lastOrNull;
+    final event = session?.lastEvent;
     if (!_journal.ready ||
         event == null ||
-        _journal.reported(event.occurrenceId)) {
+        _journal.reported(event.occurrenceId) ||
+        controller.now.difference(event.at) > const Duration(hours: 18)) {
       return const SizedBox.shrink();
     }
     return Padding(
@@ -128,8 +125,11 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(
-                    builder: (_) =>
-                        SleepReview(journal: _journal, event: event),
+                    builder: (_) => SleepReview(
+                      journal: _journal,
+                      event: event,
+                      session: session,
+                    ),
                   ),
                 ),
                 child: const Text('Оценить утро'),
@@ -163,18 +163,11 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
   AlarmController get controller => widget.controller;
 
   Future<void> _edit([Alarm? alarm]) async {
-    final saved = await Navigator.of(context).push<bool>(
+    await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => AlarmEditor(controller: controller, alarm: alarm),
       ),
     );
-    if (saved == true && mounted) {
-      _message(
-        controller.device.supported
-            ? 'Будильник сохранён'
-            : 'Черновик сохранён. Срабатывание недоступно.',
-      );
-    }
   }
 
   void _message(String text) {
@@ -271,6 +264,19 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
             icon: const Icon(Icons.phonelink_ring_outlined),
           ),
           IconButton(
+            tooltip: 'Синхронизация',
+            icon: const Icon(Icons.cloud_outlined),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => SyncScreen(sync: SyncService.instance),
+                ),
+              );
+              await _journal.load();
+            },
+          ),
+          IconButton(
             tooltip: 'О приложении',
             onPressed: _about,
             icon: const Icon(Icons.info_outline_rounded),
@@ -347,6 +353,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                   1 => _challenges(),
                   2 => BedtimeScreen(journal: _journal),
                   _ => HistoryView(
+                    archive: true,
                     events: controller.events,
                     journal: _journal,
                     now: controller.now,
@@ -747,12 +754,12 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                         style: const TextStyle(color: muted, fontSize: 12),
                       ),
                       Text(
-                        alarm.maxSnoozes == 0
+                        alarm.snoozeBudget == 0
                             ? 'Без переносов'
-                            : '${alarm.maxSnoozes} × ${alarm.snoozeMinutes} мин',
+                            : '${alarm.snoozeBudget} мин на переносы',
                         style: const TextStyle(color: morning, fontSize: 12),
                       ),
-                      if (alarm.escalateOnSnooze && alarm.maxSnoozes > 0)
+                      if (alarm.escalateOnSnooze && alarm.snoozeBudget > 0)
                         const Text(
                           'Сложнее после переноса',
                           style: TextStyle(color: morning, fontSize: 12),
@@ -805,6 +812,8 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
             .toList(),
       ),
       const SizedBox(height: 12),
+      const PhraseSettings(),
+      const SizedBox(height: 12),
       ...ChallengeKind.values.map(
         (kind) => ListTile(
           key: ValueKey('practice-kind-${kind.name}'),
@@ -846,7 +855,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
         content: Text(
           'Версия · $version\n\n'
           'Простой будильник, ограниченные переносы и задания для пробуждения.\n\n'
-          'Без регистрации и рекламы. Записи, оценки сна и история остаются на телефоне. Фразы из интернета — только по желанию.\n\n'
+          'Работает без аккаунта и рекламы. Историю и оценки сна можно синхронизировать по желанию. Загрузка голоса доступна только разрешённому сервером аккаунту.\n\n'
           'Перед первым утром проверь срабатывание на своём телефоне. '
           'После принудительной остановки приложения открой его снова.',
         ),

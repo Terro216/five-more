@@ -1,3 +1,5 @@
+import 'package:five_more/services/local_database.dart';
+
 import 'dart:convert';
 
 import 'package:five_more/app/alarm_controller.dart';
@@ -98,6 +100,8 @@ void main() {
         at: DateTime(2026, 10, 22, 7, 30),
         snoozesUsed: 1,
       );
+      await LocalDatabase.instance.close();
+      LocalDatabase.instance = LocalDatabase(path: ':memory:');
       SharedPreferences.setMockInitialValues({
         'five_more.state.v1': jsonEncode({
           'version': 2,

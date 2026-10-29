@@ -16,6 +16,65 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'alarm_fakes.dart';
 
 void main() {
+  for (final extend in [false, true]) {
+    testWidgets(
+      'recording saves at ${extend ? "ten minutes after explicit extension" : "five minutes by default"}',
+      (tester) async {
+        var stops = 0, extensions = 0;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(NativeExtras.channel, (call) async {
+              if (call.method == 'extendRecording') extensions++;
+              if (call.method == 'stopRecording') {
+                stops++;
+                return {'file': 'limit.m4a', 'seconds': extend ? 600 : 300};
+              }
+              return null;
+            });
+        addTearDown(
+          () => TestDefaultBinaryMessengerBinding
+              .instance
+              .defaultBinaryMessenger
+              .setMockMethodCallHandler(NativeExtras.channel, null),
+        );
+        final journal = SleepJournal()..ready = true;
+        addTearDown(journal.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: fiveMoreTheme(),
+            home: Scaffold(body: BedtimeScreen(journal: journal)),
+          ),
+        );
+        await tester.tap(find.byKey(const ValueKey('record-morning-note')));
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(seconds: 299));
+        expect(stops, 0);
+        if (extend) {
+          await tester.tap(find.textContaining('Ещё 5 минут'));
+          await tester.pumpAndSettle();
+          expect(extensions, 1);
+        }
+        await tester.pump(const Duration(seconds: 1));
+        if (extend) {
+          expect(stops, 0);
+          await tester.pump(const Duration(minutes: 5));
+        }
+        for (
+          var attempt = 0;
+          attempt < 20 && journal.notes.isEmpty;
+          attempt++
+        ) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump();
+        }
+        expect(stops, 1);
+        expect(journal.notes.single.seconds, extend ? 600 : 300);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets(
     'hour taps, drags and typing advance to minutes after selection',
     (tester) async {
@@ -204,6 +263,16 @@ void main() {
           await tester.pumpWidget(const SizedBox.shrink());
         } else {
           await tester.tap(record);
+        }
+        for (
+          var attempt = 0;
+          attempt < 20 && journal.notes.isEmpty;
+          attempt++
+        ) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump();
         }
         await tester.pumpAndSettle();
         expect(stops, 1);

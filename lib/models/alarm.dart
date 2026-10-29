@@ -36,6 +36,9 @@ class Alarm {
     this.enabled = true,
     this.snoozeMinutes = 5,
     this.maxSnoozes = 3,
+    this.snoozeBudgetMinutes,
+    this.volumeRampSeconds = 10,
+    this.armedAt,
     this.challengeKind = ChallengeKind.math,
     this.difficulty = ChallengeDifficulty.medium,
     this.escalateOnSnooze = false,
@@ -64,7 +67,12 @@ class Alarm {
   final List<int> weekdays;
   final bool enabled;
   final int snoozeMinutes;
+  // Kept only to migrate configurations written before minute budgets.
   final int maxSnoozes;
+  final int? snoozeBudgetMinutes;
+  int get snoozeBudget => snoozeBudgetMinutes ?? maxSnoozes * snoozeMinutes;
+  final int volumeRampSeconds;
+  final DateTime? armedAt;
   final ChallengeKind challengeKind;
   final ChallengeDifficulty difficulty;
   final bool escalateOnSnooze;
@@ -126,6 +134,9 @@ class Alarm {
     bool? enabled,
     int? snoozeMinutes,
     int? maxSnoozes,
+    int? snoozeBudgetMinutes,
+    int? volumeRampSeconds,
+    DateTime? armedAt,
     ChallengeKind? challengeKind,
     ChallengeDifficulty? difficulty,
     bool? escalateOnSnooze,
@@ -152,6 +163,9 @@ class Alarm {
     enabled: enabled ?? this.enabled,
     snoozeMinutes: snoozeMinutes ?? this.snoozeMinutes,
     maxSnoozes: maxSnoozes ?? this.maxSnoozes,
+    snoozeBudgetMinutes: snoozeBudgetMinutes ?? this.snoozeBudgetMinutes,
+    volumeRampSeconds: volumeRampSeconds ?? this.volumeRampSeconds,
+    armedAt: armedAt ?? this.armedAt,
     challengeKind: challengeKind ?? this.challengeKind,
     difficulty: difficulty ?? this.difficulty,
     escalateOnSnooze: escalateOnSnooze ?? this.escalateOnSnooze,
@@ -173,6 +187,9 @@ class Alarm {
     'enabled': enabled,
     'snoozeMinutes': snoozeMinutes,
     'maxSnoozes': maxSnoozes,
+    'snoozeBudgetMinutes': snoozeBudget,
+    'volumeRampSeconds': volumeRampSeconds,
+    'armedAt': armedAt?.millisecondsSinceEpoch,
     'challengeKind': challengeKind.name,
     'difficulty': difficulty.name,
     'escalateOnSnooze': escalateOnSnooze,
@@ -212,6 +229,13 @@ class Alarm {
       enabled: json['enabled'] == true,
       snoozeMinutes: intValue(json['snoozeMinutes'], 5).clamp(1, 30),
       maxSnoozes: intValue(json['maxSnoozes'], 3).clamp(0, 10),
+      snoozeBudgetMinutes: json['snoozeBudgetMinutes'] is num
+          ? intValue(json['snoozeBudgetMinutes'], 15).clamp(0, 300)
+          : null,
+      volumeRampSeconds: [0, 10, 30, 60].contains(json['volumeRampSeconds'])
+          ? intValue(json['volumeRampSeconds'], 10)
+          : 10,
+      armedAt: parseNextTimestamp(json['armedAt']),
       challengeKind: ChallengeKind.values.firstWhere(
         (kind) => kind.name == json['challengeKind'],
         orElse: () => ChallengeKind.math,
@@ -248,6 +272,7 @@ class AlarmEvent {
     required this.type,
     required this.at,
     this.snoozesUsed = 0,
+    this.snoozedMinutes = 0,
     this.nextAt,
   });
   final String eventId;
@@ -256,6 +281,7 @@ class AlarmEvent {
   final String type;
   final DateTime at;
   final int snoozesUsed;
+  final int snoozedMinutes;
   final DateTime? nextAt;
 
   factory AlarmEvent.fromJson(Map<String, dynamic> json) => AlarmEvent(
@@ -265,6 +291,7 @@ class AlarmEvent {
     type: json['type'] as String? ?? 'unknown',
     at: parseTimestamp(json['at']) ?? DateTime.fromMillisecondsSinceEpoch(0),
     snoozesUsed: intValue(json['snoozesUsed'], 0),
+    snoozedMinutes: intValue(json['snoozedMinutes'], 0),
     nextAt: parseNextTimestamp(json['nextAt']),
   );
   Map<String, Object?> toJson() => {
@@ -274,10 +301,12 @@ class AlarmEvent {
     'type': type,
     'at': at.millisecondsSinceEpoch,
     'snoozesUsed': snoozesUsed,
+    'snoozedMinutes': snoozedMinutes,
     if (nextAt != null) 'nextAt': nextAt!.millisecondsSinceEpoch,
   };
 
   String get label => switch (type) {
+    'armed' => 'Будильник настроен',
     'fired' || 'ringing' => 'Будильник зазвонил',
     'snoozed' => 'Перенос №$snoozesUsed',
     'dismissed' => 'Будильник отключён',
@@ -296,12 +325,21 @@ class RingingAlarm {
     required this.occurrenceId,
     required this.firedAt,
     required this.snoozesUsed,
+    this.snoozedMinutes,
   });
   final Alarm alarm;
   final String occurrenceId;
   final DateTime firedAt;
   final int snoozesUsed;
-  int get snoozesRemaining => (alarm.maxSnoozes - snoozesUsed).clamp(0, 10);
+  final int? snoozedMinutes;
+  int get minutesRemaining =>
+      (alarm.snoozeBudget -
+              (snoozedMinutes ?? snoozesUsed * alarm.snoozeMinutes))
+          .clamp(0, 300);
+  int get defaultSnoozeMinutes =>
+      alarm.snoozeMinutes.clamp(1, minutesRemaining.clamp(1, 30));
+  // Compatibility for consumers which only need to know whether snooze is available.
+  int get snoozesRemaining => (minutesRemaining / alarm.snoozeMinutes).ceil();
   ChallengeDifficulty get challengeDifficulty =>
       alarm.difficultyForSnoozes(snoozesUsed);
 
@@ -313,6 +351,9 @@ class RingingAlarm {
       occurrenceId: json['occurrenceId'] as String? ?? config['id'] as String,
       firedAt: parseTimestamp(json['firedAt']) ?? DateTime.now(),
       snoozesUsed: intValue(json['snoozesUsed'], 0),
+      snoozedMinutes: json['snoozedMinutes'] is num
+          ? intValue(json['snoozedMinutes'], 0)
+          : null,
     );
   }
 }

@@ -47,6 +47,7 @@ class AlarmStore(context: Context) {
             .put("type", type)
             .put("at", at)
             .put("snoozesUsed", alarm.optInt("snoozesUsed"))
+            .put("snoozedMinutes", alarm.optInt("snoozedMinutes"))
             .put("snoozeMinutes", alarm.optInt("snoozeMinutes", 5))
             .put("nextAt", alarm.optLong("nextAt"))
             .put("enabled", alarm.optBoolean("enabled"))

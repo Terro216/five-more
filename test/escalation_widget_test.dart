@@ -200,7 +200,11 @@ void main() {
     await controller.initialize(startPolling: false);
     await _openEditor(tester, controller, _alarm, width: 320, textScale: 1.5);
 
-    final selector = find.byType(DropdownButtonFormField<int>);
+    final selector = find.byWidgetPredicate(
+      (widget) =>
+          widget is DropdownButtonFormField<int> &&
+          widget.key != const ValueKey('volume-ramp'),
+    );
     await _tapScrolled(tester, selector);
     await tester.tap(find.text('После 2 переносов · Сложно').last);
     await tester.pumpAndSettle();
@@ -227,7 +231,14 @@ void main() {
     await controller.initialize(startPolling: false);
     await _openEditor(tester, controller, _alarm);
 
-    await _tapScrolled(tester, find.byType(DropdownButtonFormField<int>));
+    await _tapScrolled(
+      tester,
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<int> &&
+            widget.key != const ValueKey('volume-ramp'),
+      ),
+    );
     await tester.tap(find.text('После 2 переносов · Сложно').last);
     await tester.pumpAndSettle();
     final toggle = find.byKey(const ValueKey('escalate-on-snooze'));
@@ -235,7 +246,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(toggle);
     await tester.pumpAndSettle();
-    expect(find.byType(DropdownButtonFormField<int>), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<int> &&
+            widget.key != const ValueKey('volume-ramp'),
+      ),
+      findsNothing,
+    );
     await _tapScrolled(tester, find.byKey(const ValueKey('practice-alarm')));
     expect(
       tester.widget<ChallengeScreen>(find.byType(ChallengeScreen)).difficulty,
@@ -268,11 +286,7 @@ void main() {
           textScale: 1.5,
         );
         expect(
-          find.text(
-            used == 1
-                ? 'Средне · после 1 переноса'
-                : 'Сложно · после 2 переносов',
-          ),
+          find.text(used == 1 ? 'Сложность: Средне' : 'Сложность: Сложно'),
           findsOneWidget,
         );
         await _tapScrolled(tester, find.text('Пройти задание'));

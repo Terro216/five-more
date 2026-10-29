@@ -10,8 +10,15 @@ challenge preview, never an actual background alarm.
 - iOS AlarmKit has a system stop control: do not claim mandatory captchas on iOS.
 - Emergency dismissal is always available and recorded separately.
 - Scheduling failures must reach the user; never show an unscheduled alarm as active.
-- No tracking SDKs, accounts, or voice uploads. Statistics and recordings stay local.
-  Online mirror phrases require explicit opt-in; never fetch during an alarm.
+- No tracking SDKs. Offline alarms never depend on an account or the sync service.
+  Statistics sync requires explicit opt-in. Audio sync additionally requires a
+  server-side account allowlist and separate consent; default-deny for all others.
+  The server can decrypt statistics and audio; never describe this as end-to-end
+  encryption. Keep tokens in platform secure storage and recovery keys out of logs.
+  Online mirror phrases require explicit opt-in; suspend network work during alarms.
+- History lives in SQLite. Preserve legacy data until migration succeeds; native
+  events are acknowledged only after durable local persistence. Paginate archives
+  independently of graph aggregates. Snooze limits use spent minutes, never count.
 - Device-check success is an explicit user report, never inferred from a native event.
 - Test occurrences have preview-only IDs; cancellation must not change real schedules.
 - Snooze escalation uses the native occurrence counter; keep the saved base level unchanged.

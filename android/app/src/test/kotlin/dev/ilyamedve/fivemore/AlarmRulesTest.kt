@@ -171,4 +171,25 @@ class AlarmRulesTest {
         assertNull(AlarmRules.nextSnooze(0, 0, 0, 3))
         assertNull(AlarmRules.nextSnooze(0, 10, 5, 3))
     }
+    @Test fun fifteenMinutesAllowFifteenShortSnoozesAndSurviveRestoration() {
+        var spent = 0
+        for (used in 0 until 15) {
+            val next = AlarmRules.nextBudgetSnooze(1_000L, used, spent, 1, 15)!!
+            assertEquals(used + 1, next.used)
+            spent = next.totalMinutes
+        }
+        assertEquals(15, spent)
+        assertNull(AlarmRules.nextBudgetSnooze(1_000L, 15, spent, 1, 15))
+        assertNull(AlarmRules.nextBudgetSnooze(1_000L, 1, 14, 5, 15))
+        assertEquals(15, AlarmRules.nextBudgetSnooze(1_000L, 1, 14, 1, 15)!!.totalMinutes)
+    }
+
+    @Test fun invalidMinuteCountersCannotCreateMoreSnoozeTime() {
+        assertNull(AlarmRules.nextBudgetSnooze(0, -1, 0, 1, 15))
+        assertNull(AlarmRules.nextBudgetSnooze(0, 0, -1, 1, 15))
+        assertNull(AlarmRules.nextBudgetSnooze(0, 0, 0, 31, 60))
+        assertNull(AlarmRules.nextBudgetSnooze(0, 0, 0, 1, 0))
+        assertNull(AlarmRules.nextBudgetSnooze(0, 0, 16, 1, 15))
+    }
+
 }

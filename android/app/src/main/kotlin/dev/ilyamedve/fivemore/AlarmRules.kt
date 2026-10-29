@@ -5,7 +5,7 @@ import java.util.TimeZone
 
 /** Pure scheduling rules shared by the receiver/service and covered without an Android runtime. */
 object AlarmRules {
-    data class Snooze(val used: Int, val nextAt: Long)
+    data class Snooze(val used: Int, val nextAt: Long, val totalMinutes: Int = 0)
     data class ChallengeOptions(
         val kind: String,
         val difficulty: String,
@@ -79,6 +79,11 @@ object AlarmRules {
     fun nextSnooze(now: Long, used: Int, minutes: Int, limit: Int): Snooze? {
         if (used < 0 || minutes !in 1..30 || limit !in 0..10 || used >= limit) return null
         return Snooze(used + 1, now + minutes * 60_000L)
+    }
+
+    fun nextBudgetSnooze(now: Long, used: Int, spentMinutes: Int, minutes: Int, budget: Int): Snooze? {
+        if (used < 0 || spentMinutes < 0 || budget !in 0..300 || minutes !in 1..30 || minutes > budget - spentMinutes) return null
+        return Snooze(used + 1, now + minutes * 60_000L, spentMinutes + minutes)
     }
 
     /** Calendar days, not 24-hour additions, preserve selected wall time across DST. */

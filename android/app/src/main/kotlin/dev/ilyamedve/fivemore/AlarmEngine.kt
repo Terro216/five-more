@@ -77,6 +77,9 @@ class AlarmEngine(private val context: Context) {
         val minute = (arguments["minute"] as? Number)?.toInt() ?: return fail("invalid_minute")
         val snoozeMinutes = (arguments["snoozeMinutes"] as? Number)?.toInt() ?: 5
         val maxSnoozes = (arguments["maxSnoozes"] as? Number)?.toInt() ?: 3
+        val budget = (arguments["snoozeBudgetMinutes"] as? Number)?.toInt() ?: maxSnoozes * snoozeMinutes
+        val ramp = (arguments["volumeRampSeconds"] as? Number)?.toInt() ?: 10
+        if (budget !in 0..300 || ramp !in setOf(0, 10, 30, 60)) return fail("invalid_schedule")
         val weekdays = (arguments["weekdays"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() } ?: emptyList()
         if (hour !in 0..23 || minute !in 0..59 || snoozeMinutes !in 1..30 || maxSnoozes !in 0..10 || weekdays.any { it !in 1..7 }) return fail("invalid_schedule")
         val challenge = AlarmRules.challengeOptions(arguments, fromStoredConfiguration = test != null)
@@ -95,6 +98,8 @@ class AlarmEngine(private val context: Context) {
             .put("id", id).put("title", (arguments["title"] as? String ?: "Ещё пять").take(160))
             .put("hour", hour).put("minute", minute).put("weekdays", JSONArray(weekdays.distinct()))
             .put("enabled", enabled).put("snoozeMinutes", snoozeMinutes).put("maxSnoozes", maxSnoozes)
+            .put("snoozeBudgetMinutes", budget).put("snoozedMinutes", 0).put("volumeRampSeconds", ramp)
+            .put("armedAt", (arguments["armedAt"] as? Number)?.toLong() ?: 0L)
             .put("challengeKind", challenge.kind).put("difficulty", challenge.difficulty)
             .put("escalateOnSnooze", challenge.escalateOnSnooze)
             .put("moveSnoozeButton", challenge.moveSnoozeButton)
@@ -145,11 +150,14 @@ class AlarmEngine(private val context: Context) {
     fun snooze(id: String, minutes: Int? = null): Map<String, Any?> {
         val alarm = store.get(id) ?: return fail("not_found")
         if (alarm.optString("state") != "ringing") return fail("not_ringing")
-        val snooze = AlarmRules.nextSnooze(System.currentTimeMillis(), alarm.optInt("snoozesUsed"), (minutes ?: alarm.optInt("snoozeMinutes", 5)), alarm.optInt("maxSnoozes", 3))
+        val budget = alarm.optInt("snoozeBudgetMinutes", alarm.optInt("maxSnoozes", 3) * alarm.optInt("snoozeMinutes", 5))
+        val spent = alarm.optInt("snoozedMinutes", alarm.optInt("snoozesUsed") * alarm.optInt("snoozeMinutes", 5))
+        val chosen = minutes ?: minOf(alarm.optInt("snoozeMinutes", 5), budget - spent)
+        val snooze = AlarmRules.nextBudgetSnooze(System.currentTimeMillis(), alarm.optInt("snoozesUsed"), spent, chosen, budget)
             ?: return fail("snooze_limit")
         if (!canSchedule()) return fail("exact_alarm_permission")
         val previous = JSONObject(alarm.toString())
-        alarm.put("snoozesUsed", snooze.used)
+        alarm.put("snoozesUsed", snooze.used).put("snoozedMinutes", snooze.totalMinutes)
             .put("state", "snoozed")
             .put("nextAt", snooze.nextAt)
         store.put(alarm)
@@ -329,7 +337,7 @@ class AlarmEngine(private val context: Context) {
             alarm.put("enabled", false).put("state", "disabled").put("nextAt", 0L)
         } else {
             alarm.put("occurrenceId", UUID.randomUUID().toString())
-                .put("state", "scheduled").put("snoozesUsed", 0)
+                .put("state", "scheduled").put("snoozesUsed", 0).put("snoozedMinutes", 0)
                 .put("firedAt", 0L).put("ringingSince", 0L)
                 .put("nextAt", nextOccurrence(alarm))
         }

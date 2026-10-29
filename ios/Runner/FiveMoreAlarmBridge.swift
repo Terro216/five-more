@@ -92,6 +92,7 @@ private enum FiveMoreAlarmStore {
       "eventId": UUID().uuidString, "id": record["id"] as? String ?? "",
       "occurrenceId": record["occurrenceId"] as? String ?? "",
       "type": type, "at": now(), "snoozesUsed": record["snoozesUsed"] as? Int ?? 0,
+      "snoozedMinutes": record["snoozedMinutes"] as? Int ?? 0,
     ]
     if let nextAt { event["nextAt"] = nextAt }
     events.append(event)
@@ -199,6 +200,7 @@ private enum FiveMoreAlarmStore {
     if isBase || record["occurrenceId"] == nil {
       record["occurrenceId"] = UUID().uuidString
       record["snoozesUsed"] = 0
+      record["snoozedMinutes"] = 0
       // This is an observation time, not a claimed daemon delivery timestamp.
       record["firedAt"] = now()
     }
@@ -478,6 +480,9 @@ private final class FiveMoreAlarmEngine {
     if sound != "system" { _ = try FiveMoreExtrasBridge.soundURL(sound) }
     return [
       "oneShotAt": oneShot, "mixOrder": order, "qrValue": qr,
+      "snoozeBudgetMinutes": min(300, max(0, args["snoozeBudgetMinutes"] as? Int ?? (args["maxSnoozes"] as? Int ?? 3) * (args["snoozeMinutes"] as? Int ?? 5))),
+      "armedAt": args["armedAt"] as? Int64 ?? 0,
+      "volumeRampSeconds": args["volumeRampSeconds"] as? Int ?? 10,
       "sound": sound, "soundLabel": args["soundLabel"] as? String ?? "Системный будильник",
       "id": id, "title": String((args["title"] as? String ?? "").prefix(100)),
       "hour": hour, "minute": minute, "weekdays": Array(Set(days)).sorted(),
@@ -600,9 +605,11 @@ private final class FiveMoreAlarmEngine {
     guard let id = args["id"] as? String else { throw failure("Не указан будильник.") }
     let (currentID, record, config) = try active(id)
     let used = record["snoozesUsed"] as? Int ?? 0
-    let maximum = config["maxSnoozes"] as? Int ?? 0
-    guard used < maximum else { throw failure("Переносы закончились. Пора выполнить задание.") }
-    let minutes = args["minutes"] as? Int ?? config["snoozeMinutes"] as? Int ?? 5
+    let baseMinutes = config["snoozeMinutes"] as? Int ?? 5
+    let budget = config["snoozeBudgetMinutes"] as? Int ?? (config["maxSnoozes"] as? Int ?? 3) * baseMinutes
+    let spent = record["snoozedMinutes"] as? Int ?? used * baseMinutes
+    let minutes = args["minutes"] as? Int ?? min(baseMinutes, budget - spent)
+    guard minutes <= budget - spent else { throw failure("Запас минут закончился.") }
     guard (1...30).contains(minutes) else { throw failure("Выбери перенос от 1 до 30 минут.") }
     let next = Date().addingTimeInterval(TimeInterval(minutes * 60))
     let nextAt = Int64(next.timeIntervalSince1970 * 1000)
@@ -631,6 +638,7 @@ private final class FiveMoreAlarmEngine {
     nextRecord["kind"] = "snooze"
     nextRecord["state"] = "scheduled"
     nextRecord["snoozesUsed"] = used + 1
+    nextRecord["snoozedMinutes"] = spent + minutes
     nextRecord["nextAt"] = nextAt
     instances[uuid.uuidString] = nextRecord
     FiveMoreAlarmStore.instances = instances
@@ -777,13 +785,15 @@ private final class FiveMoreAlarmEngine {
 }
 #endif
 
-// Optional local-only morning audio and bedtime notifications.
+// Optional morning audio and bedtime notifications; alarm playback is independent.
 import AVFoundation
 import UserNotifications
 import UniformTypeIdentifiers
 
 @MainActor
 final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNotificationCenterDelegate {
+  private var recordingLimit: TimeInterval = 300
+  private var recordingStop: DispatchWorkItem?
   private var recorder: AVAudioRecorder?
   private var player: AVAudioPlayer?
   private var recordURL: URL?
@@ -800,6 +810,7 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
     channel = FlutterMethodChannel(name: "five_more/extras", binaryMessenger: messenger)
     super.init()
     UNUserNotificationCenter.current().delegate = self
+    NotificationCenter.default.addObserver(self, selector: #selector(stopRecordingInBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self else { return }
       Task { @MainActor in
@@ -807,6 +818,17 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
         catch { result(FlutterError(code: "extras_error", message: error.localizedDescription, details: nil)) }
       }
     }
+  }
+  @objc private func stopRecordingInBackground() {
+    recordingStop?.cancel()
+    recorder?.stop()
+    if player == nil { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
+  }
+  private func scheduleRecordingStop() {
+    recordingStop?.cancel()
+    let work = DispatchWorkItem { [weak self] in self?.stopRecordingInBackground() }
+    recordingStop = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + max(0, recordingLimit - (recorder?.currentTime ?? 0)), execute: work)
   }
   private func fail(_ text: String) -> NSError { NSError(domain: "FiveMoreExtras", code: 1, userInfo: [NSLocalizedDescriptionKey: text]) }
   private func idleAudio() throws {
@@ -867,14 +889,36 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
       try session.setCategory(.playAndRecord, options: [.defaultToSpeaker, .mixWithOthers])
       try session.setActive(true)
       let next = try AVAudioRecorder(url: url, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 22050, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 64000])
+      recordingLimit = 300
       guard next.record() else { throw fail("Не удалось начать запись.") }
-      recorder = next; recordURL = url; result(nil)
+      recorder = next; recordURL = url; scheduleRecordingStop(); result(nil)
+    case "extendRecording":
+      guard let current = recorder, current.isRecording else { throw fail("Запись уже завершена.") }
+      recordingLimit += 300
+      scheduleRecordingStop()
+      result(nil)
+    case "timeZone": result(TimeZone.current.identifier)
+    case "readNote":
+      let url = try localNote(args["file"])
+      let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+      guard size <= 20_000_000 else { throw fail("Запись слишком большая.") }
+      let data = try Data(contentsOf: url)
+      guard data.count <= 20_000_000 else { throw fail("Запись слишком большая.") }
+      result(FlutterStandardTypedData(bytes: data))
+    case "writeNote":
+      let url = try localNote(args["file"])
+      guard let data = args["bytes"] as? FlutterStandardTypedData, data.data.count <= 20_000_000 else { throw fail("Неверная запись.") }
+      try FileManager.default.createDirectory(at: Self.noteDirectory, withIntermediateDirectories: true)
+      if !FileManager.default.fileExists(atPath: url.path) { try data.data.write(to: url, options: .atomic) }
+      result(nil)
     case "stopRecording":
+      recordingStop?.cancel()
       guard let current = recorder, let url = recordURL else { result(nil); return }
       let seconds = max(0, Int(current.currentTime))
+      let fileSeconds = (try? AVAudioFile(forReading: url)).map { Int(Double($0.length) / $0.processingFormat.sampleRate) } ?? seconds
       current.stop(); recorder = nil
       try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-      result(["file": url.lastPathComponent, "seconds": seconds])
+      result(["file": url.lastPathComponent, "seconds": max(seconds, fileSeconds)])
     case "stopAudio":
       player?.stop(); player = nil
       if recorder == nil { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
@@ -882,7 +926,8 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
     case "playNote": try play(try localNote(args["file"])); result(nil)
     case "deleteNote":
       player?.stop(); player = nil
-      try FileManager.default.removeItem(at: localNote(args["file"])); result(nil)
+      let url = try localNote(args["file"])
+      if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }; result(nil)
     case "previewSound":
       let sound = args["sound"] as? String ?? "classic"
       try play(try Self.soundURL(sound == "system" ? "classic" : sound))

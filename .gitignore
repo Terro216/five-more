@@ -61,3 +61,13 @@ app.*.map.json
 artifacts/
 release-artifacts/
 .sdk/
+
+# Private sync service state and local tooling.
+server/.venv/
+server/data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.key
+__pycache__/
+.impeccable/review/

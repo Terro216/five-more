@@ -6,8 +6,8 @@ import 'package:flutter/services.dart';
 import '../../app/theme.dart';
 import '../../models/sleep_entry.dart';
 import '../../services/native_extras.dart';
-import '../../services/phrase_library.dart';
 import '../../services/sleep_journal.dart';
+import '../../services/sync_service.dart';
 import '../../widgets/time_composer.dart';
 
 class BedtimeScreen extends StatefulWidget {
@@ -19,8 +19,8 @@ class BedtimeScreen extends StatefulWidget {
 
 class _BedtimeScreenState extends State<BedtimeScreen>
     with WidgetsBindingObserver {
-  bool _recording = false, _busy = false, _fetching = false;
-  int _seconds = 0;
+  bool _recording = false, _busy = false;
+  int _seconds = 0, _limitSeconds = 300;
   Timer? _timer, _playbackTimer;
   String? _error;
   String? _playing;
@@ -29,14 +29,6 @@ class _BedtimeScreenState extends State<BedtimeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    unawaited(_loadPhrases());
-  }
-
-  Future<void> _loadPhrases() async {
-    try {
-      await PhraseLibrary.instance.load();
-      if (mounted) setState(() {});
-    } catch (_) {}
   }
 
   @override
@@ -90,11 +82,13 @@ class _BedtimeScreenState extends State<BedtimeScreen>
     setState(() {
       _recording = true;
       _seconds = 0;
+      _limitSeconds = 300;
       _playing = null;
     });
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
       setState(() => _seconds = timer.tick);
+      if (_seconds >= _limitSeconds) unawaited(_stop());
     });
   });
   Future<void> _saveRecording() async {
@@ -156,10 +150,39 @@ class _BedtimeScreenState extends State<BedtimeScreen>
             textAlign: TextAlign.center,
           ),
         ),
+        if (_recording)
+          TextButton(
+            onPressed: _busy
+                ? null
+                : () => _run(() async {
+                    await NativeExtras.call<void>('extendRecording');
+                    if (mounted) setState(() => _limitSeconds += 300);
+                  }),
+            child: Text(
+              'Ещё 5 минут · осталось ${voiceDurationLabel((_limitSeconds - _seconds).clamp(0, _limitSeconds))}',
+            ),
+          ),
         const SizedBox(height: 8),
         const Text(
-          'Можно записать до звонка или после подъёма. Записи остаются на телефоне.',
+          '5 минут на запись. Можно продлить или сохранить раньше.',
           style: TextStyle(color: muted, fontSize: 12, height: 1.5),
+        ),
+        const SizedBox(height: 24),
+        DropdownButtonFormField<int>(
+          initialValue: journal.fallingAsleepMinutes,
+          decoration: const InputDecoration(
+            labelText: 'Примерное время на засыпание',
+          ),
+          items: {0, 10, 20, 30, 45, 60, journal.fallingAsleepMinutes}
+              .map((v) => DropdownMenuItem(value: v, child: Text('$v мин')))
+              .toList(),
+          onChanged: _busy
+              ? null
+              : (value) {
+                  if (value != null) {
+                    _run(() => journal.setFallingAsleepMinutes(value));
+                  }
+                },
         ),
         const SizedBox(height: 24),
         SwitchListTile.adaptive(
@@ -243,9 +266,16 @@ class _BedtimeScreenState extends State<BedtimeScreen>
                         await _stopPlayback();
                         _playing = null;
                       } else {
-                        await NativeExtras.call<void>('playNote', {
-                          'file': note.file,
-                        });
+                        try {
+                          await NativeExtras.call<void>('playNote', {
+                            'file': note.file,
+                          });
+                        } catch (_) {
+                          await SyncService.instance.downloadNote(note.file);
+                          await NativeExtras.call<void>('playNote', {
+                            'file': note.file,
+                          });
+                        }
                         _playing = note.file;
                         _playbackTimer?.cancel();
                         _playbackTimer = Timer(
@@ -289,58 +319,6 @@ class _BedtimeScreenState extends State<BedtimeScreen>
                     },
             ),
           ),
-        ),
-        const SizedBox(height: 28),
-        ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          title: const Text('Фразы для зеркального текста'),
-          children: [
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Загружать новые фразы'),
-              subtitle: const Text(
-                'Forismatic · русский язык. Только запросы фраз; записи и дневник не отправляются.',
-              ),
-              value: PhraseLibrary.instance.enabled,
-              onChanged: _busy
-                  ? null
-                  : (v) => _run(() => PhraseLibrary.instance.setEnabled(v)),
-            ),
-            const Text(
-              'Обновляй запас здесь перед сном, не чаще раза в сутки. Во время звонка используются сохранённые и встроенные фразы; повтор — только после исчерпания набора.',
-              style: TextStyle(color: muted, height: 1.5),
-            ),
-            TextButton.icon(
-              onPressed: !PhraseLibrary.instance.enabled || _fetching
-                  ? null
-                  : () async {
-                      setState(() => _fetching = true);
-                      try {
-                        final count = await PhraseLibrary.instance.refresh();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                count == 0
-                                    ? 'Запас уже обновлён сегодня'
-                                    : 'В запасе $count фраз',
-                              ),
-                            ),
-                          );
-                        }
-                      } catch (_) {
-                        if (mounted) {
-                          setState(
-                            () => _error = 'Источник фраз не ответил. Сохранённые и встроенные фразы доступны.',
-                          );
-                        }
-                      }
-                      if (mounted) setState(() => _fetching = false);
-                    },
-              icon: const Icon(Icons.download_rounded),
-              label: Text(_fetching ? 'Загружаем…' : 'Обновить запас фраз'),
-            ),
-          ],
         ),
       ],
     ),

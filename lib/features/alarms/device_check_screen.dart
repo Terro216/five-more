@@ -276,8 +276,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Разрешения — первый шаг. Затем проверим настоящий звонок '
-                    'с заблокированным экраном, как утром.',
+                    'Запусти тест и заблокируй экран.',
                     style: TextStyle(color: muted, height: 1.5),
                   ),
                   if (check?.pending == true) ...[
@@ -422,11 +421,6 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     ],
                   ],
                   const SizedBox(height: 24),
-                  const Text(
-                    'Результат отмечаешь ты. Даже успешная проверка не гарантирует '
-                    'будущие звонки после изменения настроек телефона.',
-                    style: TextStyle(color: muted, fontSize: 12, height: 1.5),
-                  ),
                   if (!device.challengeEnforced)
                     const Padding(
                       padding: EdgeInsets.only(top: 12),

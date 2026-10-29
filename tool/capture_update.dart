@@ -8,6 +8,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:five_more/services/local_database.dart';
+import 'package:five_more/features/sync/sync_screen.dart';
+import 'package:five_more/services/sync_service.dart';
+import 'package:five_more/features/challenges/phrase_settings.dart';
+import 'package:five_more/features/sleep/sleep_review.dart';
+import 'package:five_more/models/sleep_session.dart';
 import 'package:five_more/app/alarm_controller.dart';
 import 'package:five_more/app/theme.dart';
 import 'package:five_more/features/alarms/alarm_home.dart';
@@ -29,6 +36,12 @@ import '../test/ui_helpers.dart';
 
 void main() {
   setUpAll(() async {
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfiNoIsolate;
+    LocalDatabase.instance = LocalDatabase(path: inMemoryDatabasePath);
+    await LocalDatabase.instance.database;
     final sdk = Platform.environment['FIVE_MORE_FLUTTER_SDK'];
     if (sdk == null) {
       throw StateError('Set FIVE_MORE_FLUTTER_SDK to your Flutter SDK.');
@@ -87,7 +100,7 @@ void main() {
       challengeKind: ChallengeKind.mixed,
       difficulty: ChallengeDifficulty.hard,
     );
-    final now = DateTime(2026, 10, 27, 20, 15);
+    final now = DateTime(2026, 10, 27, 7, 30);
     final gateway = FakeAlarmGateway()..nativeAlarms[alarm.id] = alarm;
     final storage = MemoryAlarmStorage()
       ..snapshot = AlarmSnapshot(
@@ -244,7 +257,41 @@ void main() {
       await tester.pump(const Duration(seconds: 95));
       await _capture(tester, key, 'update-long-recording-${width.toInt()}');
       await tester.tap(record);
+      for (var i = 0; i < 20; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
       await tester.pumpAndSettle();
+      key = await mount(SyncScreen(sync: SyncService()));
+      await _capture(tester, key, 'update-sync-${width.toInt()}');
+      key = await mount(
+        const Scaffold(body: SingleChildScrollView(child: PhraseSettings())),
+      );
+      await tester.tap(find.byType(ExpansionTile));
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'update-phrases-${width.toInt()}');
+      final wakeEvent = AlarmEvent(
+        eventId: 'review',
+        alarmId: alarm.id,
+        occurrenceId: 'review',
+        type: 'dismissed',
+        at: now,
+      );
+      key = await mount(
+        SleepReview(
+          journal: journal,
+          event: wakeEvent,
+          session: SleepSession(
+            id: 'review',
+            occurrences: const ['review'],
+            lastEvent: wakeEvent,
+            bedtimeCandidate: DateTime(2026, 10, 26, 23),
+          ),
+        ),
+      );
+      await _capture(tester, key, 'update-sleep-review-${width.toInt()}');
       for (var used = 0; used < 2; used++) {
         gateway.ringing = RingingAlarm(
           alarm: alarm,
