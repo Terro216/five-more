@@ -597,14 +597,19 @@ class _HistoryViewState extends State<HistoryView> {
         final latency = estimate is Map
             ? estimate['fallingAsleepMinutes'] as int?
             : null;
-        if (latency == null) {
+        if (latency == null ||
+            zone['bedtimeAt'] !=
+                SleepGoals.estimatedBedtime(
+                  entry.bedAt,
+                  latency,
+                ).millisecondsSinceEpoch) {
           unknownBed++;
           continue;
         }
         final bed = SleepGoals.wallTime(
-          entry.bedAt,
+          SleepGoals.estimatedBedtime(entry.bedAt, latency),
           bedOffset,
-        ).subtract(Duration(minutes: latency));
+        );
         final bedDistance = SleepGoals.clockDistance(
           bed.hour * 60 + bed.minute,
           goals.bedMinute!,

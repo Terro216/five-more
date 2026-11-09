@@ -36,6 +36,9 @@ class SleepGoals {
     return difference <= 720 ? difference : 1440 - difference;
   }
 
+  static DateTime estimatedBedtime(DateTime fellAsleep, int latencyMinutes) =>
+      fellAsleep.subtract(Duration(minutes: latencyMinutes));
+
   /// A UTC container for a saved wall clock, not an instant to use for duration.
   static DateTime wallTime(DateTime instant, int offsetMinutes) =>
       instant.toUtc().add(Duration(minutes: offsetMinutes));

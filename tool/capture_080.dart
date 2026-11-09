@@ -153,8 +153,15 @@ void main() {
       };
       journal.sleepTimezones[entry.occurrenceId] = {
         'bedAt': entry.bedAt.millisecondsSinceEpoch,
+        'bedtimeAt': SleepGoals.estimatedBedtime(
+          entry.bedAt,
+          20,
+        ).millisecondsSinceEpoch,
         'wakeAt': entry.wokeAt.millisecondsSinceEpoch,
-        'bedOffsetMinutes': entry.bedAt.timeZoneOffset.inMinutes,
+        'bedOffsetMinutes': SleepGoals.estimatedBedtime(
+          entry.bedAt,
+          20,
+        ).timeZoneOffset.inMinutes,
         'wakeOffsetMinutes': entry.wokeAt.timeZoneOffset.inMinutes,
       };
     }

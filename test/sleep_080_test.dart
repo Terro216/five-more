@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:five_more/models/alarm.dart';
 import 'package:five_more/models/sleep_session.dart';
 import 'package:five_more/models/sleep_goals.dart';
@@ -193,6 +195,7 @@ void main() {
     await journal.saveEntry(entry);
     journal.sleepTimezones['night'] = {
       'bedAt': entry.bedAt.millisecondsSinceEpoch,
+      'bedtimeAt': entry.bedAt.millisecondsSinceEpoch,
       'wakeAt': entry.wokeAt.millisecondsSinceEpoch,
       'bedOffsetMinutes': 120,
       'wakeOffsetMinutes': 60,
@@ -214,4 +217,63 @@ void main() {
     expect(journal.sleepTimezones['night']['bedOffsetMinutes'], isNull);
     expect(journal.sleepTimezones['night']['wakeOffsetMinutes'], isNull);
   });
+  test(
+    'DST boundary uses offset at estimated bedtime',
+    () async {
+      final journal = SleepJournal()..ready = true;
+      addTearDown(journal.dispose);
+      // Berlin jumps from 02:00 to 03:00 during this 20-minute interval.
+      final asleep = DateTime(2026, 3, 29, 3, 10);
+      await journal.saveEstimate('spring', {
+        'source': 'alarm_setup',
+        'fallingAsleepMinutes': 20,
+      });
+      final entry = SleepEntry(
+        occurrenceId: 'spring',
+        bedAt: asleep,
+        wokeAt: DateTime(2026, 3, 29, 8),
+        sleepQuality: 3,
+        wakeQuality: 3,
+      );
+      await journal.saveEntry(entry);
+      final zone = journal.sleepTimezones['spring'];
+      expect(zone['bedOffsetMinutes'], 60);
+      expect(zone['wakeOffsetMinutes'], 120);
+      final bedWall = SleepGoals.wallTime(
+        SleepGoals.estimatedBedtime(asleep, 20),
+        zone['bedOffsetMinutes'] as int,
+      );
+      expect([bedWall.hour, bedWall.minute], [1, 50]);
+      // Fall-back crosses the repeated hour in the opposite direction.
+      final autumnAsleep = DateTime.parse('2026-10-25T02:10:00+01:00')
+          .toLocal();
+      await journal.saveEstimate('autumn', {
+        'source': 'alarm_setup',
+        'fallingAsleepMinutes': 20,
+      });
+      await journal.saveEntry(
+        SleepEntry(
+          occurrenceId: 'autumn',
+          bedAt: autumnAsleep,
+          wokeAt: DateTime(2026, 10, 25, 8),
+          sleepQuality: 3,
+          wakeQuality: 3,
+        ),
+      );
+      final autumnZone = journal.sleepTimezones['autumn'];
+      expect(autumnZone['bedOffsetMinutes'], 120);
+      expect(autumnZone['wakeOffsetMinutes'], 60);
+      final autumnBed = SleepGoals.wallTime(
+        SleepGoals.estimatedBedtime(autumnAsleep, 20),
+        autumnZone['bedOffsetMinutes'] as int,
+      );
+      expect([autumnBed.hour, autumnBed.minute], [2, 50]);
+    },
+    skip:
+        Platform.environment['FIVE_MORE_DST_TEST'] != 'true' &&
+            (DateTime(2026, 3, 29, 1, 50).timeZoneOffset.inMinutes != 60 ||
+                DateTime(2026, 3, 29, 3, 10).timeZoneOffset.inMinutes != 120)
+        ? 'Run with TZ=Europe/Berlin (dedicated CI step).'
+        : false,
+  );
 }

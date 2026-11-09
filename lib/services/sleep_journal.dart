@@ -183,15 +183,23 @@ class SleepJournal extends ChangeNotifier {
         .where((e) => e.occurrenceId == entry.occurrenceId)
         .firstOrNull;
     final previousZone = sleepTimezones[entry.occurrenceId];
+    final estimate = sleepEstimates[entry.occurrenceId];
+    final latency = estimate is Map
+        ? estimate['fallingAsleepMinutes'] as int?
+        : null;
+    final bedtime = SleepGoals.estimatedBedtime(entry.bedAt, latency ?? 0);
     sleepTimezones[entry.occurrenceId] = {
       'bedAt': entry.bedAt.millisecondsSinceEpoch,
+      'bedtimeAt': bedtime.millisecondsSinceEpoch,
       'wakeAt': entry.wokeAt.millisecondsSinceEpoch,
       'bedOffsetMinutes': previousEntry?.bedAt == entry.bedAt
           ? (previousZone is Map &&
-                    previousZone['bedAt'] == entry.bedAt.millisecondsSinceEpoch
+                    previousZone['bedAt'] ==
+                        entry.bedAt.millisecondsSinceEpoch &&
+                    previousZone['bedtimeAt'] == bedtime.millisecondsSinceEpoch
                 ? previousZone['bedOffsetMinutes']
                 : null)
-          : entry.bedAt.toLocal().timeZoneOffset.inMinutes,
+          : bedtime.toLocal().timeZoneOffset.inMinutes,
       'wakeOffsetMinutes': previousEntry?.wokeAt == entry.wokeAt
           ? (previousZone is Map &&
                     previousZone['wakeAt'] ==

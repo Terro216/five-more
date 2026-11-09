@@ -42,6 +42,11 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib test tool
       - run: flutter analyze
       - run: flutter test
+      - name: Sleep regularity across DST
+        run: flutter test test/sleep_080_test.dart --plain-name "DST boundary uses offset at estimated bedtime"
+        env:
+          TZ: Europe/Berlin
+          FIVE_MORE_DST_TEST: 'true'
       - run: flutter build web --release
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

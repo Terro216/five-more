@@ -1,7 +1,7 @@
 # Five More 0.8.0 — implementation and verification
 
 The accepted scope is [IMPLEMENTATION_0.8.0.md](IMPLEMENTATION_0.8.0.md).
-Version: **0.8.0+11**. Existing 0.7.0 alarms retain challenge mode and their
+Installation candidate: **0.8.1+12**, including the 0.8.0 scope and a DST boundary correction. Existing 0.7.0 alarms retain challenge mode and their
 settings; new alarms use normal dismissal. No new statistics-sync schema or
 consent is introduced. Goals, original sleep proposals and wall-time offsets
 remain local. The existing passkey fixes are retained.
@@ -35,8 +35,14 @@ remain local. The existing passkey fixes are retained.
 The candidate runs `dart format --output=none --set-exit-if-changed lib test tool`,
 `flutter analyze`, `flutter test`, Kotlin tests, server tests and release-metadata
 tests. Android APK compilation and the macOS iOS simulator compilation are
-mandatory. Check results and the exact commit are linked in the release report.
-The final Flutter source passed formatting, analysis and **210 tests**.
+mandatory. The complete [0.8.0 CI](https://github.com/Terro216/five-more/actions/runs/42705759927) passed, including iOS simulator compilation on macOS.
+The final patch is checked again by CI; results and the exact commit are linked in the release report.
+The 0.8.0 source passed formatting, analysis and **210 tests**.
+The 0.8.1 correction adds a dedicated Europe/Berlin spring/fall DST regression
+run: the actual instant of estimated bedtime is calculated first, and its
+own offset is used for wall-clock comparisons. Metadata without a matching bedtime instant is treated as unknown.
+The patch passed formatting and analysis, the full 210-test suite, and the
+additional enforced DST test (211 distinct Flutter tests across both runs).
 The Android implementation passed an arm64 build and **48 native unit tests**;
 **9 release-metadata tests** and **27 isolated server tests** also passed.
 Synthetic 390/320 captures were rendered and visually inspected.

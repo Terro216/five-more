@@ -48,6 +48,11 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib test tool
       - run: flutter analyze
       - run: flutter test
+      - name: Sleep regularity across DST
+        run: flutter test test/sleep_080_test.dart --plain-name "DST boundary uses offset at estimated bedtime"
+        env:
+          TZ: Europe/Berlin
+          FIVE_MORE_DST_TEST: 'true'
       - name: Restore signing key
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
