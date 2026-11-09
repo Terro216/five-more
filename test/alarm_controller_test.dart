@@ -77,26 +77,28 @@ void main() {
     },
   );
 
-  test(
-    'mutations serialize across native calls and final persisted state',
-    () async {
-      await controller.initialize(startPolling: false);
-      final gate = Completer<void>();
-      var calls = 0;
-      gateway.beforeSchedule = () async {
-        calls++;
-        if (calls == 1) await gate.future;
-      };
-      final first = controller.saveAlarm(alarm.copyWith(hour: 8));
-      final second = controller.saveAlarm(alarm.copyWith(hour: 9));
-      await Future<void>.delayed(Duration.zero);
-      expect(gateway.scheduleCalls, hasLength(1));
-      gate.complete();
-      await Future.wait([first, second]);
-      expect(gateway.scheduleCalls, hasLength(2));
-      expect(storage.snapshot.alarms.single.hour, 9);
-    },
-  );
+  test('mutations serialize across IDs while duplicate same-ID requests are rejected', () async {
+    await controller.initialize(startPolling: false);
+    final gate = Completer<void>();
+    var calls = 0;
+    gateway.beforeSchedule = () async {
+      calls++;
+      if (calls == 1) await gate.future;
+    };
+    final first = controller.saveAlarm(alarm.copyWith(hour: 8));
+    final duplicate = controller.saveAlarm(alarm.copyWith(hour: 9));
+    final second = controller.saveAlarm(
+      const Alarm(id: 'b', hour: 9, minute: 0),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(gateway.scheduleCalls, hasLength(1));
+    gate.complete();
+    await Future.wait([first, second]);
+    expect(gateway.scheduleCalls, hasLength(2));
+    expect((await duplicate).ok, isFalse);
+    expect(storage.snapshot.alarms.firstWhere((a) => a.id == alarm.id).hour, 8);
+    expect(storage.snapshot.alarms.firstWhere((a) => a.id == 'b').hour, 9);
+  });
 
   test('pending events are saved before acknowledgement and replay is deduplicated', () async {
     final event = AlarmEvent(
@@ -227,4 +229,15 @@ void main() {
       expect(controller.ringing!.occurrenceId, 'new-morning');
     },
   );
+  test('unchanged polling never notifies the alarm list', () async {
+    storage.snapshot = const AlarmSnapshot(alarms: [alarm]);
+    gateway.nativeAlarms[alarm.id] = alarm;
+    await controller.initialize(startPolling: false);
+    var notifications = 0;
+    controller.addListener(() => notifications++);
+    for (var i = 0; i < 5; i++) {
+      await controller.poll();
+    }
+    expect(notifications, 0);
+  });
 }

@@ -69,6 +69,7 @@ class MainActivity : FlutterActivity() {
                     "schedule" -> result.success(engine.schedule(args))
                     "cancel" -> result.success(engine.cancel(id))
                     "snooze" -> result.success(engine.snooze(id, (args["minutes"] as? Number)?.toInt()))
+                    "quiet" -> result.success(engine.quiet(id, args["occurrenceId"] as? String ?: "", (args["generation"] as? Number)?.toInt() ?: -1))
                     "dismiss" -> result.success(engine.dismiss(id, emergency = args["emergency"] == true))
                     "status" -> result.success(engine.status())
                     "restoreAlarms" -> result.success(engine.restoreAlarms())

@@ -96,14 +96,14 @@ class AlarmRulesTest {
     }
 
     @Test fun testDelayAcceptsDefaultAndInclusiveIntegerBounds() {
-        assertEquals(5, AlarmRules.testDelaySeconds(null))
-        assertEquals(5, AlarmRules.testDelaySeconds(5))
+        assertEquals(20, AlarmRules.testDelaySeconds(null))
+        assertEquals(1, AlarmRules.testDelaySeconds(1))
         assertEquals(30, AlarmRules.testDelaySeconds(30L))
         assertEquals(60, AlarmRules.testDelaySeconds(60))
     }
 
     @Test fun testDelayRejectsOutOfRangeOrCoercedValues() {
-        for (value in listOf(0, 4, 61, -5, Long.MAX_VALUE, 5.0, 5.9, "30", true)) {
+        for (value in listOf(0, -1, 61, -5, Long.MAX_VALUE, 5.0, 5.9, "30", true)) {
             assertNull(AlarmRules.testDelaySeconds(value))
         }
     }

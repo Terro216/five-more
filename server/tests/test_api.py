@@ -77,6 +77,25 @@ class ApiTest(unittest.TestCase):
         self.app = create_app(replace(self.config, audio_account_id=self.identity['accountId']))
         self.client = TestClient(self.app)
 
+    def test_android_association_supports_both_provider_checks_without_broadening_identity(self):
+        fingerprints = (':'.join(['AB'] * 32), ':'.join(['CD'] * 32))
+        app = create_app(replace(self.config, android_fingerprints=fingerprints))
+        with TestClient(app) as client:
+            response = client.get('/.well-known/assetlinks.json', follow_redirects=False)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['content-type'], 'application/json')
+        self.assertEqual(response.json(), [{
+            'relation': [
+                'delegate_permission/common.get_login_creds',
+                'delegate_permission/common.handle_all_urls',
+            ],
+            'target': {
+                'namespace': 'android_app',
+                'package_name': 'dev.ilyamedve.fivemore',
+                'sha256_cert_fingerprints': list(fingerprints),
+            },
+        }])
+
     def test_recovery_cannot_be_undone_by_an_inflight_add_passkey(self):
         from server.app import verify_registration_response
         options = self.client.post('/v1/auth/register/options', headers=self.headers).json()

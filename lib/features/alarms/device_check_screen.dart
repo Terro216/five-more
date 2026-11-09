@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../app/alarm_controller.dart';
 import '../../app/theme.dart';
 import '../../models/device_alarm_check.dart';
+import '../../widgets/exact_slider.dart';
 import '../../services/alarm_gateway.dart';
 import '../challenges/challenge_models.dart';
 import '../challenges/challenge_screen.dart';
@@ -32,6 +33,8 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
   String? _sourceAlarmId;
   String? _error;
   bool _acting = false;
+  int _delaySeconds = 20;
+  bool _delayValid = true;
   Timer? _adminTimer;
   bool _adminRemoving = false;
   bool _adminPollBusy = false;
@@ -312,7 +315,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                   ..._preview()
                 else ...[
                   const Text(
-                    'Услышимся через 20 секунд',
+                    'Проверим звонок',
                     style: TextStyle(fontSize: 27, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 12),
@@ -394,7 +397,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     if (selected == null) ...[
                       const Text(
                         'Сначала сохрани будильник. Для проверки возьмём его '
-                        'задание и настройки переносов.',
+                        'звук и настройки переносов.',
                         style: TextStyle(color: muted, height: 1.5),
                       ),
                       const SizedBox(height: 16),
@@ -417,7 +420,11 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                               (alarm) => DropdownMenuItem(
                                 value: alarm.id,
                                 child: Text(
-                                  '${alarm.timeLabel} · ${alarm.displayTitle}',
+                                  [
+                                    alarm.timeLabel,
+                                    if (alarm.displayTitle.isNotEmpty)
+                                      alarm.displayTitle,
+                                  ].join(' · '),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -435,19 +442,34 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                         style: TextStyle(color: muted, height: 1.5),
                       ),
                       const SizedBox(height: 18),
+                      ExactSlider(
+                        label: 'Проверочный звонок через',
+                        unit: 'с',
+                        value: _delaySeconds,
+                        min: 1,
+                        max: 60,
+                        enabled: !blocked,
+                        onValidityChanged: (v) =>
+                            setState(() => _delayValid = v),
+                        onChanged: (v) => setState(() => _delaySeconds = v),
+                      ),
                       FilledButton.icon(
                         key: const ValueKey('device-check-start'),
                         onPressed:
                             blocked ||
+                                !_delayValid ||
                                 !device.canSchedule ||
                                 !controller.storageHealthy
                             ? null
                             : () => _run(
-                                () => controller.startDeviceCheck(selected.id),
+                                () => controller.startDeviceCheck(
+                                  selected.id,
+                                  delaySeconds: _delaySeconds,
+                                ),
                               ),
                         icon: const Icon(Icons.phonelink_ring_rounded),
-                        label: const Text(
-                          'Проверить через 20 секунд',
+                        label: Text(
+                          'Проверить через $_delaySeconds секунд',
                           textAlign: TextAlign.center,
                         ),
                       ),

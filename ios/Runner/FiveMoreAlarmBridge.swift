@@ -91,6 +91,7 @@ private enum FiveMoreAlarmStore {
     var event: [String: Any] = [
       "eventId": UUID().uuidString, "id": record["id"] as? String ?? "",
       "occurrenceId": record["occurrenceId"] as? String ?? "",
+      "configurationId": record["configurationId"] as? String ?? "",
       "type": type, "at": now(), "snoozesUsed": record["snoozesUsed"] as? Int ?? 0,
       "snoozedMinutes": record["snoozedMinutes"] as? Int ?? 0,
     ]
@@ -110,6 +111,18 @@ private enum FiveMoreAlarmStore {
     let accepted = Set(ids)
     var root = data
     let events = root["events"] as? [[String: Any]] ?? []
+    var configs = root["configurations"] as? [String: [String: Any]] ?? [:]
+    for event in events where accepted.contains(event["eventId"] as? String ?? "") {
+      let id = event["id"] as? String ?? ""
+      let token = event["configurationId"] as? String ?? ""
+      guard !id.hasPrefix("preview:"), !token.isEmpty,
+        ["dismissed", "emergency_dismissed"].contains(event["type"] as? String ?? ""),
+        let config = configs[id], config["configurationId"] as? String == token,
+        config["enabled"] as? Bool == false, config["deleteAfterDismiss"] as? Bool == true,
+        (config["weekdays"] as? [Int] ?? []).isEmpty else { continue }
+      configs.removeValue(forKey: id)
+    }
+    root["configurations"] = configs
     root["events"] = events.filter { !accepted.contains($0["eventId"] as? String ?? "") }
     data = root
   }
@@ -239,7 +252,7 @@ private enum FiveMoreAlarmStore {
       } else {
         configs[id] = config
       }
-      configurations = configs
+      // Written with history below.
     }
     var all = instances
     // Retain only the weekly base. Finished one-off, preview and snooze
@@ -251,8 +264,19 @@ private enum FiveMoreAlarmStore {
         all.removeValue(forKey: key)
       }
     }
-    instances = all
-    appendEvent(record, type: type)
+    var root = data
+    var events = root["events"] as? [[String: Any]] ?? []
+    events.append([
+      "eventId": UUID().uuidString, "id": id,
+      "occurrenceId": record["occurrenceId"] as? String ?? "",
+      "configurationId": record["configurationId"] as? String ?? "",
+      "type": type, "at": now(), "snoozesUsed": record["snoozesUsed"] as? Int ?? 0,
+      "snoozedMinutes": record["snoozedMinutes"] as? Int ?? 0,
+    ])
+    root["configurations"] = configs
+    root["instances"] = all
+    root["events"] = events
+    data = root
   }
 }
 
@@ -287,7 +311,9 @@ struct FiveMoreSystemStopIntent: LiveActivityIntent {
       if let record = FiveMoreAlarmStore.instances[systemID],
         let until = record["appStopUntil"] as? NSNumber,
         until.int64Value > FiveMoreAlarmStore.now() { return }
-      FiveMoreAlarmStore.finish(systemID: systemID, type: "emergency_dismissed")
+      let id = FiveMoreAlarmStore.instances[systemID]?["id"] as? String ?? ""
+      let normal = FiveMoreAlarmStore.configurations[id]?["dismissalMode"] as? String == "normal"
+      FiveMoreAlarmStore.finish(systemID: systemID, type: normal ? "dismissed" : "emergency_dismissed")
     }
     return .result()
   }
@@ -449,6 +475,14 @@ private final class FiveMoreAlarmEngine {
       let snooze = args["snoozeMinutes"] as? Int, (1...30).contains(snooze),
       let maximum = args["maxSnoozes"] as? Int, (0...10).contains(maximum)
     else { throw failure("Проверь время, дни недели и настройки переноса.") }
+    let mode = args["dismissalMode"] as? String ?? "challenge"
+    guard ["normal", "challenge"].contains(mode) else { throw failure("Проверь тип отключения.") }
+    for key in ["vibration", "deleteAfterDismiss"] {
+      if let value = args[key] {
+        guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID()
+        else { throw failure("Проверь настройки будильника.") }
+      }
+    }
     let kind = args["challengeKind"] ?? "math"
     let difficulty = args["difficulty"] ?? "medium"
     guard let kind = kind as? String,
@@ -473,12 +507,15 @@ private final class FiveMoreAlarmEngine {
     let kinds = ["math", "memory", "stroop", "sequence", "mirror", "captcha", "qr", "shake", "maze", "flags"]
     guard order.count <= 12, order.allSatisfy({ kinds.contains($0) }) else { throw failure("Проверь порядок заданий.") }
     let qr = String((args["qrValue"] as? String ?? "").prefix(2048))
-    if (kind == "qr" || (kind == "mixed" && order.contains("qr"))) && qr.isEmpty { throw failure("Сначала зарегистрируй QR-код.") }
+    if mode == "challenge" && (kind == "qr" || (kind == "mixed" && order.contains("qr"))) && qr.isEmpty { throw failure("Сначала зарегистрируй QR-код.") }
     let oneShot = (args["oneShotAt"] as? NSNumber)?.int64Value ?? 0
     if args["enabled"] as? Bool != false && oneShot > 0 && (oneShot <= FiveMoreAlarmStore.now() || !days.isEmpty) { throw failure("Время короткого сна уже прошло. Выбери длительность снова.") }
     let sound = args["sound"] as? String ?? "system"
     if sound != "system" { _ = try FiveMoreExtrasBridge.soundURL(sound) }
     return [
+      "dismissalMode": mode, "vibration": args["vibration"] as? Bool ?? true,
+      "deleteAfterDismiss": days.isEmpty && args["deleteAfterDismiss"] as? Bool == true,
+      "configurationId": args["configurationId"] as? String ?? "",
       "oneShotAt": oneShot, "mixOrder": order, "qrValue": qr,
       "snoozeBudgetMinutes": min(300, max(0, args["snoozeBudgetMinutes"] as? Int ?? (args["maxSnoozes"] as? Int ?? 3) * (args["snoozeMinutes"] as? Int ?? 5))),
       "armedAt": args["armedAt"] as? Int64 ?? 0,
@@ -498,9 +535,9 @@ private final class FiveMoreAlarmEngine {
   ) -> AlarmManager.AlarmConfiguration<FiveMoreAlarmMetadata> {
     let title = (config["title"] as? String ?? "").trimmingCharacters(in: .whitespaces)
     let alert = AlarmPresentation.Alert(
-      title: LocalizedStringResource(stringLiteral: title.isEmpty ? "Пора вставать" : title),
+      title: LocalizedStringResource(stringLiteral: title.isEmpty ? String(format: "Будильник на %02d:%02d", config["hour"] as? Int ?? 0, config["minute"] as? Int ?? 0) : title),
       stopButton: AlarmButton(text: "Остановить", textColor: .white, systemImageName: "stop.circle"),
-      secondaryButton: AlarmButton(text: "Задание", textColor: .black, systemImageName: "brain"),
+      secondaryButton: AlarmButton(text: config["dismissalMode"] as? String == "normal" ? "Открыть" : "Задание", textColor: .black, systemImageName: "alarm"),
       secondaryButtonBehavior: .custom
     )
     let attributes = AlarmAttributes(
@@ -560,6 +597,7 @@ private final class FiveMoreAlarmEngine {
     for key in previousSystemIDs { instances.removeValue(forKey: key) }
     instances[uuid.uuidString] = [
       "id": id, "kind": "base", "state": "scheduled", "snoozesUsed": 0,
+      "configurationId": config["configurationId"] as? String ?? "",
       "nextAt": nextAt,
     ]
     FiveMoreAlarmStore.instances = instances
@@ -727,12 +765,12 @@ private final class FiveMoreAlarmEngine {
   }
 
   private func testDelaySeconds(_ value: Any?) -> Int? {
-    guard let value else { return 5 }
+    guard let value else { return 20 }
     guard let number = value as? NSNumber,
       CFGetTypeID(number) != CFBooleanGetTypeID(),
       !["f", "d"].contains(String(cString: number.objCType)) else { return nil }
     let seconds = number.int64Value
-    guard (5...60).contains(seconds), number.doubleValue == Double(seconds) else { return nil }
+    guard (1...60).contains(seconds), number.doubleValue == Double(seconds) else { return nil }
     return Int(seconds)
   }
 

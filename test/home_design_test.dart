@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:five_more/app/alarm_controller.dart';
 import 'package:five_more/app/theme.dart';
 import 'package:five_more/features/alarms/alarm_editor.dart';
@@ -79,7 +81,7 @@ void main() {
     expect(find.text('Пятница, 23 октября'), findsOneWidget);
     expect(find.text('До будильника 1 ч 30 мин'), findsOneWidget);
     expect(find.text('Телефон ещё не проверен'), findsOneWidget);
-    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
     expect(toggle.hitTestable(), findsOneWidget);
     expect(
       tester.getRect(card).bottom,
@@ -255,13 +257,82 @@ void main() {
       width: 320,
       textScale: 1.5,
     );
-    expect(find.text('Поставить будильник'), findsOneWidget);
+    expect(find.byTooltip('Добавить будильник'), findsOneWidget);
     expect(find.text('Режим знакомства'), findsOneWidget);
-    await tester.tap(find.text('Поставить будильник'));
+    await tester.tap(find.byTooltip('Добавить будильник'));
     await tester.pumpAndSettle();
     expect(find.byType(AlarmEditor), findsOneWidget);
     expect(gateway.scheduleCalls, isEmpty);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+  testWidgets(
+    'time sorting keeps ties and neighbor controls during a queued toggle',
+    (tester) async {
+      const late = Alarm(id: 'late', hour: 23, minute: 0, enabled: false);
+      const tieA = Alarm(id: 'tie-a', hour: 7, minute: 0);
+      const tieB = Alarm(id: 'tie-b', hour: 7, minute: 0);
+      final gateway = FakeAlarmGateway();
+      final controller = await showHome(
+        tester,
+        gateway: gateway,
+        alarms: [late, tieA, tieB],
+      );
+      tester.view.physicalSize = const Size(390, 2400);
+      await tester.pumpAndSettle();
+      Finder card(String id) => find.byKey(ValueKey('alarm-card-$id'));
+      final before = tester.element(card('tie-b'));
+      expect(
+        tester.getTopLeft(card('tie-a')).dy,
+        lessThan(tester.getTopLeft(card('tie-b')).dy),
+      );
+      expect(
+        tester.getTopLeft(card('tie-b')).dy,
+        lessThan(tester.getTopLeft(card('late')).dy),
+      );
+      final gate = Completer<void>();
+      gateway.beforeSchedule = () => gate.future;
+      final pending = controller.setEnabled(tieA, false);
+      await tester.pump();
+      expect(
+        tester
+            .widget<Switch>(find.byKey(const ValueKey('alarm-toggle-tie-a')))
+            .onChanged,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<Switch>(find.byKey(const ValueKey('alarm-toggle-tie-b')))
+            .onChanged,
+        isNotNull,
+      );
+      expect(
+        tester
+            .widget<FloatingActionButton>(
+              find.byKey(const ValueKey('add-alarm')),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(tester.element(card('tie-b')), same(before));
+      gate.complete();
+      await pending;
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(card('tie-a')).dy,
+        lessThan(tester.getTopLeft(card('tie-b')).dy),
+      );
+      gateway.beforeSchedule = null;
+      await controller.saveAlarm(
+        controller.alarmById('late')!.copyWith(hour: 6),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(card('late')).dy,
+        lessThan(tester.getTopLeft(card('tie-a')).dy),
+      );
+      expect(tester.element(card('tie-b')), same(before));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -21,6 +22,14 @@ class AlarmController extends ChangeNotifier {
 
   List<Alarm> _alarms = [];
   List<AlarmEvent> _events = [];
+  List<AlarmEvent> sleepEvents = [];
+  Future<void> _refreshSleepEvents() async {
+    sleepEvents = await storage.eventsBetween(
+      now.subtract(const Duration(hours: 54)),
+      now.add(const Duration(seconds: 1)),
+    );
+  }
+
   List<Alarm> get alarms => List.unmodifiable(_alarms);
   List<AlarmEvent> get events => List.unmodifiable(_events.reversed);
   AlarmDeviceStatus device = const AlarmDeviceStatus();
@@ -28,6 +37,28 @@ class AlarmController extends ChangeNotifier {
   bool loading = true;
   bool nativeStateKnown = false;
   bool busy = false;
+  final Set<String> _pendingAlarmIds = {};
+  bool isAlarmBusy(String id) => _pendingAlarmIds.contains(id);
+  Alarm? alarmById(String id) => _alarms.where((a) => a.id == id).firstOrNull;
+  Future<AlarmResult> _forAlarm(
+    String id,
+    Future<AlarmResult> Function() action,
+  ) async {
+    if (!_pendingAlarmIds.add(id)) {
+      return const AlarmResult(
+        ok: false,
+        error: 'Дождись завершения изменения этого будильника.',
+      );
+    }
+    _notify();
+    try {
+      return await action();
+    } finally {
+      _pendingAlarmIds.remove(id);
+      _notify();
+    }
+  }
+
   bool storageHealthy = true;
   String? error;
   bool _disposed = false;
@@ -41,6 +72,7 @@ class AlarmController extends ChangeNotifier {
       _alarms = [...snapshot.alarms];
       _events = [...snapshot.events];
       deviceCheck = snapshot.deviceCheck;
+      await _refreshSleepEvents();
     } catch (_) {
       storageHealthy = false;
       error =
@@ -139,10 +171,25 @@ class AlarmController extends ChangeNotifier {
     }
   }
 
-  Future<AlarmResult> saveAlarm(
+  Future<AlarmResult> saveAlarm(Alarm alarm, {bool allowPreviewDraft = true}) =>
+      _forAlarm(
+        alarm.id,
+        () => _saveAlarm(alarm, allowPreviewDraft: allowPreviewDraft),
+      );
+
+  Future<AlarmResult> _saveAlarm(
     Alarm alarm, {
     bool allowPreviewDraft = true,
+    bool? enabledOverride,
   }) => _mutate(() async {
+    if (enabledOverride != null) {
+      final current = alarmById(alarm.id);
+      if (current == null) {
+        return const AlarmResult(ok: false, error: 'Будильник уже удалён.');
+      }
+      alarm = current.copyWith(enabled: enabledOverride);
+    }
+    alarm = alarm.copyWith(configurationId: newAlarmId());
     if (alarm.enabled) alarm = alarm.copyWith(armedAt: now);
     Alarm saved;
     if (!device.supported) {
@@ -184,18 +231,39 @@ class AlarmController extends ChangeNotifier {
     return AlarmResult(ok: true, alarm: saved, nextAt: saved.nextAt);
   });
 
-  Future<AlarmResult> setEnabled(Alarm alarm, bool enabled) =>
-      saveAlarm(alarm.copyWith(enabled: enabled), allowPreviewDraft: false);
+  Future<AlarmResult> setEnabled(Alarm alarm, bool enabled) => _forAlarm(
+    alarm.id,
+    () => _saveAlarm(alarm, enabledOverride: enabled, allowPreviewDraft: false),
+  );
 
-  Future<AlarmResult> deleteAlarm(String id) => _mutate(() async {
-    if (device.supported) {
-      final result = await gateway.cancel(id);
-      if (!result.ok) return result;
+  Future<AlarmResult> deleteAlarm(String id) => _forAlarm(
+    id,
+    () => _mutate(() async {
+      if (device.supported) {
+        final result = await gateway.cancel(id);
+        if (!result.ok) return result;
+      }
+      _alarms.removeWhere((alarm) => alarm.id == id);
+      await _persist();
+      return const AlarmResult(ok: true);
+    }),
+  );
+
+  Future<AlarmResult> quiet(RingingAlarm source) => _mutate(() async {
+    final current = await gateway.getRingingAlarm();
+    if (current == null ||
+        current.occurrenceId != source.occurrenceId ||
+        current.snoozesUsed != source.snoozesUsed) {
+      return const AlarmResult(ok: false, error: 'Этот звонок уже завершён.');
     }
-    _alarms.removeWhere((alarm) => alarm.id == id);
-    await _persist();
-    return const AlarmResult(ok: true);
-  });
+    final result = await gateway.quiet(
+      source.alarm.id,
+      source.occurrenceId,
+      source.snoozesUsed,
+    );
+    ringing = await gateway.getRingingAlarm();
+    return result;
+  }, requiresStorage: false);
 
   Future<AlarmResult> snooze({
     String? alarmId,
@@ -270,8 +338,12 @@ class AlarmController extends ChangeNotifier {
   Future<AlarmResult> testAlarm(String id) => startDeviceCheck(id);
 
   Future<AlarmResult> startDeviceCheck(
-    String sourceAlarmId,
-  ) => _mutate(() async {
+    String sourceAlarmId, {
+    int delaySeconds = 20,
+  }) => _mutate(() async {
+    if (delaySeconds < 1 || delaySeconds > 60) {
+      return const AlarmResult(ok: false, error: 'Укажи от 1 до 60 секунд.');
+    }
     if (deviceCheck?.pending == true) {
       return const AlarmResult(
         ok: false,
@@ -314,7 +386,10 @@ class AlarmController extends ChangeNotifier {
       );
     }
     final startedAt = now;
-    final result = await gateway.testAlarm(sourceAlarmId, delaySeconds: 20);
+    final result = await gateway.testAlarm(
+      sourceAlarmId,
+      delaySeconds: delaySeconds,
+    );
     if (!result.ok) return result;
     final previewId = result.alarm?.id;
     final dueAt = result.nextAt;
@@ -488,8 +563,9 @@ class AlarmController extends ChangeNotifier {
     _pollPending = true;
     try {
       await _enqueue(() async {
+        final before = _visibleState();
         await _refreshNative();
-        _notify();
+        if (before != _visibleState()) _notify();
       });
     } catch (_) {
       error = 'Связь с системным будильником временно недоступна.';
@@ -498,6 +574,22 @@ class AlarmController extends ChangeNotifier {
       _pollPending = false;
     }
   }
+
+  String _visibleState() => jsonEncode({
+    'alarms': _alarms.map((a) => a.toJson()).toList(),
+    'events': _events.map((e) => e.eventId).toList(),
+    'ring': ringing == null
+        ? null
+        : [
+            ringing!.occurrenceId,
+            ringing!.snoozesUsed,
+            ringing!.quietUsed,
+            ringing!.quietRemainingSeconds,
+            ringing!.alarm.toJson(),
+          ],
+    'known': nativeStateKnown,
+    'error': error,
+  });
 
   Future<void> _refreshNative() async {
     // Alarm controls must remain usable even if local history cannot be read or
@@ -517,6 +609,10 @@ class AlarmController extends ChangeNotifier {
         final index = _alarms.indexWhere((alarm) => alarm.id == event.alarmId);
         if (index < 0) continue;
         final alarm = _alarms[index];
+        if (alarm.configurationId.isNotEmpty &&
+            alarm.configurationId != event.configurationId) {
+          continue;
+        }
         final finished = const [
           'dismissed',
           'emergency_dismissed',
@@ -541,11 +637,40 @@ class AlarmController extends ChangeNotifier {
       _events.sort((a, b) => a.at.compareTo(b.at));
       try {
         await _persist();
+        // First commit history, then remove only the exact configuration that
+        // produced a final dismissal. Replays run this even for known events.
+        final beforeCleanup = [..._alarms];
+        _alarms.removeWhere(
+          (alarm) =>
+              alarm.weekdays.isEmpty &&
+              alarm.deleteAfterDismiss &&
+              alarm.configurationId.isNotEmpty &&
+              incoming.any(
+                (event) =>
+                    !event.alarmId.startsWith('preview:') &&
+                    event.alarmId == alarm.id &&
+                    event.configurationId == alarm.configurationId &&
+                    const [
+                      'dismissed',
+                      'emergency_dismissed',
+                      'emergency',
+                    ].contains(event.type),
+              ),
+        );
+        if (_alarms.length != beforeCleanup.length) {
+          try {
+            await _persist();
+          } catch (_) {
+            _alarms = beforeCleanup;
+            rethrow;
+          }
+        }
         await gateway.ackEvents(
           incoming.map((event) => event.eventId).toList(),
         );
         device = await gateway.status();
         await _mergeNativeConfigs();
+        await _refreshSleepEvents();
       } catch (_) {
         error =
             'История пока не сохранена. Будильник продолжает работать; '

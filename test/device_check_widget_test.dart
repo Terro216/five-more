@@ -130,7 +130,11 @@ void main() {
   ) async {
     await showScreen(tester, width: 320, textScale: 1.5);
     final start = find.byKey(const ValueKey('device-check-start'));
-    await tester.scrollUntilVisible(start, 200);
+    await tester.scrollUntilVisible(
+      start,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     expect(
       tester.widget<FilledButton>(start).onPressed,
@@ -150,6 +154,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('device-check-countdown')),
       200,
+      scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
     expect(
@@ -160,7 +165,11 @@ void main() {
     expect(tester.takeException(), isNull);
 
     final cancel = find.byKey(const ValueKey('device-check-cancel'));
-    await tester.scrollUntilVisible(cancel, 200);
+    await tester.scrollUntilVisible(
+      cancel,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(cancel);
     await tester.pumpAndSettle();
@@ -179,7 +188,11 @@ void main() {
   ) async {
     await showScreen(tester, width: 320, textScale: 1.5);
     final start = find.byKey(const ValueKey('device-check-start'));
-    await tester.scrollUntilVisible(start, 200);
+    await tester.scrollUntilVisible(
+      start,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     expect(
       tester.widget<FilledButton>(start).onPressed,
@@ -200,7 +213,11 @@ void main() {
     expect(controller.deviceCheck!.heard, isNull);
     expect(storage.snapshot.deviceCheck!.confirmedAt, isNull);
     final heard = find.byKey(const ValueKey('device-check-heard'));
-    await tester.scrollUntilVisible(heard, 200);
+    await tester.scrollUntilVisible(
+      heard,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     expect(heard, findsOneWidget);
     expect(
@@ -226,7 +243,11 @@ void main() {
     gateway.rejectTest = true;
     await showScreen(tester);
     final start = find.byKey(const ValueKey('device-check-start'));
-    await tester.scrollUntilVisible(start, 200);
+    await tester.scrollUntilVisible(
+      start,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     expect(
       tester.widget<FilledButton>(start).onPressed,

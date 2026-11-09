@@ -32,6 +32,10 @@ class Alarm {
     required this.hour,
     required this.minute,
     this.title = '',
+    this.dismissalMode = 'challenge',
+    this.vibration = true,
+    this.deleteAfterDismiss = false,
+    this.configurationId = '',
     this.weekdays = const [],
     this.enabled = true,
     this.snoozeMinutes = 5,
@@ -57,13 +61,19 @@ class Alarm {
     minute: 30,
     weekdays: const [1, 2, 3, 4, 5],
     difficulty: ChallengeDifficulty.easy,
-    escalateOnSnooze: true,
+    dismissalMode: 'normal',
+    snoozeBudgetMinutes: 15,
   );
 
   final String id;
   final int hour;
   final int minute;
   final String title;
+  final String dismissalMode;
+  bool get requiresChallenge => dismissalMode == 'challenge';
+  final bool vibration;
+  final bool deleteAfterDismiss;
+  final String configurationId;
   final List<int> weekdays;
   final bool enabled;
   final int snoozeMinutes;
@@ -87,8 +97,9 @@ class Alarm {
   String get timeLabel =>
       '${hour.toString().padLeft(2, '0')}:'
       '${minute.toString().padLeft(2, '0')}';
-  String get displayTitle =>
-      title.trim().isEmpty ? 'Пора вставать' : title.trim();
+  String get displayTitle => title.trim();
+  String get systemTitle =>
+      displayTitle.isEmpty ? 'Будильник на $timeLabel' : displayTitle;
   String get repeatLabel => alarmRepeatLabel(this);
 
   /// Use the native occurrence's counter, so reopening Flutter cannot lower
@@ -130,6 +141,10 @@ class Alarm {
     int? hour,
     int? minute,
     String? title,
+    String? dismissalMode,
+    bool? vibration,
+    bool? deleteAfterDismiss,
+    String? configurationId,
     List<int>? weekdays,
     bool? enabled,
     int? snoozeMinutes,
@@ -159,6 +174,12 @@ class Alarm {
     hour: hour ?? this.hour,
     minute: minute ?? this.minute,
     title: title ?? this.title,
+    dismissalMode: dismissalMode ?? this.dismissalMode,
+    vibration: vibration ?? this.vibration,
+    deleteAfterDismiss:
+        (weekdays ?? this.weekdays).isEmpty &&
+        (deleteAfterDismiss ?? this.deleteAfterDismiss),
+    configurationId: configurationId ?? this.configurationId,
     weekdays: List.unmodifiable(weekdays ?? this.weekdays),
     enabled: enabled ?? this.enabled,
     snoozeMinutes: snoozeMinutes ?? this.snoozeMinutes,
@@ -183,6 +204,10 @@ class Alarm {
     'hour': hour,
     'minute': minute,
     'title': title,
+    'dismissalMode': dismissalMode,
+    'vibration': vibration,
+    'deleteAfterDismiss': weekdays.isEmpty && deleteAfterDismiss,
+    'configurationId': configurationId,
     'weekdays': weekdays,
     'enabled': enabled,
     'snoozeMinutes': snoozeMinutes,
@@ -225,6 +250,11 @@ class Alarm {
       hour: intValue(json['hour'], 7).clamp(0, 23),
       minute: intValue(json['minute'], 30).clamp(0, 59),
       title: json['title'] as String? ?? '',
+      dismissalMode: json['dismissalMode'] == 'normal' ? 'normal' : 'challenge',
+      vibration: json['vibration'] != false,
+      deleteAfterDismiss:
+          weekdays.isEmpty && json['deleteAfterDismiss'] == true,
+      configurationId: json['configurationId'] as String? ?? '',
       weekdays: weekdays,
       enabled: json['enabled'] == true,
       snoozeMinutes: intValue(json['snoozeMinutes'], 5).clamp(1, 30),
@@ -232,9 +262,7 @@ class Alarm {
       snoozeBudgetMinutes: json['snoozeBudgetMinutes'] is num
           ? intValue(json['snoozeBudgetMinutes'], 15).clamp(0, 300)
           : null,
-      volumeRampSeconds: [0, 10, 30, 60].contains(json['volumeRampSeconds'])
-          ? intValue(json['volumeRampSeconds'], 10)
-          : 10,
+      volumeRampSeconds: intValue(json['volumeRampSeconds'], 10).clamp(0, 60),
       armedAt: parseNextTimestamp(json['armedAt']),
       challengeKind: ChallengeKind.values.firstWhere(
         (kind) => kind.name == json['challengeKind'],
@@ -274,7 +302,11 @@ class AlarmEvent {
     this.snoozesUsed = 0,
     this.snoozedMinutes = 0,
     this.nextAt,
+    this.configurationId = '',
   });
+  // Native delivery metadata only. Deliberately excluded from history/sync JSON.
+  // Cleanup finishes before acknowledgement; replay still carries this token.
+  final String configurationId;
   final String eventId;
   final String alarmId;
   final String occurrenceId;
@@ -285,6 +317,7 @@ class AlarmEvent {
   final DateTime? nextAt;
 
   factory AlarmEvent.fromJson(Map<String, dynamic> json) => AlarmEvent(
+    configurationId: json['configurationId'] as String? ?? '',
     eventId: json['eventId'] as String,
     alarmId: json['id'] as String? ?? '',
     occurrenceId: json['occurrenceId'] as String? ?? '',
@@ -326,7 +359,11 @@ class RingingAlarm {
     required this.firedAt,
     required this.snoozesUsed,
     this.snoozedMinutes,
+    this.quietUsed = 0,
+    this.quietRemainingSeconds = 0,
   });
+  final int quietUsed;
+  final int quietRemainingSeconds;
   final Alarm alarm;
   final String occurrenceId;
   final DateTime firedAt;
@@ -350,6 +387,8 @@ class RingingAlarm {
       alarm: Alarm.fromJson(config),
       occurrenceId: json['occurrenceId'] as String? ?? config['id'] as String,
       firedAt: parseTimestamp(json['firedAt']) ?? DateTime.now(),
+      quietUsed: intValue(json['quietUsed'], 0),
+      quietRemainingSeconds: intValue(json['quietRemainingSeconds'], 0),
       snoozesUsed: intValue(json['snoozesUsed'], 0),
       snoozedMinutes: json['snoozedMinutes'] is num
           ? intValue(json['snoozedMinutes'], 0)

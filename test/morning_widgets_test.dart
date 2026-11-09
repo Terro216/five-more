@@ -96,7 +96,7 @@ void main() {
     );
     await tester.tap(find.text('Вздремнуть'));
     await tester.pumpAndSettle();
-    expect(find.text('Звонок в 00:18 · через 20 мин'), findsOneWidget);
+    expect(find.text('Звонок в 00:18'), findsOneWidget);
     now = now.add(const Duration(minutes: 2));
     await tester.tap(find.byKey(const ValueKey('save-alarm')));
     await tester.pumpAndSettle();

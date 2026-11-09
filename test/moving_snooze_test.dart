@@ -323,11 +323,11 @@ void main() {
                   axisDirectionToAxis(widget.axisDirection) == Axis.vertical,
             )
             .first;
-        final advanced = find.byKey(const ValueKey('alarm-advanced'));
+        final advanced = find.byKey(const ValueKey('alarm-snoozes'));
         await tester.scrollUntilVisible(advanced, 220, scrollable: vertical);
         await tester.ensureVisible(advanced);
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Настроить вручную'));
+        await tester.tap(find.text('Переносы'));
         await tester.pumpAndSettle();
         final toggle = find.byKey(const ValueKey('move-snooze-button'));
         await tester.scrollUntilVisible(toggle, 220, scrollable: vertical);

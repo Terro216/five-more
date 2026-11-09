@@ -25,7 +25,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Режим знакомства'), findsOneWidget);
-    await tester.tap(find.text('Поставить будильник'));
+    await tester.tap(find.byKey(const ValueKey('add-alarm')));
     await tester.pumpAndSettle();
     expect(find.text('Новый будильник'), findsOneWidget);
     expect(find.text('Сохранить черновик'), findsOneWidget);
@@ -83,7 +83,7 @@ void main() {
       await controller.initialize(startPolling: false);
       await tester.pumpWidget(FiveMoreApp(controller: controller));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Поставить будильник'));
+      await tester.tap(find.byKey(const ValueKey('add-alarm')));
       await tester.pumpAndSettle();
       expect(find.text('Новый будильник'), findsOneWidget);
 

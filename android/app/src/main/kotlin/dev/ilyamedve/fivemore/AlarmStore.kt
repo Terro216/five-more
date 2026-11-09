@@ -39,11 +39,11 @@ class AlarmStore(context: Context) {
         check(prefs.edit().putString("alarms", JSONArray(alarms().filterNot { it.optString("id") == id }).toString()).commit())
     }
 
-    fun event(alarm: JSONObject, type: String, at: Long = System.currentTimeMillis()) {
-        val event = JSONObject()
+    private fun eventRecord(alarm: JSONObject, type: String, at: Long): JSONObject = JSONObject()
             .put("eventId", UUID.randomUUID().toString())
             .put("id", alarm.getString("id"))
             .put("occurrenceId", alarm.optString("occurrenceId"))
+            .put("configurationId", alarm.optString("configurationId"))
             .put("type", type)
             .put("at", at)
             .put("snoozesUsed", alarm.optInt("snoozesUsed"))
@@ -51,9 +51,20 @@ class AlarmStore(context: Context) {
             .put("snoozeMinutes", alarm.optInt("snoozeMinutes", 5))
             .put("nextAt", alarm.optLong("nextAt"))
             .put("enabled", alarm.optBoolean("enabled"))
+
+    fun event(alarm: JSONObject, type: String, at: Long = System.currentTimeMillis()) {
         val all = jsonArray(prefs.getString("events", null))
-        all.put(event)
+        all.put(eventRecord(alarm, type, at))
         check(prefs.edit().putString("events", all.toString()).commit())
+    }
+
+    /** A stopped one-shot and its pending history are a single durable commit. */
+    fun finishOneShot(alarm: JSONObject, type: String) {
+        val events = jsonArray(prefs.getString("events", null))
+        events.put(eventRecord(alarm, type, System.currentTimeMillis()))
+        alarm.put("enabled", false).put("state", "disabled").put("nextAt", 0L)
+        val all = alarms().filterNot { it.optString("id") == alarm.optString("id") } + alarm
+        check(prefs.edit().putString("events", events.toString()).putString("alarms", JSONArray(all).toString()).commit())
     }
 
     fun drainEvents(): List<Map<String, Any?>> {
@@ -65,11 +76,23 @@ class AlarmStore(context: Context) {
     fun ackEvents(ids: Set<String>) {
         val all = jsonArray(prefs.getString("events", null))
         val remaining = JSONArray()
+        var configs = alarms()
         for (i in 0 until all.length()) {
             val event = all.getJSONObject(i)
             if (event.optString("eventId") !in ids) remaining.put(event)
+            else if (event.optString("type") in setOf("dismissed", "emergency_dismissed")) {
+                configs = configs.filterNot { alarm ->
+                    !AlarmRules.isPreviewId(alarm.optString("id")) &&
+                    alarm.optString("id") == event.optString("id") &&
+                    alarm.optString("configurationId").isNotEmpty() &&
+                    alarm.optString("configurationId") == event.optString("configurationId") &&
+                    alarm.optString("occurrenceId") == event.optString("occurrenceId") &&
+                    alarm.optString("state") == "disabled" && alarm.optBoolean("deleteAfterDismiss") &&
+                    (alarm.optJSONArray("weekdays")?.length() ?: 0) == 0
+                }
+            }
         }
-        check(prefs.edit().putString("events", remaining.toString()).commit())
+        check(prefs.edit().putString("events", remaining.toString()).putString("alarms", JSONArray(configs).toString()).commit())
     }
 
     private fun jsonArray(raw: String?): JSONArray = if (raw == null) JSONArray() else JSONArray(raw)

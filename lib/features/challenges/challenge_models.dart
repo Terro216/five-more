@@ -372,6 +372,61 @@ class ChallengeSession {
     List<ChallengeKind> order = const [],
   }) : rounds = _buildRounds(kind, difficulty, random ?? Random(), order);
 
+  ChallengeSession._restored(
+    this.kind,
+    this.difficulty,
+    this.rounds,
+    this._completedSteps,
+    this._mistakes,
+  );
+
+  Map<String, Object?> toJson() => {
+    'kind': kind.name,
+    'difficulty': difficulty.name,
+    'rounds': rounds.map((r) => r.name).toList(),
+    'completedSteps': completedSteps,
+    'mistakes': mistakes,
+  };
+
+  static ChallengeSession? restore(
+    Map<String, dynamic> data,
+    ChallengeKind kind,
+    ChallengeDifficulty difficulty,
+  ) {
+    if (data['kind'] != kind.name || data['difficulty'] != difficulty.name) {
+      return null;
+    }
+    final raw = data['rounds'];
+    final completed = data['completedSteps'], mistakes = data['mistakes'];
+    if (raw is! List ||
+        raw.isEmpty ||
+        raw.length > 12 ||
+        completed is! int ||
+        completed < 0 ||
+        completed > raw.length ||
+        mistakes is! int ||
+        mistakes < 0) {
+      return null;
+    }
+    final rounds = <ChallengeKind>[];
+    for (final value in raw) {
+      final round = ChallengeKind.values
+          .where((r) => r.name == value && r != ChallengeKind.mixed)
+          .firstOrNull;
+      if (round == null || (kind != ChallengeKind.mixed && round != kind)) {
+        return null;
+      }
+      rounds.add(round);
+    }
+    return ChallengeSession._restored(
+      kind,
+      difficulty,
+      List.unmodifiable(rounds),
+      completed,
+      mistakes,
+    );
+  }
+
   final ChallengeKind kind;
   final ChallengeDifficulty difficulty;
   final List<ChallengeKind> rounds;

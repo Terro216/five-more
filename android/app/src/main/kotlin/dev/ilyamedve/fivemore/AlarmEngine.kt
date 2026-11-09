@@ -12,6 +12,8 @@ import android.os.PowerManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+import android.os.SystemClock
+import android.provider.Settings
 
 /** The native engine, not Flutter, owns every active occurrence and its snooze budget. */
 class AlarmEngine(private val context: Context) {
@@ -80,9 +82,13 @@ class AlarmEngine(private val context: Context) {
         val maxSnoozes = (arguments["maxSnoozes"] as? Number)?.toInt() ?: 3
         val budget = (arguments["snoozeBudgetMinutes"] as? Number)?.toInt() ?: maxSnoozes * snoozeMinutes
         val ramp = (arguments["volumeRampSeconds"] as? Number)?.toInt() ?: 10
-        if (budget !in 0..300 || ramp !in setOf(0, 10, 30, 60)) return fail("invalid_schedule")
+        if (budget !in 0..300 || ramp !in 0..60) return fail("invalid_schedule")
         val weekdays = (arguments["weekdays"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() } ?: emptyList()
         if (hour !in 0..23 || minute !in 0..59 || snoozeMinutes !in 1..30 || maxSnoozes !in 0..10 || weekdays.any { it !in 1..7 }) return fail("invalid_schedule")
+        val mode = arguments["dismissalMode"] ?: "challenge"
+        if (mode !in setOf("normal", "challenge")) return fail("invalid_schedule")
+        if (arguments.containsKey("vibration") && arguments["vibration"] !is Boolean) return fail("invalid_schedule")
+        if (arguments.containsKey("deleteAfterDismiss") && arguments["deleteAfterDismiss"] !is Boolean) return fail("invalid_schedule")
         val challenge = AlarmRules.challengeOptions(arguments, fromStoredConfiguration = test != null)
             ?: return fail("invalid_challenge")
         val enabled = arguments["enabled"] as? Boolean ?: true
@@ -91,12 +97,15 @@ class AlarmEngine(private val context: Context) {
         val order = (arguments["mixOrder"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
         if (order.size > 12 || order.any { it !in setOf("math", "memory", "stroop", "sequence", "mirror", "captcha", "qr", "shake", "maze", "flags") }) return fail("invalid_challenge")
         val qr = (arguments["qrValue"] as? String ?: "").take(2048)
-        if ((challenge.kind == "qr" || (challenge.kind == "mixed" && "qr" in order)) && qr.isBlank()) return fail("invalid_challenge")
+        if (mode == "challenge" && (challenge.kind == "qr" || (challenge.kind == "mixed" && "qr" in order)) && qr.isBlank()) return fail("invalid_challenge")
         val sound = arguments["sound"] as? String ?: "system"
         try { ExtrasBridge.soundUri(context, sound) } catch (_: Exception) { return fail("sound_unavailable", "Мелодия недоступна. Выбери её снова.") }
         if (enabled && !canSchedule()) return fail("exact_alarm_permission")
         val alarm = JSONObject()
-            .put("id", id).put("title", (arguments["title"] as? String ?: "Ещё пять").take(160))
+            .put("id", id).put("title", (arguments["title"] as? String ?: "").take(160))
+            .put("dismissalMode", mode).put("vibration", arguments["vibration"] as? Boolean ?: true)
+            .put("deleteAfterDismiss", test == null && weekdays.isEmpty() && arguments["deleteAfterDismiss"] == true)
+            .put("configurationId", arguments["configurationId"] as? String ?: "")
             .put("hour", hour).put("minute", minute).put("weekdays", JSONArray(weekdays.distinct()))
             .put("enabled", enabled).put("snoozeMinutes", snoozeMinutes).put("maxSnoozes", maxSnoozes)
             .put("snoozeBudgetMinutes", budget).put("snoozedMinutes", 0).put("volumeRampSeconds", ramp)
@@ -188,8 +197,13 @@ class AlarmEngine(private val context: Context) {
         val alarm = store.get(id) ?: return fail("not_found")
         if (alarm.optString("state") !in listOf("ringing", "snoozed")) return fail("not_ringing")
         cancelPending(id)
-        store.event(alarm, if (timedOut) "timed_out" else if (emergency) "emergency_dismissed" else "dismissed")
-        resolve(alarm)
+        val type = if (timedOut) "timed_out" else if (emergency) "emergency_dismissed" else "dismissed"
+        if ((alarm.optJSONArray("weekdays")?.length() ?: 0) == 0 && !AlarmRules.isPreviewId(id)) {
+            store.finishOneShot(alarm, type)
+        } else {
+            store.event(alarm, type)
+            resolve(alarm)
+        }
         refreshService()
         return success(alarm)
     }
@@ -212,6 +226,11 @@ class AlarmEngine(private val context: Context) {
         val now = System.currentTimeMillis()
         if (now + 1_000L < expectedAt) return false
         if (alarm.optLong("firedAt") == 0L) alarm.put("firedAt", now)
+        if (!alarm.has("quietGeneration") || alarm.optInt("quietGeneration") != alarm.optInt("snoozesUsed")) {
+            alarm.put("quietGeneration", alarm.optInt("snoozesUsed"))
+                .put("quietUsed", 0).put("quietDeadline", 0L).put("quietBoot", -1)
+                .put("ringStartedElapsed", SystemClock.elapsedRealtime()).put("ringBoot", bootCount())
+        }
         val ringingSince = AlarmRules.ringingSinceAfterFire(alarm.optString("state"), alarm.optLong("ringingSince"), now)
         alarm.put("state", "ringing").put("ringingSince", ringingSince).put("nextAt", 0L)
         store.put(alarm)
@@ -222,7 +241,28 @@ class AlarmEngine(private val context: Context) {
     fun ringing(): JSONObject? = store.alarms().filter { it.optString("state") == "ringing" && it.optString("id") !in silencedAlarmIds }
         .minByOrNull { it.optLong("ringingSince") }
 
-    fun getRingingAlarm(): Map<String, Any?>? = ringing()?.toMap()
+    fun bootCount(): Int = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1)
+
+    fun quietRemaining(alarm: JSONObject): Long = AlarmAudioRules.remaining(
+        SystemClock.elapsedRealtime(), alarm.optLong("quietDeadline"), alarm.optInt("quietBoot", -1), bootCount())
+
+    fun quiet(id: String, occurrence: String, generation: Int): Map<String, Any?> {
+        val alarm = store.get(id) ?: return fail("not_found")
+        if (alarm.optString("state") != "ringing" || alarm.optString("occurrenceId") != occurrence ||
+            alarm.optInt("snoozesUsed") != generation) return fail("not_ringing")
+        if (!AlarmAudioRules.canQuiet(alarm.optInt("quietUsed"), quietRemaining(alarm))) return fail("quiet_unavailable")
+        val boot = bootCount()
+        if (boot < 0) return fail("quiet_unavailable")
+        alarm.put("quietUsed", alarm.optInt("quietUsed") + 1)
+            .put("quietDeadline", SystemClock.elapsedRealtime() + AlarmAudioRules.QUIET_MS)
+            .put("quietBoot", boot).put("quietGeneration", generation)
+        store.put(alarm)
+        return success(alarm)
+    }
+
+    fun getRingingAlarm(): Map<String, Any?>? = ringing()?.let {
+        it.toMap() + mapOf("quietRemainingSeconds" to ((quietRemaining(it) + 999) / 1000))
+    }
 
     /** A separate native occurrence exercises delivery without changing the user's schedule. */
     fun testAlarm(id: String, delayValue: Any? = null): Map<String, Any?> {
@@ -338,7 +378,7 @@ class AlarmEngine(private val context: Context) {
             alarm.put("enabled", false).put("state", "disabled").put("nextAt", 0L)
         } else {
             alarm.put("occurrenceId", UUID.randomUUID().toString())
-                .put("state", "scheduled").put("snoozesUsed", 0).put("snoozedMinutes", 0)
+                .put("state", "scheduled").put("snoozesUsed", 0).put("snoozedMinutes", 0).put("quietGeneration", -1)
                 .put("firedAt", 0L).put("ringingSince", 0L)
                 .put("nextAt", nextOccurrence(alarm))
         }
@@ -401,6 +441,7 @@ class AlarmEngine(private val context: Context) {
 
     companion object {
         const val ACTION_FIRE = "dev.ilyamedve.fivemore.FIRE"
+        const val ACTION_DISMISS = "dev.ilyamedve.fivemore.DISMISS"
         const val ACTION_SNOOZE = "dev.ilyamedve.fivemore.SNOOZE"
         private val silencedAlarmIds = mutableSetOf<String>()
         private var safetyError: String? = null

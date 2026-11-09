@@ -4,12 +4,41 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/sleep_entry.dart';
+import '../models/sleep_goals.dart';
 import 'native_extras.dart';
 import 'local_database.dart';
 
 class SleepJournal extends ChangeNotifier {
   static const _key = 'five_more.sleep.v1';
   List<SleepEntry> entries = [];
+  SleepGoals goals = const SleepGoals();
+  Map<String, dynamic> sleepEstimates = {};
+  // Local wall times keep historical regularity stable after travel. These
+  // offsets are not added to the existing statistics-sync contract.
+  Map<String, dynamic> sleepTimezones = {};
+  Future<void> setGoals(SleepGoals value) async {
+    final previous = goals;
+    goals = value;
+    try {
+      await _persist();
+    } catch (_) {
+      goals = previous;
+      rethrow;
+    }
+  }
+
+  Future<void> saveEstimate(String id, Map<String, Object?> value) async {
+    // Preserve the first proposal separately from later manual corrections.
+    if (sleepEstimates.containsKey(id)) return;
+    sleepEstimates[id] = value;
+    try {
+      await _persist();
+    } catch (_) {
+      sleepEstimates.remove(id);
+      rethrow;
+    }
+  }
+
   List<VoiceNote> notes = [];
   Set<String> skipped = {};
   bool reminder = false;
@@ -37,6 +66,15 @@ class SleepJournal extends ChangeNotifier {
           : (await SharedPreferences.getInstance()).getString(_key);
       if (raw != null) {
         final data = jsonDecode(raw) as Map<String, dynamic>;
+        goals = SleepGoals.fromJson(
+          Map<String, dynamic>.from(data['goals'] as Map? ?? {}),
+        );
+        sleepEstimates = Map<String, dynamic>.from(
+          data['sleepEstimates'] as Map? ?? {},
+        );
+        sleepTimezones = Map<String, dynamic>.from(
+          data['sleepTimezones'] as Map? ?? {},
+        );
         entries = (data['entries'] as List? ?? [])
             .map(
               (e) => SleepEntry.fromJson(Map<String, dynamic>.from(e as Map)),
@@ -113,6 +151,9 @@ class SleepJournal extends ChangeNotifier {
         'bedHour': bedHour,
         'bedMinute': bedMinute,
         'fallingAsleepMinutes': fallingAsleepMinutes,
+        'goals': goals.toJson(),
+        'sleepEstimates': sleepEstimates,
+        'sleepTimezones': sleepTimezones,
       });
       _notify();
       return;
@@ -127,6 +168,9 @@ class SleepJournal extends ChangeNotifier {
         'bedHour': bedHour,
         'bedMinute': bedMinute,
         'fallingAsleepMinutes': fallingAsleepMinutes,
+        'goals': goals.toJson(),
+        'sleepEstimates': sleepEstimates,
+        'sleepTimezones': sleepTimezones,
       }),
     );
     if (!ok) throw StateError('Не удалось сохранить дневник');
@@ -135,23 +179,49 @@ class SleepJournal extends ChangeNotifier {
 
   Future<void> saveEntry(SleepEntry entry) async {
     if (!ready) throw StateError('Дневник недоступен');
-    if (usesSqlite) {
-      await LocalDatabase.instance.put(
-        'sleep',
-        entry.occurrenceId,
-        entry.toJson(),
-        entry.wokeAt.millisecondsSinceEpoch,
-      );
-    }
+    final previousEntry = entries
+        .where((e) => e.occurrenceId == entry.occurrenceId)
+        .firstOrNull;
+    final previousZone = sleepTimezones[entry.occurrenceId];
+    sleepTimezones[entry.occurrenceId] = {
+      'bedAt': entry.bedAt.millisecondsSinceEpoch,
+      'wakeAt': entry.wokeAt.millisecondsSinceEpoch,
+      'bedOffsetMinutes': previousEntry?.bedAt == entry.bedAt
+          ? (previousZone is Map &&
+                    previousZone['bedAt'] == entry.bedAt.millisecondsSinceEpoch
+                ? previousZone['bedOffsetMinutes']
+                : null)
+          : entry.bedAt.toLocal().timeZoneOffset.inMinutes,
+      'wakeOffsetMinutes': previousEntry?.wokeAt == entry.wokeAt
+          ? (previousZone is Map &&
+                    previousZone['wakeAt'] ==
+                        entry.wokeAt.millisecondsSinceEpoch
+                ? previousZone['wakeOffsetMinutes']
+                : null)
+          : entry.wokeAt.toLocal().timeZoneOffset.inMinutes,
+    };
     final old = entries;
-    entries = [
-      ...entries.where((e) => e.occurrenceId != entry.occurrenceId),
-      entry,
-    ];
     try {
+      if (usesSqlite) {
+        await LocalDatabase.instance.put(
+          'sleep',
+          entry.occurrenceId,
+          entry.toJson(),
+          entry.wokeAt.millisecondsSinceEpoch,
+        );
+      }
+      entries = [
+        ...entries.where((e) => e.occurrenceId != entry.occurrenceId),
+        entry,
+      ];
       await _persist();
     } catch (_) {
       entries = old;
+      if (previousZone == null) {
+        sleepTimezones.remove(entry.occurrenceId);
+      } else {
+        sleepTimezones[entry.occurrenceId] = previousZone;
+      }
       rethrow;
     }
   }

@@ -74,7 +74,7 @@ Future<void> _openEditor(
   );
   await tester.tap(find.text('Открыть настройки'));
   await tester.pumpAndSettle();
-  final advanced = find.byKey(const ValueKey('alarm-advanced'));
+  final advanced = find.byKey(const ValueKey('alarm-challenge'));
   await tester.scrollUntilVisible(
     advanced,
     220,
@@ -88,7 +88,7 @@ Future<void> _openEditor(
   );
   await tester.pumpAndSettle();
   if (!tester.widget<ExpansionTile>(advanced).initiallyExpanded) {
-    await _tapScrolled(tester, find.text('Настроить вручную'));
+    await _tapScrolled(tester, find.text('Задание'));
   }
 }
 
@@ -129,7 +129,10 @@ void main() {
     final toggle = find.byKey(const ValueKey('escalate-on-snooze'));
     await _tapScrolled(tester, toggle);
     expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
-    expect(find.textContaining('после 1 переноса: Средне'), findsOneWidget);
+    expect(
+      find.text('Каждый перенос повышает сложность на один уровень'),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const ValueKey('save-alarm')));
     await tester.pumpAndSettle();
     expect(storage.snapshot.alarms.single.escalateOnSnooze, isTrue);

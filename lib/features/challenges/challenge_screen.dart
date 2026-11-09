@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -22,6 +26,8 @@ class ChallengeScreen extends StatefulWidget {
     this.practice = false,
     this.order = const [],
     this.qrValue = '',
+    this.alarmAction,
+    this.progressIdentity,
   });
 
   final ChallengeKind kind;
@@ -31,6 +37,8 @@ class ChallengeScreen extends StatefulWidget {
   final bool practice;
   final List<ChallengeKind> order;
   final String qrValue;
+  final Widget? alarmAction;
+  final String? progressIdentity;
 
   @override
   State<ChallengeScreen> createState() => _ChallengeScreenState();
@@ -44,7 +52,66 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   static const _muted = muted;
 
   final _random = Random();
-  late final ChallengeSession _session;
+  late ChallengeSession _session;
+  bool _restoringProgress = false;
+  String? _progressError;
+  Future<void> _progressQueue = Future.value();
+  Future<void> _persistProgress() {
+    if (widget.progressIdentity == null) return Future.value();
+    final snapshot = jsonEncode({
+      'identity': widget.progressIdentity,
+      'session': _session.toJson(),
+    });
+    final pending = _progressQueue.then((_) async {
+      final saved = await (await SharedPreferences.getInstance()).setString(
+        'five_more.challenge.v1',
+        snapshot,
+      );
+      if (!saved) throw StateError('Challenge progress not saved');
+    });
+    _progressQueue = pending.catchError((Object _) {});
+    return pending;
+  }
+
+  Future<void> _restoreProgress() async {
+    try {
+      await _progressQueue;
+      final raw = (await SharedPreferences.getInstance()).getString(
+        'five_more.challenge.v1',
+      );
+      if (!mounted) return;
+      if (raw != null) {
+        final saved = jsonDecode(raw) as Map<String, dynamic>;
+        if (saved['identity'] == widget.progressIdentity &&
+            saved['session'] is Map) {
+          final restored = ChallengeSession.restore(
+            Map<String, dynamic>.from(saved['session'] as Map),
+            widget.kind,
+            widget.difficulty,
+          );
+          if (restored != null) _session = restored;
+        }
+      }
+      setState(() {
+        _restoringProgress = false;
+        _prepareRound();
+      });
+      if (_session.isComplete) {
+        _completionReady = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _deliverCompletion();
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _restoringProgress = false;
+          _progressError = 'Не удалось восстановить прогресс задания. Можно пройти его заново.';
+        });
+      }
+    }
+  }
+
   late ChallengeKind _activeKind;
   MathQuestion? _math;
   MemoryPattern? _memory;
@@ -81,6 +148,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       order: widget.order,
     );
     _prepareRound();
+    if (widget.progressIdentity != null) {
+      _restoringProgress = true;
+      unawaited(_restoreProgress());
+    }
   }
 
   @override
@@ -184,8 +255,13 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     });
   }
 
-  void _answer(bool correct) {
-    if (_finished || _transitioning || _session.isComplete) return;
+  Future<void> _answer(bool correct) async {
+    if (_restoringProgress ||
+        _finished ||
+        _transitioning ||
+        _session.isComplete) {
+      return;
+    }
     if (!correct) {
       setState(() {
         _session.submitIncorrect();
@@ -195,6 +271,15 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             : 'Ошибка. Один этап назад.';
         _feedbackCorrect = false;
       });
+      try {
+        await _persistProgress();
+      } catch (_) {
+        if (mounted) {
+          setState(
+            () => _progressError = 'Прогресс пока не сохранён. При перезапуске этап может повториться.',
+          );
+        }
+      }
       return;
     }
     final complete = _session.submitCorrect();
@@ -203,6 +288,16 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       _feedbackCorrect = true;
       _feedback = complete ? 'Готово. Доброе утро!' : 'Верно. Ещё немного.';
     });
+    try {
+      await _persistProgress();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _progressError = 'Прогресс пока не сохранён. При перезапуске этап может повториться.',
+        );
+      }
+    }
+    if (!mounted) return;
     _nextTimer = Timer(const Duration(milliseconds: 500), () {
       if (!mounted || _finished) return;
       if (complete) {
@@ -278,16 +373,19 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               constraints: const BoxConstraints(maxWidth: 520),
               child: Column(
                 children: [
-                  if (!keyboardVisible || widget.practice)
+                  if (!keyboardVisible ||
+                      widget.practice ||
+                      widget.alarmAction != null)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(24, 16, 16, 0),
                       child: Row(
                         children: [
                           if (!keyboardVisible) ...[
-                            const Icon(
-                              Icons.wb_twilight_rounded,
-                              color: _accent,
-                            ),
+                            if (widget.alarmAction == null)
+                              const Icon(
+                                Icons.wb_twilight_rounded,
+                                color: _accent,
+                              ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
@@ -302,6 +400,8 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                             ),
                           ] else
                             const Spacer(),
+                          if (widget.alarmAction != null)
+                            Flexible(child: widget.alarmAction!),
                           if (widget.practice)
                             IconButton(
                               tooltip: 'Закрыть тренировку',
@@ -311,82 +411,97 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                         ],
                       ),
                     ),
+                  if (_restoringProgress) const LinearProgressIndicator(),
+                  if (_progressError != null)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(_progressError!),
+                    ),
                   Expanded(
-                    child:
-                        _activeKind == ChallengeKind.memory &&
-                            _showPattern &&
-                            _hard
-                        ? _memoryPreview()
-                        : SingleChildScrollView(
-                            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Wrap(
-                                  alignment: WrapAlignment.spaceBetween,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 12,
-                                  runSpacing: 8,
-                                  children: [
-                                    Text(
-                                      widget.kind.label,
+                    child: IgnorePointer(
+                      ignoring: _restoringProgress,
+                      child:
+                          _activeKind == ChallengeKind.memory &&
+                              _showPattern &&
+                              _hard
+                          ? _memoryPreview()
+                          : SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(
+                                24,
+                                28,
+                                24,
+                                24,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Wrap(
+                                    alignment: WrapAlignment.spaceBetween,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    spacing: 12,
+                                    runSpacing: 8,
+                                    children: [
+                                      Text(
+                                        widget.kind.label,
+                                        style: TextStyle(
+                                          color: _text,
+                                          fontSize:
+                                              MediaQuery.textScalerOf(context)
+                                                      .scale(1) >
+                                                  1.3
+                                              ? 26
+                                              : 34,
+                                          height: 1.1,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text(
+                                        '$currentNumber / ${_session.totalSteps}',
+                                        style: const TextStyle(
+                                          color: _accent,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 18),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: LinearProgressIndicator(
+                                      value: _session.progress,
+                                      minHeight: 5,
+                                      color: _accent,
+                                      backgroundColor: _surface,
+                                      semanticsLabel:
+                                          'Пройдено заданий: ${_session.completedSteps} из ${_session.totalSteps}',
+                                    ),
+                                  ),
+                                  const SizedBox(height: 30),
+                                  IgnorePointer(
+                                    ignoring: _transitioning,
+                                    child: _buildTask(),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Semantics(
+                                    liveRegion: true,
+                                    child: Text(
+                                      _feedback ?? '',
+                                      textAlign: TextAlign.center,
                                       style: TextStyle(
-                                        color: _text,
-                                        fontSize:
-                                            MediaQuery.textScalerOf(context)
-                                                    .scale(1) >
-                                                1.3
-                                            ? 26
-                                            : 34,
-                                        height: 1.1,
-                                        fontWeight: FontWeight.w700,
+                                        color: _feedbackCorrect
+                                            ? _accent
+                                            : _muted,
+                                        fontSize: 14,
+                                        height: 1.5,
                                       ),
                                     ),
-                                    Text(
-                                      '$currentNumber / ${_session.totalSteps}',
-                                      style: const TextStyle(
-                                        color: _accent,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 18),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: LinearProgressIndicator(
-                                    value: _session.progress,
-                                    minHeight: 5,
-                                    color: _accent,
-                                    backgroundColor: _surface,
-                                    semanticsLabel:
-                                        'Пройдено заданий: ${_session.completedSteps} из ${_session.totalSteps}',
                                   ),
-                                ),
-                                const SizedBox(height: 30),
-                                IgnorePointer(
-                                  ignoring: _transitioning,
-                                  child: _buildTask(),
-                                ),
-                                const SizedBox(height: 20),
-                                Semantics(
-                                  liveRegion: true,
-                                  child: Text(
-                                    _feedback ?? '',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: _feedbackCorrect
-                                          ? _accent
-                                          : _muted,
-                                      fontSize: 14,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
+                    ),
                   ),
                   if (!widget.practice && widget.onEmergencyExit != null)
                     Padding(

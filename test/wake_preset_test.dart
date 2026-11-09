@@ -89,7 +89,7 @@ void main() {
     },
   );
 
-  test('the existing new-alarm default matches the gradual preset', () {
-    expect(WakePreset.matching(Alarm.fresh()), WakePreset.gradual);
+  test('new alarms do not use a legacy preset', () {
+    expect(WakePreset.matching(Alarm.fresh()), isNull);
   });
 }

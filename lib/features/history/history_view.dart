@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../models/alarm.dart';
 import '../../models/sleep_entry.dart';
+import '../../models/sleep_goals.dart';
+import '../sleep/sleep_goals_editor.dart';
 import '../../services/sleep_journal.dart';
 import '../../services/local_database.dart';
 import '../../services/sync_service.dart';
@@ -440,12 +442,12 @@ class _HistoryViewState extends State<HistoryView> {
             _heading(
               'От звонка до отключения',
               summary == null
-                  ? 'Минуты · только завершённые задания'
-                  : 'Среднее за день · только завершённые задания',
+                  ? 'Минуты · обычное отключение'
+                  : 'Среднее за день · обычное отключение',
             ),
             if (wakePoints.isEmpty)
               const Text(
-                'Пока нет пары «звонок — задание пройдено».',
+                'Пока нет пары «звонок — обычное отключение».',
                 style: TextStyle(color: muted),
               )
             else
@@ -457,6 +459,7 @@ class _HistoryViewState extends State<HistoryView> {
           ],
           const SizedBox(height: 28),
           _heading('Сон и самочувствие', 'Расчётное время сна и твои оценки'),
+          _goals(sleep, cutoff, until),
           if (sleepPoints.isEmpty)
             const Text('Пока нет оценок сна.', style: TextStyle(color: muted))
           else ...[
@@ -531,8 +534,171 @@ class _HistoryViewState extends State<HistoryView> {
       ],
     ),
   );
+  Widget _goals(List<SleepEntry> entries, DateTime from, DateTime until) {
+    final goals = widget.journal.goals;
+    final eligible = entries.where((e) => e.hours > 0).toList();
+    DateTime wakeWall(SleepEntry entry) {
+      final zone = widget.journal.sleepTimezones[entry.occurrenceId];
+      if (zone is Map &&
+          zone['wakeAt'] == entry.wokeAt.millisecondsSinceEpoch &&
+          zone['wakeOffsetMinutes'] is int) {
+        return SleepGoals.wallTime(
+          entry.wokeAt,
+          zone['wakeOffsetMinutes'] as int,
+        );
+      }
+      return entry.wokeAt.toLocal();
+    }
+
+    final dates = eligible
+        .map(
+          (e) => DateTime(wakeWall(e).year, wakeWall(e).month, wakeWall(e).day),
+        )
+        .toSet();
+    // Calendar arithmetic keeps the number of missing dates stable across DST.
+    final periodStart = DateTime(from.year, from.month, from.day);
+    final periodEnd = DateTime(until.year, until.month, until.day);
+    final days = DateTime.utc(periodEnd.year, periodEnd.month, periodEnd.day)
+        .difference(
+          DateTime.utc(periodStart.year, periodStart.month, periodStart.day),
+        )
+        .inDays;
+    final manual = eligible
+        .where((e) => e.bedSource == 'manual' || e.wakeSource == 'manual')
+        .length;
+    final regime = <({String label, double value})>[];
+    var outside = 0, unknownBed = 0;
+    if (goals.hasSchedule) {
+      for (final entry in eligible) {
+        final zone = widget.journal.sleepTimezones[entry.occurrenceId];
+        final wakeOffset = zone is Map
+            ? zone['wakeOffsetMinutes'] as int?
+            : null;
+        final bedOffset = zone is Map ? zone['bedOffsetMinutes'] as int? : null;
+        if (wakeOffset == null ||
+            bedOffset == null ||
+            zone['bedAt'] != entry.bedAt.millisecondsSinceEpoch ||
+            zone['wakeAt'] != entry.wokeAt.millisecondsSinceEpoch) {
+          unknownBed++;
+          continue;
+        }
+        final wake = SleepGoals.wallTime(entry.wokeAt, wakeOffset);
+        final wakeDistance = SleepGoals.clockDistance(
+          wake.hour * 60 + wake.minute,
+          goals.wakeMinute!,
+        );
+        // Keep off-schedule sleep separate instead of calling a daytime nap a
+        // failed night. The window is explicit in the caption.
+        if (wakeDistance > 360) {
+          outside++;
+          continue;
+        }
+        final estimate = widget.journal.sleepEstimates[entry.occurrenceId];
+        final latency = estimate is Map
+            ? estimate['fallingAsleepMinutes'] as int?
+            : null;
+        if (latency == null) {
+          unknownBed++;
+          continue;
+        }
+        final bed = SleepGoals.wallTime(
+          entry.bedAt,
+          bedOffset,
+        ).subtract(Duration(minutes: latency));
+        final bedDistance = SleepGoals.clockDistance(
+          bed.hour * 60 + bed.minute,
+          goals.bedMinute!,
+        );
+        regime.add((
+          label: '${wake.day}.${wake.month}',
+          value: max(bedDistance, wakeDistance).toDouble(),
+        ));
+      }
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Моя цель'),
+          subtitle: Text(
+            goals.isEmpty
+                ? 'По желанию · только на этом телефоне'
+                : 'Личная цель · изменить',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => SleepGoalsEditor(journal: widget.journal),
+            ),
+          ),
+        ),
+        if (!goals.isEmpty) ...[
+          Text(
+            'На телефоне: ${eligible.length} оценок сна, из них $manual с ручной правкой времени. Дат без оценки: ${max(0, days - dates.length)}. Пропуски не считаются нулём.',
+            style: const TextStyle(color: muted, fontSize: 12),
+          ),
+          Text(
+            'Время засыпания: ${eligible.where((e) => e.bedSource == 'alarm_setup').length} по настройке будильника, ${eligible.where((e) => e.bedSource == 'habit').length} по обычному времени, ${eligible.where((e) => e.bedSource == 'manual').length} указано вручную.',
+            style: const TextStyle(color: muted, fontSize: 12),
+          ),
+          if (goals.durationMinutes != null) ...[
+            const SizedBox(height: 12),
+            Text('Желаемая длительность: ${goals.durationMinutes} мин'),
+            if (eligible.isEmpty)
+              const Text('Пока нет оценок для сравнения.')
+            else
+              DataPlot(
+                points: eligible
+                    .map(
+                      (e) => (
+                        label: '${wakeWall(e).day}.${wakeWall(e).month}',
+                        value: e.hours,
+                      ),
+                    )
+                    .toList(),
+                unit: 'ч',
+                color: const Color(0xFF7FBFFF),
+                target: goals.durationMinutes! / 60,
+                connect: false,
+              ),
+            const Text(
+              'Каждая точка — отдельный сон, включая дневной. Время не измерено устройством.',
+              style: TextStyle(color: muted, fontSize: 12),
+            ),
+          ],
+          if (goals.hasSchedule) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Режим: ${SleepGoals.clock(goals.bedMinute!)} — ${SleepGoals.clock(goals.wakeMinute!)} · ±${goals.toleranceMinutes} мин',
+            ),
+            const Text('Отклонение укладывания или подъёма — большее из двух'),
+            if (regime.isNotEmpty)
+              DataPlot(
+                points: regime,
+                unit: 'мин',
+                color: morning,
+                target: goals.toleranceMinutes!.toDouble(),
+                connect: false,
+              ),
+            Text(
+              'Подходящих оценок: ${regime.length}. Вне окна подъёма ±6 ч: $outside — показаны отдельно в длительности. Без исходной оценки или часового пояса: $unknownBed.',
+              style: const TextStyle(color: muted, fontSize: 12),
+            ),
+            const Text(
+              'Укладывание оценено как засыпание минус сохранённое время засыпания. Используем местное время при сохранении оценки, с переходом через полночь.',
+              style: TextStyle(color: muted, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 24),
+        ],
+      ],
+    );
+  }
+
   Widget _outcomes(List<int> values) {
-    const names = ['С заданием', 'Аварийно', 'Пропуск / тайм-аут'];
+    const names = ['Отключён', 'Аварийно', 'Пропуск / тайм-аут'];
     const colors = [Color(0xFF8EDDAB), Color(0xFFF3C96B), Color(0xFFFFB4AB)];
     final total = values.fold(0, (sum, n) => sum + n);
     return Column(
@@ -577,12 +743,16 @@ class DataPlot extends StatefulWidget {
     required this.color,
     this.bars = false,
     this.ceiling,
+    this.target,
+    this.connect = true,
   });
   final List<({String label, double value})> points;
   final String unit;
   final Color color;
   final bool bars;
   final double? ceiling;
+  final double? target;
+  final bool connect;
   @override
   State<DataPlot> createState() => _DataPlotState();
 }
@@ -601,6 +771,11 @@ class _DataPlotState extends State<DataPlot> {
           '${points[index].label} · ${points[index].value.toStringAsFixed(widget.bars ? 0 : 1)} ${widget.unit}',
           style: TextStyle(color: widget.color),
         ),
+        if (widget.target != null)
+          Text(
+            'Линия цели: ${widget.target!.toStringAsFixed(1)} ${widget.unit}',
+            style: const TextStyle(color: morning, fontSize: 12),
+          ),
         const SizedBox(height: 8),
         Semantics(
           label:
@@ -623,6 +798,8 @@ class _DataPlotState extends State<DataPlot> {
                   widget.bars,
                   widget.ceiling,
                   index,
+                  widget.target,
+                  widget.connect,
                 ),
               ),
             ),
@@ -647,15 +824,27 @@ class _DataPlotState extends State<DataPlot> {
 }
 
 class _PlotPainter extends CustomPainter {
-  _PlotPainter(this.points, this.color, this.bars, this.ceiling, this.selected);
+  _PlotPainter(
+    this.points,
+    this.color,
+    this.bars,
+    this.ceiling,
+    this.selected,
+    this.target,
+    this.connect,
+  );
   final List<({String label, double value})> points;
   final Color color;
   final bool bars;
   final double? ceiling;
   final int selected;
+  final double? target;
+  final bool connect;
   @override
   void paint(Canvas canvas, Size size) {
-    final high = ceiling ?? max(1.0, points.map((p) => p.value).reduce(max));
+    final high =
+        ceiling ??
+        max(target ?? 0, max(1.0, points.map((p) => p.value).reduce(max)));
     const left = 28.0;
     final width = size.width - left - 12;
     final height = size.height - 16;
@@ -679,6 +868,16 @@ class _PlotPainter extends CustomPainter {
       )..layout();
       text.paint(canvas, Offset(0, y - 6));
       text.dispose();
+    }
+    if (target != null) {
+      final y = 8 + height * (1 - target! / high);
+      canvas.drawLine(
+        Offset(left, y),
+        Offset(left + width, y),
+        Paint()
+          ..color = morning
+          ..strokeWidth = 2,
+      );
     }
     final path = Path();
     for (var i = 0; i < points.length; i++) {
@@ -710,7 +909,7 @@ class _PlotPainter extends CustomPainter {
         );
       }
     }
-    if (!bars) {
+    if (!bars && connect) {
       canvas.drawPath(
         path,
         Paint()

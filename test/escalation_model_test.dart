@@ -22,17 +22,14 @@ void main() {
     escalateOnSnooze: true,
   );
 
-  test(
-    'new alarms start gently and disclose escalation in their configuration',
-    () {
-      final alarm = Alarm.fresh();
-      expect(alarm.difficulty, ChallengeDifficulty.easy);
-      expect(alarm.escalateOnSnooze, isTrue);
-      expect(alarm.difficultyForSnoozes(0), ChallengeDifficulty.easy);
-      expect(alarm.difficultyForSnoozes(1), ChallengeDifficulty.medium);
-      expect(alarm.difficultyForSnoozes(2), ChallengeDifficulty.hard);
-    },
-  );
+  test('new alarms keep escalation disabled until explicit opt-in', () {
+    final alarm = Alarm.fresh();
+    expect(alarm.difficulty, ChallengeDifficulty.easy);
+    expect(alarm.escalateOnSnooze, isFalse);
+    expect(alarm.difficultyForSnoozes(0), ChallengeDifficulty.easy);
+    expect(alarm.difficultyForSnoozes(1), ChallengeDifficulty.easy);
+    expect(alarm.difficultyForSnoozes(2), ChallengeDifficulty.easy);
+  });
 
   test(
     'escalation is bounded, monotonic and never mutates the saved baseline',

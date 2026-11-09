@@ -9,6 +9,12 @@ class MemoryAlarmStorage implements AlarmStorage {
   int saves = 0;
 
   @override
+  Future<List<AlarmEvent>> eventsBetween(DateTime from, DateTime until) async =>
+      snapshot.events
+          .where((e) => !e.at.isBefore(from) && e.at.isBefore(until))
+          .toList();
+
+  @override
   Future<AlarmSnapshot> load() async {
     if (failLoad) throw StateError('Corrupt storage');
     return snapshot;
@@ -72,6 +78,13 @@ class FakeAlarmGateway implements AlarmGateway {
     );
     return AlarmResult(ok: true, nextAt: next);
   }
+
+  @override
+  Future<AlarmResult> quiet(
+    String id,
+    String occurrenceId,
+    int generation,
+  ) async => const AlarmResult(ok: true);
 
   @override
   Future<AlarmResult> cancel(String id) async {

@@ -75,12 +75,12 @@ object AlarmRules {
     /** MethodChannel integers may arrive as Int or Long; never truncate a fractional delay. */
     fun testDelaySeconds(value: Any?): Int? {
         val seconds = when (value) {
-            null -> 5L
+            null -> 20L
             is Int -> value.toLong()
             is Long -> value
             else -> return null
         }
-        return seconds.takeIf { it in 5L..60L }?.toInt()
+        return seconds.takeIf { it in 1L..60L }?.toInt()
     }
 
     /** A test cancellation must never accept an ordinary alarm identifier. */

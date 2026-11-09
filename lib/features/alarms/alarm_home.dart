@@ -92,7 +92,9 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
 
   Widget _morningReview() {
     final session = SleepSession.fromEvents(
-      controller.events,
+      controller.sleepEvents
+          .where((e) => !_journal.reported(e.occurrenceId))
+          .toList(),
       separateOccurrences: _journal.entries
           .where((e) => e.separate)
           .map((e) => e.occurrenceId)
@@ -127,6 +129,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                   MaterialPageRoute<void>(
                     builder: (_) => SleepReview(
                       journal: _journal,
+                      controller: controller,
                       event: event,
                       session: session,
                     ),
@@ -284,38 +287,17 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
           const SizedBox(width: 8),
         ],
       ),
+      floatingActionButton: _tab == 0 && !controller.loading
+          ? FloatingActionButton(
+              key: const ValueKey('add-alarm'),
+              tooltip: 'Добавить будильник',
+              onPressed: controller.storageHealthy ? () => _edit() : null,
+              child: const Icon(Icons.add_rounded),
+            )
+          : null,
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_tab == 0 && !controller.loading)
-            SafeArea(
-              top: false,
-              bottom: false,
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 700),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        key: const ValueKey('add-alarm'),
-                        onPressed: controller.busy || !controller.storageHealthy
-                            ? null
-                            : () => _edit(),
-                        icon: const Icon(Icons.add_rounded),
-                        label: Text(
-                          controller.alarms.isEmpty
-                              ? 'Поставить будильник'
-                              : 'Добавить будильник',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
           NavigationBar(
             selectedIndex: _tab,
             onDestinationSelected: (index) => setState(() => _tab = index),
@@ -364,9 +346,17 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
     ),
   );
 
+  List<Alarm> _sortedAlarms() {
+    final alarms = controller.alarms;
+    final order = {for (var i = 0; i < alarms.length; i++) alarms[i].id: i};
+    return [...alarms]..sort((a, b) {
+      final time = (a.hour * 60 + a.minute).compareTo(b.hour * 60 + b.minute);
+      return time != 0 ? time : order[a.id]!.compareTo(order[b.id]!);
+    });
+  }
+
   Widget _today() {
     final now = controller.now;
-    final next = controller.nextAlarm(now);
     final todaySnoozes = controller.events
         .where(
           (event) =>
@@ -380,14 +370,21 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
       onRefresh: controller.refreshStatus,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
         children: [
           Text(
             _dayTitle(now),
             style: const TextStyle(color: muted, fontSize: 13),
           ),
           const SizedBox(height: 14),
-          if (next != null) _nextCard(next, now) else _emptyCard(),
+          _HomeClock(
+            builder: () {
+              final current = controller.nextAlarm(controller.now);
+              return current == null
+                  ? _emptyCard()
+                  : _nextCard(current, controller.now);
+            },
+          ),
           const SizedBox(height: 12),
           _deviceCard(),
           _morningReview(),
@@ -406,8 +403,8 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
               padding: const EdgeInsets.only(top: 12),
               child: _InfoCard(
                 icon: Icons.snooze_rounded,
-                title: 'Сегодня: $todaySnoozes ${_times(todaySnoozes)}',
-                text: 'Столько переносов записал будильник. Подробности — в истории.',
+                title: 'Переносы сегодня: $todaySnoozes',
+                text: '',
               ),
             ),
           if (controller.alarms.isNotEmpty) ...[
@@ -427,7 +424,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
               ],
             ),
             const SizedBox(height: 14),
-            ...controller.alarms.map(_alarmCard),
+            ...(_sortedAlarms()).map(_alarmCard),
           ],
           if (!controller.device.challengeEnforced)
             const Padding(
@@ -483,7 +480,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         key: const ValueKey('next-alarm'),
-        onTap: controller.busy ? null : () => _editTime(alarm),
+        onTap: controller.isAlarmBusy(alarm.id) ? null : () => _editTime(alarm),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -661,7 +658,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
     padding: const EdgeInsets.only(bottom: 10),
     child: Dismissible(
       key: ValueKey('swipe-alarm-${alarm.id}'),
-      direction: controller.busy
+      direction: controller.isAlarmBusy(alarm.id)
           ? DismissDirection.none
           : DismissDirection.endToStart,
       background: Container(
@@ -686,22 +683,23 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
           color: panel,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
-            onTap: controller.busy ? null : () => _edit(alarm),
+            onTap: controller.isAlarmBusy(alarm.id) ? null : () => _edit(alarm),
             borderRadius: BorderRadius.circular(16),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    alarm.displayTitle,
-                    key: ValueKey('alarm-name-${alarm.id}'),
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
+                  if (alarm.displayTitle.isNotEmpty)
+                    Text(
+                      alarm.displayTitle,
+                      key: ValueKey('alarm-name-${alarm.id}'),
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
+                  if (alarm.displayTitle.isNotEmpty) const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
@@ -709,7 +707,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                           alignment: Alignment.centerLeft,
                           child: InkWell(
                             key: ValueKey('alarm-time-${alarm.id}'),
-                            onTap: controller.busy
+                            onTap: controller.isAlarmBusy(alarm.id)
                                 ? null
                                 : () => _editTime(alarm),
                             child: Padding(
@@ -733,7 +731,8 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                           key: ValueKey('alarm-toggle-${alarm.id}'),
                           value: alarm.enabled,
                           onChanged:
-                              controller.busy || !controller.device.supported
+                              controller.isAlarmBusy(alarm.id) ||
+                                  !controller.device.supported
                               ? null
                               : (value) => _toggle(alarm, value),
                         ),
@@ -750,7 +749,9 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                     runSpacing: 6,
                     children: [
                       Text(
-                        '${alarm.challengeKind.label} · ${alarm.difficulty.label.toLowerCase()}',
+                        alarm.requiresChallenge
+                            ? '${alarm.challengeKind.label} · ${alarm.difficulty.label.toLowerCase()}'
+                            : 'Обычный звонок',
                         style: const TextStyle(color: muted, fontSize: 12),
                       ),
                       Text(
@@ -759,7 +760,9 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                             : '${alarm.snoozeBudget} мин на переносы',
                         style: const TextStyle(color: morning, fontSize: 12),
                       ),
-                      if (alarm.escalateOnSnooze && alarm.snoozeBudget > 0)
+                      if (alarm.requiresChallenge &&
+                          alarm.escalateOnSnooze &&
+                          alarm.snoozeBudget > 0)
                         const Text(
                           'Сложнее после переноса',
                           style: TextStyle(color: morning, fontSize: 12),
@@ -917,13 +920,6 @@ String _dayTitle(DateTime date) {
   return '${weekdays[date.weekday - 1]}, ${date.day} ${months[date.month - 1]}';
 }
 
-String _times(int count) =>
-    count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14)
-    ? 'переноса'
-    : count % 10 == 1 && count % 100 != 11
-    ? 'перенос'
-    : 'переносов';
-
 class _SunMark extends StatelessWidget {
   const _SunMark({required this.size});
   final double size;
@@ -989,4 +985,31 @@ class _InfoCard extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _HomeClock extends StatefulWidget {
+  const _HomeClock({required this.builder});
+  final Widget Function() builder;
+  @override
+  State<_HomeClock> createState() => _HomeClockState();
+}
+
+class _HomeClockState extends State<_HomeClock> {
+  Timer? _timer;
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder();
 }

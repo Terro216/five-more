@@ -93,7 +93,9 @@ String? alarmErrorMessage(String? error) => switch (error) {
   'exact_alarm_permission' =>
     'Разреши точное срабатывание в настройках телефона.',
   'alarm_active' => 'Сначала заверши текущий подъём, затем меняй расписание.',
-  'snooze_limit' => 'Переносы закончились. Пора пройти задание.',
+  'snooze_limit' => 'Запас минут переноса закончился.',
+  'quiet_unavailable' =>
+    'Сейчас приглушение недоступно. Проверь состояние звонка.',
   'not_found' => 'Будильник не найден. Обнови список и попробуй ещё раз.',
   'not_ringing' => 'Этот будильник уже не звонит.',
   'test_alarm_active' => 'Сначала заверши или отмени текущую проверку звонка.',
@@ -150,6 +152,7 @@ abstract class AlarmGateway {
   Future<AlarmResult> restoreAlarms();
   Future<AlarmResult> schedule(Alarm alarm);
   Future<AlarmResult> cancel(String id);
+  Future<AlarmResult> quiet(String id, String occurrenceId, int generation);
   Future<AlarmResult> snooze(String id, {int? minutes});
   Future<AlarmResult> dismiss(String id, {bool emergency = false});
   Future<AlarmResult> testAlarm(String id, {int delaySeconds = 5});
@@ -208,6 +211,13 @@ class NativeAlarmGateway implements AlarmGateway {
     }
   }
 
+  @override
+  Future<AlarmResult> quiet(String id, String occurrenceId, int generation) =>
+      _action('quiet', {
+        'id': id,
+        'occurrenceId': occurrenceId,
+        'generation': generation,
+      });
   @override
   Future<AlarmResult> schedule(Alarm alarm) =>
       _action('schedule', alarm.toJson()..remove('nextAt'));

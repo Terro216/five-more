@@ -1,18 +1,36 @@
 // Run with: flutter test tool/generate_icons.dart
 // Flutter's own vector renderer generates the launcher assets; no image service
 // or third-party rasterizer is needed.
+// Android 26+ uses the same paths in drawable/ic_launcher_foreground.xml at
+// 72% scale within the adaptive safe zone. Android 33+ uses the monochrome copy.
+// Keep those vector paths and the legacy PNG geometry below in sync.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 
-Future<void> writeIcon(String file, int size) async {
+Future<void> writeIcon(
+  String file,
+  int size, {
+  bool adaptive = false,
+  bool themed = false,
+}) async {
   final recorder = PictureRecorder();
   final canvas = Canvas(recorder)..scale(size / 1024);
-  canvas.drawPaint(Paint()..color = const Color(0xFF141916));
+  if (adaptive) {
+    canvas.clipPath(Path()..addOval(const Rect.fromLTWH(0, 0, 1024, 1024)));
+  }
+  canvas.drawPaint(
+    Paint()..color = themed ? const Color(0xFFD5E8CF) : const Color(0xFF141916),
+  );
+  if (adaptive) {
+    canvas.translate(512, 512);
+    canvas.scale(.72);
+    canvas.translate(-512, -512);
+  }
   final paint = Paint()
-    ..color = const Color(0xFFFFD38A)
+    ..color = themed ? const Color(0xFF19351C) : const Color(0xFFFFD38A)
     ..style = PaintingStyle.stroke
     ..strokeWidth = 48
     ..strokeCap = StrokeCap.round

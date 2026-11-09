@@ -75,6 +75,35 @@ class _RingingScreenState extends State<RingingScreen> {
     }
   }
 
+  Widget? _quietButton(RingingAlarm ringing) {
+    if (widget.controller.device.platform != 'android') return null;
+    final remaining = ringing.quietRemainingSeconds;
+    final exhausted = ringing.quietUsed >= 2;
+    return TextButton(
+      key: const ValueKey('quiet-alarm'),
+      onPressed:
+          _finishing || widget.controller.busy || remaining > 0 || exhausted
+          ? null
+          : () async {
+              final result = await widget.controller.quiet(ringing);
+              if (mounted && !result.ok) {
+                final message = result.error ?? 'Не удалось приглушить звук.';
+                setState(() => _error = message);
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text(message)));
+              }
+            },
+      child: Text(
+        remaining > 0
+            ? 'Тише · $remaining с'
+            : exhausted
+            ? 'Тише · лимит'
+            : 'Тише · 30 с',
+        style: const TextStyle(fontSize: 14),
+      ),
+    );
+  }
+
   Future<void> _snooze() async {
     if (_finishing) return;
     setState(() {
@@ -127,6 +156,8 @@ class _RingingScreenState extends State<RingingScreen> {
             difficulty: ringing.challengeDifficulty,
             order: ringing.alarm.mixOrder,
             qrValue: ringing.alarm.qrValue,
+            alarmAction: _quietButton(ringing),
+            progressIdentity: '${ringing.occurrenceId}:${ringing.snoozesUsed}',
             onComplete: () {
               _completedOccurrenceId = ringing.occurrenceId;
               _dismiss();
@@ -136,6 +167,15 @@ class _RingingScreenState extends State<RingingScreen> {
         }
         return Scaffold(
           backgroundColor: ink,
+          appBar: widget.controller.device.platform == 'android'
+              ? AppBar(
+                  automaticallyImplyLeading: false,
+                  title: Align(
+                    alignment: Alignment.centerRight,
+                    child: _quietButton(ringing)!,
+                  ),
+                )
+              : null,
           resizeToAvoidBottomInset: false,
           bottomNavigationBar: SafeArea(
             top: false,
@@ -145,8 +185,10 @@ class _RingingScreenState extends State<RingingScreen> {
                 key: const ValueKey('ringing-emergency'),
                 style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                 onPressed: _finishing ? null : _emergencyStop,
-                child: const Text(
-                  'Проблема с заданием',
+                child: Text(
+                  ringing.alarm.requiresChallenge
+                      ? 'Проблема с заданием'
+                      : 'Аварийное отключение',
                   style: TextStyle(color: muted),
                   textAlign: TextAlign.center,
                 ),
@@ -256,42 +298,45 @@ class _RingingScreenState extends State<RingingScreen> {
       ),
       if (!_snoozeEditing) ...[
         SizedBox(height: compact ? 6 : 12),
-        Text(
-          ringing.alarm.displayTitle,
-          textAlign: TextAlign.center,
-          maxLines: compact ? 1 : null,
-          overflow: compact ? TextOverflow.ellipsis : null,
-          style: TextStyle(
-            fontSize: compact ? 18 : 22,
-            fontWeight: FontWeight.w600,
+        if (ringing.alarm.displayTitle.isNotEmpty)
+          Text(
+            ringing.alarm.displayTitle,
+            textAlign: TextAlign.center,
+            maxLines: compact ? 1 : null,
+            overflow: compact ? TextOverflow.ellipsis : null,
+            style: TextStyle(
+              fontSize: compact ? 18 : 22,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
         SizedBox(height: compact ? 12 : 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              challengeIcon(ringing.alarm.challengeKind),
-              color: morning,
-              size: 20,
-            ),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                ringing.alarm.challengeKind.label,
-                style: const TextStyle(fontWeight: FontWeight.w600),
+        if (ringing.alarm.requiresChallenge)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                challengeIcon(ringing.alarm.challengeKind),
+                color: morning,
+                size: 20,
               ),
-            ),
-          ],
-        ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  ringing.alarm.challengeKind.label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
       ],
       const SizedBox(height: 6),
-      Text(
-        _challengeLevel(ringing),
-        key: const ValueKey('ringing-challenge-level'),
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 14, color: muted),
-      ),
+      if (ringing.alarm.requiresChallenge)
+        Text(
+          _challengeLevel(ringing),
+          key: const ValueKey('ringing-challenge-level'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 14, color: muted),
+        ),
       if (!_snoozeEditing) ...[
         SizedBox(height: compact ? 10 : 20),
         Text(
@@ -302,7 +347,8 @@ class _RingingScreenState extends State<RingingScreen> {
           style: const TextStyle(color: muted, fontSize: 14),
         ),
       ],
-      if (ringing.minutesRemaining > 0 &&
+      if (ringing.alarm.requiresChallenge &&
+          ringing.minutesRemaining > 0 &&
           ringing.alarm.escalateOnSnooze &&
           ringing.alarm.difficultyForSnoozes(ringing.snoozesUsed + 1) !=
               ringing.challengeDifficulty) ...[
@@ -324,12 +370,15 @@ class _RingingScreenState extends State<RingingScreen> {
         key: const ValueKey('ringing-start-challenge'),
         onPressed: _finishing || widget.controller.busy
             ? null
-            : _completedOccurrenceId == ringing.occurrenceId
+            : !ringing.alarm.requiresChallenge ||
+                  _completedOccurrenceId == ringing.occurrenceId
             ? () => _dismiss()
             : () => setState(() => _challenge = true),
         icon: const Icon(Icons.arrow_forward_rounded),
         label: Text(
-          _completedOccurrenceId == ringing.occurrenceId
+          !ringing.alarm.requiresChallenge
+              ? 'Выключить'
+              : _completedOccurrenceId == ringing.occurrenceId
               ? 'Повторить отключение'
               : 'Пройти задание',
           textAlign: TextAlign.center,
@@ -471,6 +520,7 @@ class _RingingScreenState extends State<RingingScreen> {
   String _challengeLevel(RingingAlarm ringing) =>
       'Сложность: ${ringing.challengeDifficulty.label}';
 
-  String _snoozeLabel(RingingAlarm ringing) =>
-      'Ещё ${ringing.defaultSnoozeMinutes} мин';
+  String _snoozeLabel(RingingAlarm ringing) => ringing.alarm.requiresChallenge
+      ? 'Ещё ${ringing.defaultSnoozeMinutes} мин'
+      : 'Отложить на ${ringing.defaultSnoozeMinutes} мин';
 }

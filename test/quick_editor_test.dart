@@ -1,12 +1,9 @@
-import 'dart:ui' show Tristate;
-
 import 'package:five_more/app/alarm_controller.dart';
 import 'package:five_more/app/theme.dart';
 import 'package:five_more/features/alarms/alarm_editor.dart';
 import 'package:five_more/features/challenges/challenge_models.dart';
 import 'package:five_more/features/challenges/challenge_screen.dart';
 import 'package:five_more/models/alarm.dart';
-import 'package:five_more/models/wake_preset.dart';
 import 'package:five_more/services/alarm_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -19,9 +16,10 @@ Future<void> _openEditor(
   AlarmController controller, {
   Alarm? alarm,
   double width = 390,
+  double height = 844,
   double textScale = 1,
 }) async {
-  tester.view.physicalSize = Size(width, 844);
+  tester.view.physicalSize = Size(width, height);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -83,166 +81,10 @@ Future<void> _tap(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
-Finder _preset(WakePreset value) =>
-    find.byKey(ValueKey('preset-${value.name}'));
 final _save = find.byKey(const ValueKey('save-alarm'));
-final _advanced = find.byKey(const ValueKey('alarm-advanced'));
 
 void main() {
-  for (final reject in [false, true]) {
-    testWidgets(
-      'back saves edits and ${reject ? "keeps a scheduling error visible" : "closes without a success toast"}',
-      (tester) async {
-        final gateway = FakeAlarmGateway()..rejectSchedule = reject;
-        final controller = AlarmController(
-          gateway: gateway,
-          storage: MemoryAlarmStorage(),
-        );
-        addTearDown(controller.dispose);
-        await controller.initialize(startPolling: false);
-        await _openEditor(tester, controller);
-        final title = find.byKey(const ValueKey('alarm-title'));
-        await _reveal(tester, title);
-        await tester.enterText(title, 'Утро');
-        await tester.tap(find.byType(BackButton));
-        await tester.pumpAndSettle();
-        expect(gateway.scheduleCalls.single.title, 'Утро');
-        expect(find.text('Будильник сохранён'), findsNothing);
-        if (reject) {
-          expect(find.byType(AlarmEditor), findsOneWidget);
-          expect(
-            find.byKey(const ValueKey('alarm-save-error')).hitTestable(),
-            findsOneWidget,
-          );
-        } else {
-          expect(find.byType(AlarmEditor), findsNothing);
-          expect(controller.alarms.single.enabled, isTrue);
-        }
-        await tester.pumpWidget(const SizedBox.shrink());
-      },
-    );
-  }
-
-  testWidgets(
-    'creates an alarm from a preset without opening manual settings',
-    (tester) async {
-      final gateway = FakeAlarmGateway();
-      final storage = MemoryAlarmStorage();
-      final controller = AlarmController(gateway: gateway, storage: storage);
-      addTearDown(controller.dispose);
-      await controller.initialize(startPolling: false);
-      await _openEditor(tester, controller);
-
-      await _tap(tester, _preset(WakePreset.direct));
-      expect(find.byKey(const ValueKey('escalate-on-snooze')), findsNothing);
-      expect(_save.hitTestable(), findsOneWidget);
-      await tester.tap(_save);
-      await tester.pumpAndSettle();
-
-      final saved = storage.snapshot.alarms.single;
-      expect(WakePreset.matching(saved), WakePreset.direct);
-      expect(saved.timeLabel, '07:30');
-      expect(saved.weekdays, [1, 2, 3, 4, 5]);
-      expect(gateway.scheduleCalls, hasLength(1));
-      expect(find.byType(AlarmEditor), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('opening and saving a custom alarm preserves its exact values', (
-    tester,
-  ) async {
-    const custom = Alarm(
-      id: 'custom-legacy',
-      hour: 6,
-      minute: 45,
-      title: '  Свой подъём  ',
-      weekdays: [2, 6],
-      enabled: false,
-      snoozeMinutes: 7,
-      maxSnoozes: 2,
-      challengeKind: ChallengeKind.sequence,
-      difficulty: ChallengeDifficulty.hard,
-      escalateOnSnooze: false,
-    );
-    final gateway = FakeAlarmGateway()..nativeAlarms[custom.id] = custom;
-    final storage = MemoryAlarmStorage()
-      ..snapshot = const AlarmSnapshot(alarms: [custom]);
-    final controller = AlarmController(gateway: gateway, storage: storage);
-    addTearDown(controller.dispose);
-    await controller.initialize(startPolling: false);
-    await _openEditor(tester, controller, alarm: custom);
-
-    await _reveal(tester, find.byKey(const ValueKey('wake-preset-summary')));
-    expect(find.byKey(const ValueKey('wake-preset-summary')), findsOneWidget);
-    expect(
-      tester
-          .widget<ExpansionTile>(find.byKey(const ValueKey('alarm-advanced')))
-          .initiallyExpanded,
-      isTrue,
-    );
-    await tester.tap(_save);
-    await tester.pumpAndSettle();
-
-    expect(gateway.scheduleCalls.single.toJson(), custom.toJson());
-    expect(storage.snapshot.alarms.single.toJson(), custom.toJson());
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-    'an explicit preset change preserves identity and reopens selected',
-    (tester) async {
-      final initial = WakePreset.gentle.applyTo(
-        const Alarm(
-          id: 'weekend',
-          hour: 10,
-          minute: 20,
-          title: 'Без спешки',
-          weekdays: [6, 7],
-        ),
-      );
-      final gateway = FakeAlarmGateway()..nativeAlarms[initial.id] = initial;
-      final storage = MemoryAlarmStorage()
-        ..snapshot = AlarmSnapshot(alarms: [initial]);
-      final controller = AlarmController(gateway: gateway, storage: storage);
-      addTearDown(controller.dispose);
-      final semantics = tester.ensureSemantics();
-      try {
-        await controller.initialize(startPolling: false);
-        await _openEditor(tester, controller, alarm: initial);
-
-        await _reveal(tester, _preset(WakePreset.gentle));
-        expect(
-          tester
-              .getSemantics(_preset(WakePreset.gentle))
-              .flagsCollection
-              .isSelected,
-          Tristate.isTrue,
-        );
-        await _tap(tester, _preset(WakePreset.gradual));
-        await tester.tap(_save);
-        await tester.pumpAndSettle();
-        expect(
-          gateway.scheduleCalls.single.toJson()..remove('armedAt'),
-          WakePreset.gradual.applyTo(initial).toJson()..remove('armedAt'),
-        );
-
-        await _openEditor(tester, controller, alarm: controller.alarms.single);
-        await _reveal(tester, _preset(WakePreset.gradual));
-        final selected = tester.getSemantics(_preset(WakePreset.gradual));
-        expect(selected.flagsCollection.isSelected, Tristate.isTrue);
-        expect(selected.flagsCollection.isButton, isTrue);
-        await _reveal(tester, find.text('Выбрано: С разгоном'));
-        expect(find.text('Выбрано: С разгоном'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        await tester.pumpWidget(const SizedBox.shrink());
-      } finally {
-        semantics.dispose();
-      }
-    },
-  );
-
-  testWidgets('manual settings expose every challenge and update the summary', (
+  testWidgets('new alarm saves a normal ring with no title or protections', (
     tester,
   ) async {
     final gateway = FakeAlarmGateway();
@@ -251,119 +93,139 @@ void main() {
       storage: MemoryAlarmStorage(),
     );
     addTearDown(controller.dispose);
-    final semantics = tester.ensureSemantics();
-    try {
-      await controller.initialize(startPolling: false);
-      await _openEditor(tester, controller);
-      await _tap(tester, _advanced);
-
-      for (final kind in ChallengeKind.values) {
-        final choice = find.byKey(ValueKey('challenge-kind-${kind.name}'));
-        await _tap(tester, choice);
-        final selected = tester.getSemantics(choice);
-        expect(selected.flagsCollection.isSelected, Tristate.isTrue);
-        expect(selected.flagsCollection.isButton, isTrue);
-      }
-      await _tap(tester, find.widgetWithText(ChoiceChip, 'Сложно'));
-      final toggle = find.byKey(const ValueKey('escalate-on-snooze'));
-      await _reveal(tester, toggle);
-      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
-      await _tap(tester, find.byKey(const ValueKey('practice-alarm')));
-      final practice = tester.widget<ChallengeScreen>(
-        find.byType(ChallengeScreen),
-      );
-      expect(practice.kind, ChallengeKind.mixed);
-      expect(practice.difficulty, ChallengeDifficulty.hard);
-      expect(practice.practice, isTrue);
-      Navigator.of(tester.element(find.byType(ChallengeScreen))).pop();
-      await tester.pumpAndSettle();
-
-      final title = find.byKey(const ValueKey('alarm-title'));
-      await _reveal(tester, title);
-      await tester.enterText(title, 'Мой режим');
-      // Close the software keyboard before checking the collapsed summary.
-      FocusManager.instance.primaryFocus?.unfocus();
-      await tester.pumpAndSettle();
-      await _reveal(tester, _advanced, delta: -220);
-      await tester.tap(find.text('Настроить вручную'));
-      await tester.pumpAndSettle();
-      await _reveal(
-        tester,
-        find.byKey(const ValueKey('wake-preset-summary')),
-        delta: -220,
-      );
-      expect(find.byKey(const ValueKey('wake-preset-summary')), findsOneWidget);
-      await tester.tap(_save);
-      await tester.pumpAndSettle();
-      expect(gateway.scheduleCalls.single.title, 'Мой режим');
-      expect(gateway.scheduleCalls.single.challengeKind, ChallengeKind.mixed);
-      expect(gateway.scheduleCalls.single.difficulty, ChallengeDifficulty.hard);
-      expect(gateway.snoozeCalls, isEmpty);
-      expect(tester.takeException(), isNull);
-    } finally {
-      semantics.dispose();
-    }
+    await controller.initialize(startPolling: false);
+    await _openEditor(tester, controller);
+    expect(find.text('Как просыпаться'), findsNothing);
+    await tester.tap(_save);
+    await tester.pumpAndSettle();
+    final saved = controller.alarms.single;
+    expect(saved.requiresChallenge, isFalse);
+    expect(saved.title, '');
+    expect(saved.snoozeMinutes, 5);
+    expect(saved.snoozeBudget, 15);
+    expect(saved.escalateOnSnooze, isFalse);
+    expect(saved.vibration, isTrue);
+    expect(saved.deleteAfterDismiss, isFalse);
+    expect(find.byType(AlarmEditor), findsNothing);
   });
 
-  testWidgets(
-    'presets and manual controls fit a narrow screen with large text',
-    (tester) async {
-      final controller = AlarmController(
-        gateway: FakeAlarmGateway(),
-        storage: MemoryAlarmStorage(),
-      );
-      addTearDown(controller.dispose);
-      await controller.initialize(startPolling: false);
-      await _openEditor(tester, controller, width: 320, textScale: 1.5);
+  for (final done in [false, true]) {
+    testWidgets(
+      '${done ? "Done enables" : "back preserves disabled state of"} a legacy alarm',
+      (tester) async {
+        const original = Alarm(
+          id: 'legacy',
+          hour: 6,
+          minute: 45,
+          enabled: false,
+          title: '  Моё утро  ',
+          difficulty: ChallengeDifficulty.hard,
+          snoozeMinutes: 7,
+        );
+        final gateway = FakeAlarmGateway()
+          ..nativeAlarms[original.id] = original;
+        final storage = MemoryAlarmStorage()
+          ..snapshot = const AlarmSnapshot(alarms: [original]);
+        final controller = AlarmController(gateway: gateway, storage: storage);
+        addTearDown(controller.dispose);
+        await controller.initialize(startPolling: false);
+        await _openEditor(tester, controller, alarm: original);
+        if (!done) {
+          await _reveal(tester, find.byKey(const ValueKey('alarm-title')));
+          await tester.enterText(
+            find.byKey(const ValueKey('alarm-title')),
+            'Правка',
+          );
+        }
+        await tester.tap(done ? _save : find.byType(BackButton));
+        await tester.pumpAndSettle();
+        final saved = storage.snapshot.alarms.single;
+        expect(saved.enabled, done);
+        expect(saved.difficulty, ChallengeDifficulty.hard);
+        expect(saved.requiresChallenge, isTrue);
+        expect(saved.snoozeMinutes, 7);
+        expect(saved.title, done ? original.title : 'Правка');
+        expect(find.byType(AlarmEditor), findsNothing);
+      },
+    );
+  }
 
-      for (final preset in WakePreset.values) {
-        final choice = _preset(preset);
-        await _tap(tester, choice);
-        expect(tester.getSize(choice).height, greaterThanOrEqualTo(48));
-        expect(_save.hitTestable(), findsOneWidget);
+  for (final width in [390.0, 320.0]) {
+    testWidgets(
+      'editor controls, keyboard and retry fit $width with large text',
+      (tester) async {
+        final gateway = FakeAlarmGateway()..rejectSchedule = true;
+        final controller = AlarmController(
+          gateway: gateway,
+          storage: MemoryAlarmStorage(),
+        );
+        addTearDown(controller.dispose);
+        await controller.initialize(startPolling: false);
+        await _openEditor(
+          tester,
+          controller,
+          width: width,
+          height: width == 320 ? 640 : 844,
+          textScale: 1.5,
+        );
+        await _tap(tester, find.text('С заданием'));
+        await _tap(tester, find.byKey(const ValueKey('alarm-challenge')));
+        await _tap(
+          tester,
+          find.byKey(const ValueKey('challenge-kind-sequence')),
+        );
+        await _tap(tester, find.byKey(const ValueKey('practice-alarm')));
+        expect(
+          tester.widget<ChallengeScreen>(find.byType(ChallengeScreen)).kind,
+          ChallengeKind.sequence,
+        );
+        Navigator.of(tester.element(find.byType(ChallengeScreen))).pop();
+        await tester.pumpAndSettle();
+        await _reveal(tester, find.byKey(const ValueKey('alarm-title')));
+        await tester.enterText(
+          find.byKey(const ValueKey('alarm-title')),
+          'Длинное название для утреннего будильника',
+        );
         expect(tester.takeException(), isNull);
-      }
-      await _tap(tester, _advanced);
-      await _reveal(
-        tester,
-        find.byKey(const ValueKey('challenge-kind-sequence')),
-      );
-      expect(_save.hitTestable(), findsOneWidget);
-      await _reveal(tester, find.byKey(const ValueKey('alarm-title')));
-      expect(_save.hitTestable(), findsOneWidget);
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
+        await tester.tap(_save);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('alarm-save-error')).hitTestable(),
+          findsOneWidget,
+        );
+        expect(_save.hitTestable(), findsOneWidget);
+        gateway.rejectSchedule = false;
+        await tester.tap(_save);
+        await tester.pumpAndSettle();
+        expect(find.byType(AlarmEditor), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
-  testWidgets(
-    'a rejected save stays visible beside the reachable retry button',
-    (tester) async {
-      final gateway = FakeAlarmGateway()..rejectSchedule = true;
-      final controller = AlarmController(
-        gateway: gateway,
-        storage: MemoryAlarmStorage(),
-      );
-      addTearDown(controller.dispose);
-      await controller.initialize(startPolling: false);
-      await _openEditor(tester, controller, width: 320, textScale: 1.5);
-      await _tap(tester, _preset(WakePreset.gentle));
-      await _reveal(tester, _advanced);
-      await tester.tap(_save);
-      await tester.pumpAndSettle();
-
-      final error = find.byKey(const ValueKey('alarm-save-error'));
-      expect(error.hitTestable(), findsOneWidget);
-      expect(find.text('Разрешение не предоставлено'), findsOneWidget);
-      expect(_save.hitTestable(), findsOneWidget);
-      expect(find.byType(AlarmEditor), findsOneWidget);
-      expect(find.byKey(const ValueKey('escalate-on-snooze')), findsNothing);
-      gateway.rejectSchedule = false;
-      await tester.tap(_save);
-      await tester.pumpAndSettle();
-      expect(WakePreset.matching(controller.alarms.single), WakePreset.gentle);
-      expect(find.byType(AlarmEditor), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('normal mode ignores an old unconfigured QR challenge', (
+    tester,
+  ) async {
+    const alarm = Alarm(
+      id: 'qr',
+      hour: 7,
+      minute: 0,
+      challengeKind: ChallengeKind.qr,
+    );
+    final gateway = FakeAlarmGateway()..nativeAlarms[alarm.id] = alarm;
+    final controller = AlarmController(
+      gateway: gateway,
+      storage: MemoryAlarmStorage(),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize(startPolling: false);
+    await _openEditor(tester, controller, alarm: alarm);
+    await _tap(tester, find.text('Обычный звонок'));
+    await tester.tap(_save);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlarmEditor), findsNothing);
+    expect(controller.alarms.single.requiresChallenge, isFalse);
+  });
 }

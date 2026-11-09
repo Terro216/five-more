@@ -256,7 +256,9 @@ def create_app(config: Config | None = None):
 
     @app.get("/.well-known/assetlinks.json")
     def assetlinks():
-        return [{"relation": ["delegate_permission/common.get_login_creds"], "target": {
+        # Credential providers differ in the relation they validate. Keep both
+        # scoped to this application and the explicitly configured certificates.
+        return [{"relation": ["delegate_permission/common.get_login_creds", "delegate_permission/common.handle_all_urls"], "target": {
             "namespace": "android_app", "package_name": "dev.ilyamedve.fivemore", "sha256_cert_fingerprints": list(config.android_fingerprints)}}]
 
     @app.get("/.well-known/apple-app-site-association")

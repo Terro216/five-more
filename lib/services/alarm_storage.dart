@@ -20,10 +20,25 @@ class AlarmSnapshot {
 abstract class AlarmStorage {
   Future<AlarmSnapshot> load();
   Future<void> save(AlarmSnapshot snapshot);
+  Future<List<AlarmEvent>> eventsBetween(DateTime from, DateTime until);
 }
 
 class LocalAlarmStorage implements AlarmStorage {
   static const _key = 'five_more.state.v1';
+
+  @override
+  Future<List<AlarmEvent>> eventsBetween(DateTime from, DateTime until) async {
+    if (usesSqlite) {
+      return (await LocalDatabase.instance.records(
+        'event',
+        from: from,
+        until: until,
+      )).map(AlarmEvent.fromJson).toList();
+    }
+    return (await load()).events
+        .where((e) => !e.at.isBefore(from) && e.at.isBefore(until))
+        .toList();
+  }
 
   @override
   Future<AlarmSnapshot> load() async {

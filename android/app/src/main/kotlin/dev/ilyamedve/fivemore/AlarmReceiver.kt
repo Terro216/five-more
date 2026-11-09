@@ -18,6 +18,13 @@ class AlarmReceiver : BroadcastReceiver() {
                     if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(service) else context.startService(service)
                 }
             }
+            AlarmEngine.ACTION_DISMISS -> {
+                val id = intent.getStringExtra("alarmId") ?: return
+                val occurrence = intent.getStringExtra("occurrenceId") ?: return
+                val alarm = AlarmStore(context).get(id) ?: return
+                if (alarm.optString("occurrenceId") != occurrence || alarm.optString("dismissalMode", "challenge") != "normal") return
+                engine.dismiss(id)
+            }
             AlarmEngine.ACTION_SNOOZE -> {
                 val id = intent.getStringExtra("alarmId") ?: return
                 val occurrence = intent.getStringExtra("occurrenceId") ?: return

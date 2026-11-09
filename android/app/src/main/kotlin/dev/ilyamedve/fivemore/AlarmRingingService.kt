@@ -9,6 +9,8 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.media.AudioManager
+import android.os.SystemClock
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
@@ -28,6 +30,49 @@ class AlarmRingingService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var currentOccurrence: String? = null
     private var currentId: String? = null
+    private var currentGeneration = -1
+    private var vibrating = false
+    private var soundStarted = 0L
+    private var previousQuiet = false
+    private var previousCall = false
+    private var returnStarted: Long? = null
+    private var returnFrom = 0f
+    private var lastLevel = 0f
+    private val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+    private fun callActive(): Boolean = getSystemService(AudioManager::class.java).mode in setOf(
+        AudioManager.MODE_RINGTONE, AudioManager.MODE_IN_CALL, AudioManager.MODE_IN_COMMUNICATION, AudioManager.MODE_CALL_SCREENING)
+
+    // One mixer owns the final level. Audio focus loss alone never suppresses an alarm.
+    private val mixAudio = object : Runnable {
+        override fun run() {
+            val id = currentId ?: return
+            val alarm = AlarmStore(this@AlarmRingingService).get(id) ?: return
+            if (alarm.optString("state") != "ringing" || alarm.optString("occurrenceId") != currentOccurrence || alarm.optInt("snoozesUsed") != currentGeneration) return
+            val now = SystemClock.elapsedRealtime()
+            val call = callActive()
+            val remaining = AlarmEngine(this@AlarmRingingService).quietRemaining(alarm)
+            val quiet = remaining > 0L
+            if ((previousCall && !call) || (previousQuiet && !quiet)) {
+                returnStarted = now
+                returnFrom = lastLevel
+            }
+            val target = AlarmAudioRules.level(now - soundStarted, alarm.optInt("volumeRampSeconds", 10), remaining, null, call)
+            val returnProgress = returnStarted?.let { ((now - it) / AlarmAudioRules.RETURN_MS.toFloat()).coerceIn(0f, 1f) } ?: 1f
+            val level = if (call) 0f else minOf(target, returnFrom + (target - returnFrom) * returnProgress)
+            try { player?.setVolume(level, level) } catch (_: IllegalStateException) { }
+            val shouldVibrate = !call && alarm.optBoolean("vibration", true) && now - soundStarted >= 5_000L
+            if (shouldVibrate != vibrating) {
+                if (shouldVibrate) vibration.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 650, 500, 1500), 0), attributes)
+                else vibration.cancel()
+                vibrating = shouldVibrate
+            }
+            lastLevel = level
+            previousCall = call
+            previousQuiet = quiet
+            handler.postDelayed(this, 100L)
+        }
+    }
     private val renewWakeLock = object : Runnable {
         override fun run() {
             if (currentOccurrence == null) return
@@ -68,9 +113,10 @@ class AlarmRingingService : Service() {
         val notification = notification(alarm)
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         else startForeground(NOTIFICATION_ID, notification)
-        if (currentOccurrence != alarm.optString("occurrenceId")) {
+        if (currentOccurrence != alarm.optString("occurrenceId") || currentGeneration != alarm.optInt("snoozesUsed")) {
             currentOccurrence = alarm.optString("occurrenceId")
             currentId = alarm.getString("id")
+            currentGeneration = alarm.optInt("snoozesUsed")
             handler.removeCallbacksAndMessages(null)
             stopSound()
             wakeLock?.let { if (it.isHeld) it.release() }
@@ -96,15 +142,22 @@ class AlarmRingingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_alarm_notification)
-            .setContentTitle(alarm.optString("title").ifBlank { "Ещё пять" })
-            .setContentText("Пора вставать · открой задание, чтобы отключить")
+            .setContentTitle(alarm.optString("title").ifBlank { "Будильник на %02d:%02d".format(alarm.optInt("hour"), alarm.optInt("minute")) })
+            .setContentText(if (alarm.optString("dismissalMode", "challenge") == "normal") "Будильник звонит" else "Открой задание, чтобы отключить")
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setAutoCancel(false)
             .setContentIntent(open)
             .setFullScreenIntent(open, true)
-            .addAction(Notification.Action.Builder(null, "Проснуться", open).build())
+        if (alarm.optString("dismissalMode", "challenge") == "normal") {
+            val stop = PendingIntent.getBroadcast(this, 0,
+                Intent(this, AlarmReceiver::class.java).setAction(AlarmEngine.ACTION_DISMISS)
+                    .setData(Uri.parse("fivemore://dismiss/${Uri.encode(id)}"))
+                    .putExtra("alarmId", id).putExtra("occurrenceId", alarm.optString("occurrenceId")),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            builder.addAction(Notification.Action.Builder(null, "Выключить", stop).build())
+        } else builder.addAction(Notification.Action.Builder(null, "Проснуться", open).build())
         if (!alarm.optBoolean("moveSnoozeButton") && alarm.optInt("snoozedMinutes", alarm.optInt("snoozesUsed") * alarm.optInt("snoozeMinutes", 5)) < alarm.optInt("snoozeBudgetMinutes", alarm.optInt("maxSnoozes", 3) * alarm.optInt("snoozeMinutes", 5))) {
             val snooze = PendingIntent.getBroadcast(this, 0,
                 Intent(this, AlarmReceiver::class.java).setAction(AlarmEngine.ACTION_SNOOZE)
@@ -119,8 +172,16 @@ class AlarmRingingService : Service() {
     }
 
     private fun startSound(alarm: JSONObject) {
-        val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+        val now = SystemClock.elapsedRealtime()
+        // Service/Flutter restarts never restart the ramp. Across a boot, return
+        // full sound conservatively; wall-clock changes cannot extend it.
+        val currentBoot = AlarmEngine(this).bootCount()
+        soundStarted = if (currentBoot >= 0 && alarm.optInt("ringBoot", -1) == currentBoot)
+            alarm.optLong("ringStartedElapsed", now - 60_000L) else now - 60_000L
+        previousCall = callActive()
+        previousQuiet = AlarmEngine(this).quietRemaining(alarm) > 0L
+        returnStarted = null
+        lastLevel = 0f
         // Device ringtone can be inaccessible before unlock, so a bundled sound is mandatory.
         val selected = try { ExtrasBridge.soundUri(this, alarm.optString("sound", "system")) } catch (_: Exception) { null }
         val uris = listOfNotNull(
@@ -134,7 +195,8 @@ class AlarmRingingService : Service() {
                 candidate.setAudioAttributes(attributes)
                 candidate.setDataSource(this, uri)
                 candidate.isLooping = true
-                val initialVolume = if (alarm.optInt("volumeRampSeconds", 10) == 0) 1f else 0.08f
+                val initialVolume = AlarmAudioRules.level(now - soundStarted, alarm.optInt("volumeRampSeconds", 10),
+                    AlarmEngine(this).quietRemaining(alarm), null, callActive())
                 candidate.setVolume(initialVolume, initialVolume)
                 candidate.prepare()
                 candidate.start()
@@ -144,15 +206,7 @@ class AlarmRingingService : Service() {
                 candidate.release()
             }
         }
-        // Per-player ramp; never modify the system alarm volume.
-        val rampMs = alarm.optInt("volumeRampSeconds", 10).coerceIn(0, 60) * 1000L
-        for (step in 1..20) handler.postDelayed({
-            val volume = (0.08f + 0.92f * step / 20f).coerceAtMost(1f)
-            player?.setVolume(volume, volume)
-        }, step * rampMs / 20L)
-        handler.postDelayed({
-            vibration.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 650, 500, 1500), 0), attributes)
-        }, 5_000L)
+        mixAudio.run()
     }
 
     private fun stopSound() {
@@ -162,6 +216,7 @@ class AlarmRingingService : Service() {
         }
         player = null
         vibration.cancel()
+        vibrating = false
     }
 
     override fun onDestroy() {
