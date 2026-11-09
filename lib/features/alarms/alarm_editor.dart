@@ -18,9 +18,15 @@ import '../../services/native_extras.dart';
 import '../../widgets/time_composer.dart';
 
 class AlarmEditor extends StatefulWidget {
-  const AlarmEditor({super.key, required this.controller, this.alarm});
+  const AlarmEditor({
+    super.key,
+    required this.controller,
+    this.alarm,
+    this.initialTime,
+  });
   final AlarmController controller;
   final Alarm? alarm;
+  final TimeOfDay? initialTime;
 
   @override
   State<AlarmEditor> createState() => _AlarmEditorState();
@@ -54,6 +60,15 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
     _draft = widget.alarm ?? Alarm.fresh();
     _title = TextEditingController(text: _draft.title);
     _initial = jsonEncode(_draft.toJson());
+    final time = widget.initialTime;
+    if (time != null &&
+        (time.hour != _draft.hour || time.minute != _draft.minute)) {
+      _draft = _draft.copyWith(
+        hour: time.hour,
+        minute: time.minute,
+        clearOneShotAt: true,
+      );
+    }
     WidgetsBinding.instance.addObserver(this);
     unawaited(_restoreDraft());
     _clock = Timer.periodic(const Duration(seconds: 20), (_) {
@@ -62,6 +77,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
   }
 
   Future<void> _restoreDraft() async {
+    // An explicit time from the quick editor takes precedence over an older draft.
+    if (widget.initialTime != null) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_draftKey);
@@ -393,7 +410,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                   },
                 ),
               ],
-              const _Heading('Отключение'),
+              const SizedBox(height: 24),
               SegmentedButton<String>(
                 key: const ValueKey('dismissal-mode'),
                 showSelectedIcon: false,
@@ -409,14 +426,9 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                       }),
               ),
               if (_draft.requiresChallenge)
-                ExpansionTile(
-                  maintainState: true,
+                Column(
                   key: const ValueKey('alarm-challenge'),
-                  title: const Text('Задание'),
-                  subtitle: Text(
-                    '${_draft.challengeKind.label} · ${_draft.difficulty.label}',
-                  ),
-                  tilePadding: EdgeInsets.zero,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const _Heading('Задание для пробуждения'),
                     if (_draft.challengeKind == ChallengeKind.mirror ||
@@ -553,13 +565,11 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-              ExpansionTile(
-                maintainState: true,
+              Column(
                 key: const ValueKey('alarm-snoozes'),
-                title: const Text('Переносы'),
-                subtitle: Text('${_draft.snoozeBudget} мин в запасе'),
-                tilePadding: EdgeInsets.zero,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const _Heading('Переносы'),
                   ExactSlider(
                     label: 'Общий запас переносов',
                     unit: 'мин',
@@ -619,13 +629,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                   ),
                 ],
               ),
-              ExpansionTile(
-                maintainState: true,
-                title: const Text('Звук и вибрация'),
-                subtitle: Text(_draft.soundLabel),
-                tilePadding: EdgeInsets.zero,
-                children: [_soundSettings()],
-              ),
+              const _Heading('Звук и вибрация'),
+              _soundSettings(),
               const _Heading('Название · необязательно'),
               TextField(
                 key: const ValueKey('alarm-title'),
@@ -642,7 +647,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                 SwitchListTile.adaptive(
                   key: const ValueKey('delete-after-dismiss'),
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Удалять после отключения'),
+                  title: const Text('Удалить'),
+                  subtitle: const Text('После завершения звонка'),
                   value: _draft.deleteAfterDismiss,
                   onChanged: _saving
                       ? null

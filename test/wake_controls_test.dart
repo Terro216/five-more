@@ -193,9 +193,7 @@ void main() {
     );
   }
 
-  testWidgets('alarm title can be saved with advanced settings collapsed', (
-    tester,
-  ) async {
+  testWidgets('alarm title can be saved in normal ring mode', (tester) async {
     final gateway = FakeAlarmGateway();
     final controller = AlarmController(
       gateway: gateway,

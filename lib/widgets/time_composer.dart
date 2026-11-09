@@ -318,6 +318,7 @@ Future<TimeOfDay?> editClock(
   String title = 'Время подъёма',
   DateTime Function(TimeOfDay)? nextAt,
   DateTime Function()? now,
+  ValueChanged<TimeOfDay>? onSettings,
 }) => showModalBottomSheet<TimeOfDay>(
   context: context,
   isScrollControlled: true,
@@ -327,6 +328,7 @@ Future<TimeOfDay?> editClock(
     title: title,
     nextAt: nextAt,
     now: now ?? DateTime.now,
+    onSettings: onSettings,
   ),
 );
 
@@ -336,11 +338,13 @@ class _ClockSheet extends StatefulWidget {
     required this.title,
     required this.now,
     this.nextAt,
+    this.onSettings,
   });
   final TimeOfDay initial;
   final String title;
   final DateTime Function(TimeOfDay)? nextAt;
   final DateTime Function() now;
+  final ValueChanged<TimeOfDay>? onSettings;
   @override
   State<_ClockSheet> createState() => _ClockSheetState();
 }
@@ -397,6 +401,18 @@ class _ClockSheetState extends State<_ClockSheet> {
               onPressed: _valid ? () => Navigator.pop(context, _time) : null,
               child: const Text('Готово'),
             ),
+            if (widget.onSettings != null)
+              TextButton.icon(
+                key: const ValueKey('full-alarm-settings'),
+                onPressed: _valid
+                    ? () {
+                        widget.onSettings!(_time);
+                        Navigator.pop(context);
+                      }
+                    : null,
+                icon: const Icon(Icons.tune_rounded),
+                label: const Text('Все настройки будильника'),
+              ),
           ],
         ),
       ),

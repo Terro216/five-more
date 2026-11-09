@@ -65,11 +65,13 @@ class HistoryView extends StatefulWidget {
     required this.journal,
     required this.now,
     this.archive = false,
+    this.sync,
   });
   final List<AlarmEvent> events;
   final SleepJournal journal;
   final DateTime now;
   final bool archive;
+  final SyncService? sync;
   @override
   State<HistoryView> createState() => _HistoryViewState();
 }
@@ -96,10 +98,8 @@ class _HistoryViewState extends State<HistoryView> {
   DateTime get _until => _range == null
       ? DateTime(widget.now.year, widget.now.month, widget.now.day + 1)
       : DateTime(_range!.end.year, _range!.end.month, _range!.end.day + 1);
-  bool get _cloud =>
-      widget.archive &&
-      SyncService.instance.enabled &&
-      SyncService.instance.signedIn;
+  SyncService get _sync => widget.sync ?? SyncService.instance;
+  bool get _cloud => widget.archive && _sync.enabled && _sync.signedIn;
   String get _periodKey =>
       '${_from.millisecondsSinceEpoch}:${_until.millisecondsSinceEpoch}';
   @override
@@ -108,7 +108,8 @@ class _HistoryViewState extends State<HistoryView> {
     if (widget.archive) unawaited(_refresh());
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh({bool force = false}) async {
+    if (force) _sync.invalidateHistoryCache();
     final request = ++_requestId;
     final from = _from, until = _until, key = _periodKey;
     setState(() {
@@ -134,25 +135,34 @@ class _HistoryViewState extends State<HistoryView> {
         setState(() => _local = rows.map(AlarmEvent.fromJson).toList());
       }
       if (_cloud) {
+        final accountId = _sync.accountId, endpoint = _sync.endpoint;
+        bool sameAccount() =>
+            _cloud &&
+            _sync.accountId == accountId &&
+            _sync.endpoint == endpoint;
         final cache = await LocalDatabase.instance.setting('history_summary');
-        if (!mounted || request != _requestId) return;
-        if (cache?['period'] == key) {
+        if (!mounted || request != _requestId || !sameAccount()) return;
+        if (cache?['period'] == key &&
+            cache?['accountId'] == accountId &&
+            cache?['endpoint'] == endpoint) {
           setState(() {
             _summary = Map<String, dynamic>.from(cache!['summary'] as Map);
             _cached = true;
           });
         }
-        final summary = await SyncService.instance.summary(from, until);
-        if (!mounted || request != _requestId) return;
+        final summary = await _sync.summary(from, until);
+        if (!mounted || request != _requestId || !sameAccount()) return;
         setState(() {
           _summary = summary;
           _cached = false;
         });
         await LocalDatabase.instance.setSetting('history_summary', {
           'period': key,
+          'accountId': accountId,
+          'endpoint': endpoint,
           'summary': summary,
         });
-        if (!mounted || request != _requestId) return;
+        if (!mounted || request != _requestId || !sameAccount()) return;
         await _loadPage(request, from, until);
       }
     } catch (_) {
@@ -168,7 +178,7 @@ class _HistoryViewState extends State<HistoryView> {
   }
 
   Future<void> _loadPage(int request, DateTime from, DateTime until) async {
-    final page = await SyncService.instance.history(
+    final page = await _sync.history(
       from,
       until,
       beforeAt: _beforeAt,
@@ -180,7 +190,7 @@ class _HistoryViewState extends State<HistoryView> {
         .toList();
     // Cache downloaded pages without marking them as new local events.
     for (final row in records) {
-      await LocalDatabase.instance.receive(row);
+      await LocalDatabase.instance.receive(row, fromHistory: true);
     }
     if (!mounted || request != _requestId) return;
     setState(() {
@@ -354,7 +364,7 @@ class _HistoryViewState extends State<HistoryView> {
               ),
               if (widget.archive)
                 IconButton(
-                  onPressed: _loading ? null : _refresh,
+                  onPressed: _loading ? null : () => _refresh(force: true),
                   icon: const Icon(Icons.refresh),
                   tooltip: 'Обновить историю',
                 ),

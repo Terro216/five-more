@@ -243,7 +243,11 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(quickTime);
       await tester.pumpAndSettle();
-      await _capture(tester, key, 'v080-quick-time-${width.toInt()}');
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('full-alarm-settings')),
+      );
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'v082-quick-time-${width.toInt()}');
       key = await mount(AlarmEditor(controller: controller));
       await _capture(tester, key, 'v080-clock-${width.toInt()}');
       final dial = find.byKey(const ValueKey('time-dial'));
@@ -254,6 +258,29 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _capture(tester, key, 'v080-clock-minutes-${width.toInt()}');
+      await tester.scrollUntilVisible(
+        find.text('Один раз'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Один раз'));
+      await tester.pumpAndSettle();
+      for (final section in ['Переносы', 'Звук и вибрация', 'Удалить']) {
+        final target = find.text(section);
+        await tester.scrollUntilVisible(
+          target,
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await Scrollable.ensureVisible(tester.element(target), alignment: .05);
+        await tester.pumpAndSettle();
+        final name = section == 'Переносы'
+            ? 'snoozes'
+            : section == 'Удалить'
+            ? 'delete'
+            : 'sound';
+        await _capture(tester, key, 'v082-$name-${width.toInt()}');
+      }
       final title = find.byKey(const ValueKey('alarm-title'));
       await tester.scrollUntilVisible(
         title,
@@ -263,6 +290,20 @@ void main() {
       await tester.ensureVisible(title);
       await tester.pumpAndSettle();
       await _capture(tester, key, 'v080-alarm-title-${width.toInt()}');
+      key = await mount(AlarmEditor(controller: controller));
+      await tester.scrollUntilVisible(
+        find.text('С заданием'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('С заданием'));
+      await tester.pumpAndSettle();
+      await Scrollable.ensureVisible(
+        tester.element(find.text('С заданием')),
+        alignment: .05,
+      );
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'v082-challenge-${width.toInt()}');
       key = await mount(AlarmEditor(controller: controller));
       await tester.tap(find.text('Вздремнуть'));
       await tester.pumpAndSettle();

@@ -23,11 +23,69 @@ class SyncService extends ChangeNotifier {
   SyncService({
     FlutterSecureStorage? secureStorage,
     http.Client Function()? clientFactory,
+    DateTime Function()? now,
   }) : _secure = secureStorage ?? const FlutterSecureStorage(),
-       _clientFactory = clientFactory ?? http.Client.new;
+       _clientFactory = clientFactory ?? http.Client.new,
+       _now = now ?? DateTime.now;
   static final instance = SyncService();
   final FlutterSecureStorage _secure;
   final http.Client Function() _clientFactory;
+  final DateTime Function() _now;
+  final _historyCache = <String, _HistoryCacheEntry>{};
+  final _historyRequests = <String, Future<Map<String, dynamic>>>{};
+  int _historyEpoch = 0;
+
+  void invalidateHistoryCache() {
+    _historyEpoch++;
+    _historyCache.clear();
+  }
+
+  Future<Map<String, dynamic>> _archive(String path) async {
+    if (!enabled || !signedIn) {
+      throw const SyncFailure('Включи синхронизацию истории.');
+    }
+    final db = LocalDatabase.instance;
+    final revision = db.historyRevision;
+    final epoch = _historyEpoch, generation = _generation;
+    final key = '$endpoint:$accountId:$sessionId:$path';
+    final cached = _historyCache[key];
+    if (cached != null &&
+        identical(cached.database, db) &&
+        cached.revision == revision &&
+        _now().isBefore(cached.expires)) {
+      return jsonDecode(cached.data) as Map<String, dynamic>;
+    }
+    final requestKey = '$key:$revision:$epoch:$generation';
+    final pending = _historyRequests[requestKey];
+    if (pending != null) return pending;
+    final request = () async {
+      final data = await _json('GET', path);
+      if (enabled &&
+          epoch == _historyEpoch &&
+          generation == _generation &&
+          identical(db, LocalDatabase.instance) &&
+          db.historyRevision == revision) {
+        _historyCache.remove(key);
+        while (_historyCache.length >= 8) {
+          _historyCache.remove(_historyCache.keys.first);
+        }
+        _historyCache[key] = _HistoryCacheEntry(
+          jsonEncode(data),
+          _now().add(const Duration(minutes: 5)),
+          db,
+          revision,
+        );
+      }
+      return data;
+    }();
+    _historyRequests[requestKey] = request;
+    try {
+      return await request;
+    } finally {
+      _historyRequests.remove(requestKey);
+    }
+  }
+
   static const defaultEndpoint = String.fromEnvironment('FIVE_MORE_SYNC_URL');
   String endpoint = defaultEndpoint;
   String? accountId, sessionId, _token, pendingRecoveryKey;
@@ -53,6 +111,7 @@ class SyncService extends ChangeNotifier {
   bool get signedIn => _token != null;
 
   Future<void> load({bool startPolling = true}) async {
+    invalidateHistoryCache();
     if (kIsWeb) {
       ready = true;
       return;
@@ -262,6 +321,7 @@ class SyncService extends ChangeNotifier {
         'recoveryKey': value['recoveryKey'],
       }),
     );
+    invalidateHistoryCache();
     accountId = value['accountId'] as String;
     sessionId = value['sessionId'] as String;
     _token = value['token'] as String;
@@ -397,6 +457,7 @@ class SyncService extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    invalidateHistoryCache();
     _generation++;
     _cancelRequests();
     enabled = false;
@@ -450,6 +511,7 @@ class SyncService extends ChangeNotifier {
   }
 
   Future<void> setEnabled(bool value) async {
+    if (enabled != value) invalidateHistoryCache();
     enabled = value;
     if (!value) {
       _generation++;
@@ -531,6 +593,7 @@ class SyncService extends ChangeNotifier {
           },
         );
         if (!active()) return;
+        if ((result['accepted'] as List).isNotEmpty) invalidateHistoryCache();
         for (final ack in result['accepted'] as List) {
           final sent = pending.firstWhere(
             (row) => row['kind'] == ack['kind'] && row['id'] == ack['id'],
@@ -619,8 +682,7 @@ class SyncService extends ChangeNotifier {
     try {
       zone = await NativeExtras.call<String>('timeZone');
     } catch (_) {}
-    return _json(
-      'GET',
+    return _archive(
       '/v1/summary?start=${from.millisecondsSinceEpoch}&end=${until.millisecondsSinceEpoch}&offset_minutes=${until.timeZoneOffset.inMinutes}${zone == null ? '' : '&time_zone=${Uri.encodeQueryComponent(zone)}'}',
     );
   }
@@ -630,8 +692,7 @@ class SyncService extends ChangeNotifier {
     DateTime until, {
     int? beforeAt,
     String? beforeId,
-  }) => _json(
-    'GET',
+  }) => _archive(
     '/v1/history?start=${from.millisecondsSinceEpoch}&end=${until.millisecondsSinceEpoch}${beforeAt == null ? '' : '&before_at=$beforeAt&before_id=${Uri.encodeQueryComponent(beforeId!)}'}',
   );
   Future<void> downloadNote(String id) async {
@@ -651,4 +712,17 @@ class SyncService extends ChangeNotifier {
     _cancelRequests();
     super.dispose();
   }
+}
+
+class _HistoryCacheEntry {
+  const _HistoryCacheEntry(
+    this.data,
+    this.expires,
+    this.database,
+    this.revision,
+  );
+  final String data;
+  final DateTime expires;
+  final LocalDatabase database;
+  final int revision;
 }

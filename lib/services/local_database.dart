@@ -9,6 +9,9 @@ class LocalDatabase {
   LocalDatabase({this.path});
   static LocalDatabase instance = LocalDatabase();
   final String? path;
+  // Only committed history changes invalidate the in-memory archive cache.
+  int _historyRevision = 0;
+  int get historyRevision => _historyRevision;
   Future<Database>? _opening;
   Future<Database> get database => _opening ??= _open();
 
@@ -124,7 +127,7 @@ class LocalDatabase {
           }, conflictAlgorithm: ConflictAlgorithm.replace)
           .then((_) {});
 
-  static Future<void> _put(
+  static Future<bool> _put(
     DatabaseExecutor db,
     String kind,
     String id,
@@ -137,11 +140,11 @@ class LocalDatabase {
       where: 'kind = ? AND id = ?',
       whereArgs: [kind, id],
     );
-    if (kind == 'event' && old.isNotEmpty) return;
+    if (kind == 'event' && old.isNotEmpty) return false;
     if (old.isNotEmpty &&
         old.first['data'] == data &&
         old.first['deleted'] == 0) {
-      return;
+      return false;
     }
     if (old.isEmpty) {
       await db.insert('records', {
@@ -158,6 +161,7 @@ class LocalDatabase {
         whereArgs: [kind, id],
       );
     }
+    return true;
   }
 
   Future<void> put(
@@ -165,13 +169,18 @@ class LocalDatabase {
     String id,
     Map<String, dynamic> value,
     int at,
-  ) async =>
-      (await database).transaction((txn) => _put(txn, kind, id, value, at));
+  ) async {
+    final changed = await (await database).transaction(
+      (txn) => _put(txn, kind, id, value, at),
+    );
+    if (changed && (kind == 'event' || kind == 'sleep')) _historyRevision++;
+  }
 
   Future<void> saveAlarmState(
     Map<String, Object?> state,
     Iterable<Map<String, Object?>> events,
   ) async {
+    var changed = false;
     await (await database).transaction((txn) async {
       await txn.insert('settings', {
         'key': 'alarm_state',
@@ -179,15 +188,17 @@ class LocalDatabase {
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       for (final event in events) {
         if ((event['id'] as String).startsWith('preview:')) continue;
-        await _put(
+        final inserted = await _put(
           txn,
           'event',
           event['eventId'] as String,
           event,
           event['at'] as int,
         );
+        changed = changed || inserted;
       }
     });
+    if (changed) _historyRevision++;
   }
 
   Future<List<Map<String, dynamic>>> records(
@@ -223,12 +234,13 @@ class LocalDatabase {
         whereArgs: [kind, id],
       )).isNotEmpty;
   Future<void> remove(String kind, String id) async {
-    await (await database).update(
+    final changed = await (await database).update(
       'records',
       {'deleted': 1, 'dirty': 1},
-      where: 'kind = ? AND id = ?',
+      where: 'kind = ? AND id = ? AND deleted = 0',
       whereArgs: [kind, id],
     );
+    if (changed > 0 && (kind == 'event' || kind == 'sleep')) _historyRevision++;
   }
 
   Future<List<Map<String, Object?>>> pending({
@@ -251,8 +263,12 @@ class LocalDatabase {
     );
   }
 
-  Future<bool> receive(Map<String, dynamic> record) async {
-    return (await database).transaction((txn) async {
+  Future<bool> receive(
+    Map<String, dynamic> record, {
+    bool fromHistory = false,
+  }) async {
+    var changed = false;
+    final accepted = await (await database).transaction((txn) async {
       final old = await txn.query(
         'records',
         where: 'kind = ? AND id = ?',
@@ -263,17 +279,30 @@ class LocalDatabase {
           (old.first['revision'] as int) > (record['revision'] as int)) {
         return true;
       }
+      final data = jsonEncode(record['data']);
+      final deleted = record['deleted'] == true ? 1 : 0;
+      changed =
+          old.isEmpty ||
+          old.first['data'] != data ||
+          old.first['at'] != record['at'] ||
+          old.first['deleted'] != deleted;
       await txn.insert('records', {
         'kind': record['kind'],
         'id': record['id'],
-        'data': jsonEncode(record['data']),
+        'data': data,
         'at': record['at'],
         'revision': record['revision'],
         'dirty': 0,
-        'deleted': record['deleted'] == true ? 1 : 0,
+        'deleted': deleted,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       return true;
     });
+    if (changed &&
+        !fromHistory &&
+        (record['kind'] == 'event' || record['kind'] == 'sleep')) {
+      _historyRevision++;
+    }
+    return accepted;
   }
 
   Future<void> close() async {

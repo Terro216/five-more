@@ -101,6 +101,58 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  for (final enabled in [false, true]) {
+    testWidgets('quick time carries its draft into settings ($enabled)', (
+      tester,
+    ) async {
+      final alarm = _morning.copyWith(
+        enabled: enabled,
+        dismissalMode: 'normal',
+      );
+      final gateway = FakeAlarmGateway();
+      final controller = await showHome(
+        tester,
+        gateway: gateway,
+        alarms: [alarm],
+        width: 320,
+        textScale: 1.5,
+      );
+      final calls = gateway.scheduleCalls.length;
+      final time = find.byKey(const ValueKey('alarm-time-morning'));
+      await tester.scrollUntilVisible(time, 160);
+      await tester.ensureVisible(time);
+      await tester.pumpAndSettle();
+      await tester.tap(time);
+      await tester.pumpAndSettle();
+      final hour = find.byKey(const ValueKey('time-hour-input'));
+      final minute = find.byKey(const ValueKey('time-minute-input'));
+      await tester.enterText(hour, '08');
+      await tester.enterText(minute, '');
+      await tester.pump();
+      final settings = find.byKey(const ValueKey('full-alarm-settings'));
+      expect(tester.widget<TextButton>(settings).onPressed, isNull);
+      await tester.enterText(minute, '17');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(settings);
+      await tester.pumpAndSettle();
+      await tester.tap(settings);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlarmEditor), findsOneWidget);
+      expect(tester.widget<TextField>(hour).controller!.text, '08');
+      expect(tester.widget<TextField>(minute).controller!.text, '17');
+      expect(gateway.scheduleCalls.length, calls);
+      expect(controller.alarms.single.hour, 7);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(controller.alarms.single.hour, 8);
+      expect(controller.alarms.single.minute, 17);
+      expect(controller.alarms.single.enabled, enabled);
+      expect(controller.alarms.single.weekdays, alarm.weekdays);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('editing and toggling remain separate actions on an alarm', (
     tester,
   ) async {

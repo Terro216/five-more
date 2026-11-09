@@ -96,6 +96,13 @@ void main() {
     await controller.initialize(startPolling: false);
     await _openEditor(tester, controller);
     expect(find.text('Как просыпаться'), findsNothing);
+    expect(find.text('Отключение'), findsNothing);
+    expect(find.byType(ExpansionTile), findsNothing);
+    await _tap(tester, find.text('Один раз'));
+    await _reveal(tester, find.byKey(const ValueKey('snooze-budget')));
+    await _reveal(tester, find.text('Звук и вибрация'));
+    await _reveal(tester, find.byKey(const ValueKey('delete-after-dismiss')));
+    expect(find.text('Удалить'), findsOneWidget);
     await tester.tap(_save);
     await tester.pumpAndSettle();
     final saved = controller.alarms.single;
@@ -169,7 +176,7 @@ void main() {
           textScale: 1.5,
         );
         await _tap(tester, find.text('С заданием'));
-        await _tap(tester, find.byKey(const ValueKey('alarm-challenge')));
+        expect(find.byType(ExpansionTile), findsNothing);
         await _tap(
           tester,
           find.byKey(const ValueKey('challenge-kind-sequence')),

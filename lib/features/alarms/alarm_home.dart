@@ -69,14 +69,21 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
   }
 
   Future<void> _editTime(Alarm alarm) async {
+    TimeOfDay? settingsTime;
     final time = await editClock(
       context,
       TimeOfDay(hour: alarm.hour, minute: alarm.minute),
       now: () => controller.now,
+      onSettings: (time) => settingsTime = time,
       nextAt: (time) => alarm
           .copyWith(hour: time.hour, minute: time.minute, clearOneShotAt: true)
           .nextOccurrence(controller.now),
     );
+    if (!mounted) return;
+    if (settingsTime != null) {
+      await _edit(alarm, settingsTime);
+      return;
+    }
     if (time == null) return;
     final result = await controller.saveAlarm(
       alarm.copyWith(
@@ -165,10 +172,14 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
   ChallengeDifficulty _practiceDifficulty = ChallengeDifficulty.medium;
   AlarmController get controller => widget.controller;
 
-  Future<void> _edit([Alarm? alarm]) async {
+  Future<void> _edit([Alarm? alarm, TimeOfDay? initialTime]) async {
     await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => AlarmEditor(controller: controller, alarm: alarm),
+        builder: (_) => AlarmEditor(
+          controller: controller,
+          alarm: alarm,
+          initialTime: initialTime,
+        ),
       ),
     );
   }
