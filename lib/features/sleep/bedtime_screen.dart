@@ -130,9 +130,9 @@ class _BedtimeScreenState extends State<BedtimeScreen>
           style: TextStyle(fontSize: 30, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Утром запиши, как тебе вставалось. Вечером послушай свой сонный голос — и вспомни, зачем сегодня лечь пораньше.',
-          style: TextStyle(color: muted, height: 1.5),
+          style: TextStyle(color: context.palette.muted, height: 1.5),
         ),
         const SizedBox(height: 24),
         FilledButton.icon(
@@ -163,9 +163,13 @@ class _BedtimeScreenState extends State<BedtimeScreen>
             ),
           ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           '5 минут на запись. Можно продлить или сохранить раньше.',
-          style: TextStyle(color: muted, fontSize: 12, height: 1.5),
+          style: TextStyle(
+            color: context.palette.muted,
+            fontSize: 12,
+            height: 1.5,
+          ),
         ),
         const SizedBox(height: 24),
         DropdownButtonFormField<int>(
@@ -200,7 +204,7 @@ class _BedtimeScreenState extends State<BedtimeScreen>
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.bedtime_outlined, color: morning),
+          leading: Icon(Icons.bedtime_outlined, color: context.palette.morning),
           title: Text(
             'Хочу ложиться в ${clockLabel(TimeOfDay(hour: journal.bedHour, minute: journal.bedMinute))}',
           ),
@@ -238,11 +242,11 @@ class _BedtimeScreenState extends State<BedtimeScreen>
           style: Theme.of(context).textTheme.titleLarge,
         ),
         if (journal.notes.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Text(
               'Первое послание появится здесь после записи.',
-              style: TextStyle(color: muted),
+              style: TextStyle(color: context.palette.muted),
             ),
           ),
         ...journal.notes.reversed.map(

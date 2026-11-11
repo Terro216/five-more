@@ -51,6 +51,7 @@ class Alarm {
     this.oneShotAt,
     this.mixOrder = const [],
     this.qrValue = '',
+    this.background = '',
     this.sound = 'system',
     this.soundLabel = 'Системный будильник',
   });
@@ -91,6 +92,7 @@ class Alarm {
   final DateTime? oneShotAt;
   final List<ChallengeKind> mixOrder;
   final String qrValue;
+  final String background;
   final String sound;
   final String soundLabel;
 
@@ -162,6 +164,7 @@ class Alarm {
     bool clearOneShotAt = false,
     List<ChallengeKind>? mixOrder,
     String? qrValue,
+    String? background,
     String? sound,
     String? soundLabel,
   }) => Alarm(
@@ -169,6 +172,7 @@ class Alarm {
     oneShotAt: clearOneShotAt ? null : oneShotAt ?? this.oneShotAt,
     mixOrder: List.unmodifiable(mixOrder ?? this.mixOrder),
     qrValue: qrValue ?? this.qrValue,
+    background: background ?? this.background,
     sound: sound ?? this.sound,
     soundLabel: soundLabel ?? this.soundLabel,
     hour: hour ?? this.hour,
@@ -199,6 +203,7 @@ class Alarm {
     'oneShotAt': oneShotAt?.millisecondsSinceEpoch,
     'mixOrder': mixOrder.map((kind) => kind.name).toList(),
     'qrValue': qrValue,
+    'background': background,
     'sound': sound,
     'soundLabel': soundLabel,
     'hour': hour,
@@ -245,6 +250,9 @@ class Alarm {
           .take(12)
           .toList(),
       qrValue: json['qrValue'] as String? ?? '',
+      background: validBackgroundName(json['background'])
+          ? json['background'] as String
+          : '',
       sound: json['sound'] as String? ?? 'system',
       soundLabel: json['soundLabel'] as String? ?? 'Системный будильник',
       hour: intValue(json['hour'], 7).clamp(0, 23),
@@ -361,9 +369,12 @@ class RingingAlarm {
     this.snoozedMinutes,
     this.quietUsed = 0,
     this.quietRemainingSeconds = 0,
+    this.snoozedUntil,
   });
   final int quietUsed;
   final int quietRemainingSeconds;
+  final DateTime? snoozedUntil;
+  bool get isSnoozed => snoozedUntil != null;
   final Alarm alarm;
   final String occurrenceId;
   final DateTime firedAt;
@@ -389,6 +400,9 @@ class RingingAlarm {
       firedAt: parseTimestamp(json['firedAt']) ?? DateTime.now(),
       quietUsed: intValue(json['quietUsed'], 0),
       quietRemainingSeconds: intValue(json['quietRemainingSeconds'], 0),
+      snoozedUntil: json['state'] == 'snoozed'
+          ? parseNextTimestamp(json['nextAt'])
+          : null,
       snoozesUsed: intValue(json['snoozesUsed'], 0),
       snoozedMinutes: json['snoozedMinutes'] is num
           ? intValue(json['snoozedMinutes'], 0)
@@ -396,3 +410,9 @@ class RingingAlarm {
     );
   }
 }
+
+bool validBackgroundName(Object? value) =>
+    value is String &&
+    RegExp(
+      r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}\.jpg$',
+    ).hasMatch(value);

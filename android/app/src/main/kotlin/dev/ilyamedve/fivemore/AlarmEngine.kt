@@ -116,6 +116,7 @@ class AlarmEngine(private val context: Context) {
             .put("oneShotAt", if (test == null) oneShotAt else 0L)
             .put("mixOrder", JSONArray(order)).put("qrValue", qr)
             .put("sound", sound).put("soundLabel", (arguments["soundLabel"] as? String ?: "Системный будильник").take(80))
+            .put("background", (arguments["background"] as? String ?: "").takeIf(BackgroundRules::validName) ?: "")
             .put("snoozesUsed", 0).put("occurrenceId", UUID.randomUUID().toString())
             .put("state", if (enabled) "scheduled" else "disabled")
         val nextAt = if (enabled) {
@@ -182,19 +183,20 @@ class AlarmEngine(private val context: Context) {
         return success(alarm)
     }
 
-    fun dismiss(id: String, emergency: Boolean = false, timedOut: Boolean = false): Map<String, Any?> {
+    fun dismiss(id: String, emergency: Boolean = false, timedOut: Boolean = false, occurrenceId: String? = null, generation: Int? = null): Map<String, Any?> {
         if (emergency || timedOut) {
             return AlarmSafety.resolveOrSilence(
-                operation = { dismissPersisted(id, emergency, timedOut) },
+                operation = { dismissPersisted(id, emergency, timedOut, occurrenceId, generation) },
                 silenceWithoutPersistence = { silenceAfterPersistenceFailure(id) },
                 failure = { fail("emergency_state_not_saved", it.message) },
             )
         }
-        return dismissPersisted(id, emergency = false, timedOut = false)
+        return dismissPersisted(id, emergency = false, timedOut = false, occurrenceId, generation)
     }
 
-    private fun dismissPersisted(id: String, emergency: Boolean, timedOut: Boolean): Map<String, Any?> {
+    private fun dismissPersisted(id: String, emergency: Boolean, timedOut: Boolean, occurrenceId: String? = null, generation: Int? = null): Map<String, Any?> {
         val alarm = store.get(id) ?: return fail("not_found")
+        if (occurrenceId != null && (alarm.optString("occurrenceId") != occurrenceId || alarm.optInt("snoozesUsed") != generation)) return fail("not_ringing")
         if (alarm.optString("state") !in listOf("ringing", "snoozed")) return fail("not_ringing")
         cancelPending(id)
         val type = if (timedOut) "timed_out" else if (emergency) "emergency_dismissed" else "dismissed"
@@ -263,6 +265,10 @@ class AlarmEngine(private val context: Context) {
     fun getRingingAlarm(): Map<String, Any?>? = ringing()?.let {
         it.toMap() + mapOf("quietRemainingSeconds" to ((quietRemaining(it) + 999) / 1000))
     }
+
+    fun getSnoozedAlarms(): List<Map<String, Any?>> = store.alarms()
+        .filter { it.optString("state") == "snoozed" && it.optBoolean("enabled") }
+        .sortedBy { it.optLong("nextAt") }.map { it.toMap() }
 
     /** A separate native occurrence exercises delivery without changing the user's schedule. */
     fun testAlarm(id: String, delayValue: Any? = null): Map<String, Any?> {

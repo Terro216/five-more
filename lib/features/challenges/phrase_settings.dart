@@ -78,9 +78,9 @@ class _PhraseSettingsState extends State<PhraseSettings> {
                 if (mounted) setState(() => _busy = false);
               },
       ),
-      const Text(
+      Text(
         'Во время звонка используются только сохранённые и встроенные фразы.',
-        style: TextStyle(color: muted),
+        style: TextStyle(color: context.palette.muted),
       ),
       TextButton.icon(
         onPressed: _busy || !PhraseLibrary.instance.enabled ? null : _refresh,
@@ -95,7 +95,9 @@ class _PhraseSettingsState extends State<PhraseSettings> {
             child: Text(
               _status!,
               style: TextStyle(
-                color: _failed ? Theme.of(context).colorScheme.error : muted,
+                color: _failed
+                    ? Theme.of(context).colorScheme.error
+                    : context.palette.muted,
               ),
             ),
           ),

@@ -35,13 +35,23 @@ class _FailingAlarmGateway extends FakeAlarmGateway {
   }
 
   @override
-  Future<AlarmResult> dismiss(String id, {bool emergency = false}) async {
+  Future<AlarmResult> dismiss(
+    String id, {
+    bool emergency = false,
+    String? occurrenceId,
+    int? generation,
+  }) async {
     emergencyFlags.add(emergency);
     if (rejectDismiss) {
       dismissCalls.add(id);
       return const AlarmResult(ok: false, error: _longError);
     }
-    return super.dismiss(id, emergency: emergency);
+    return super.dismiss(
+      id,
+      emergency: emergency,
+      occurrenceId: occurrenceId,
+      generation: generation,
+    );
   }
 }
 

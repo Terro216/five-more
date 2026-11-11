@@ -278,10 +278,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     padding: const EdgeInsets.only(bottom: 20),
                     child: Text(
                       displayError,
-                      style: const TextStyle(
-                        color: Color(0xFFFFB4AB),
-                        height: 1.5,
-                      ),
+                      style: TextStyle(color: context.palette.red, height: 1.5),
                     ),
                   ),
                 if (device.recoveryError != null) ...[
@@ -290,10 +287,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     child: Text(
                       'Расписание восстановлено не полностью. ${device.recoveryError}',
                       key: const ValueKey('alarm-recovery-error'),
-                      style: const TextStyle(
-                        color: Color(0xFFFFB4AB),
-                        height: 1.5,
-                      ),
+                      style: TextStyle(color: context.palette.red, height: 1.5),
                     ),
                   ),
                   if (device.platform == 'android' &&
@@ -319,9 +313,9 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     style: TextStyle(fontSize: 27, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     'Запусти тест и заблокируй экран.',
-                    style: TextStyle(color: muted, height: 1.5),
+                    style: TextStyle(color: context.palette.muted, height: 1.5),
                   ),
                   if (check?.pending == true) ...[
                     const SizedBox(height: 24),
@@ -363,12 +357,15 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                   if (!device.notifications ||
                       !device.exactAlarms ||
                       !device.fullScreenIntent)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.only(top: 12),
                       child: Text(
                         'Часть разрешений сейчас выключена. Прошлая проверка '
                         'не подтверждает работу с новыми настройками.',
-                        style: TextStyle(color: morning, height: 1.5),
+                        style: TextStyle(
+                          color: context.palette.morning,
+                          height: 1.5,
+                        ),
                       ),
                     ),
                   if (device.alarmVolume != null &&
@@ -395,10 +392,13 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                       const SizedBox(height: 20),
                     ],
                     if (selected == null) ...[
-                      const Text(
+                      Text(
                         'Сначала сохрани будильник. Для проверки возьмём его '
                         'звук и настройки переносов.',
-                        style: TextStyle(color: muted, height: 1.5),
+                        style: TextStyle(
+                          color: context.palette.muted,
+                          height: 1.5,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       FilledButton.icon(
@@ -436,10 +436,13 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                             : (value) => setState(() => _sourceAlarmId = value),
                       ),
                       const SizedBox(height: 12),
-                      const Text(
+                      Text(
                         'Основное расписание сохранится. После запуска заблокируй '
                         'телефон и оставь его рядом. Проверочный звонок нужно будет отключить.',
-                        style: TextStyle(color: muted, height: 1.5),
+                        style: TextStyle(
+                          color: context.palette.muted,
+                          height: 1.5,
+                        ),
                       ),
                       const SizedBox(height: 18),
                       ExactSlider(
@@ -474,24 +477,27 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                         ),
                       ),
                       if (!device.canSchedule)
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.only(top: 10),
                           child: Text(
                             'Сначала включи разрешения на уведомления и будильники.',
-                            style: TextStyle(color: morning, height: 1.5),
+                            style: TextStyle(
+                              color: context.palette.morning,
+                              height: 1.5,
+                            ),
                           ),
                         ),
                     ],
                   ],
                   const SizedBox(height: 24),
                   if (!device.challengeEnforced)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.only(top: 12),
                       child: Text(
                         'На iPhone системная кнопка остановки отключает звонок без задания. '
                         'Для задания открой приложение.',
                         style: TextStyle(
-                          color: muted,
+                          color: context.palette.muted,
                           fontSize: 12,
                           height: 1.5,
                         ),
@@ -533,7 +539,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                       'Проверь восстановление звонка на своём телефоне.'
                 : 'Поддержку восстановления на этом устройстве не удалось подтвердить. '
                       'Обнови статус и проверь звонок после перезагрузки.',
-            style: const TextStyle(color: muted, height: 1.5),
+            style: TextStyle(color: context.palette.muted, height: 1.5),
           ),
           if (device.powerMenuGuardActive != null) ...[
             const SizedBox(height: 20),
@@ -547,7 +553,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                   ? 'Защита включена. Во время звонка приложение закрывает распознанное меню питания. Проверь на своём телефоне.'
                   : 'Закрывать меню выключения во время звонка. Требуется отдельное разрешение Android; работает не на всех телефонах.',
               key: const ValueKey('power-menu-status'),
-              style: const TextStyle(color: muted, height: 1.5),
+              style: TextStyle(color: context.palette.muted, height: 1.5),
             ),
             TextButton(
               key: const ValueKey('power-menu-change'),
@@ -599,7 +605,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     'Эта защита не требуется для обычного звонка.',
             },
             key: const ValueKey('device-admin-status'),
-            style: const TextStyle(color: muted, height: 1.5),
+            style: TextStyle(color: context.palette.muted, height: 1.5),
           ),
           if (device.deviceAdminActive != null)
             TextButton(
@@ -622,11 +628,11 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
               ),
             ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Принудительная перезагрузка кнопками и остановка через настройки Android остаются доступны. '
             'После принудительной остановки открой приложение и восстанови расписание. '
             'В режиме «Не беспокоить» разреши будильники в настройках звука телефона.',
-            style: TextStyle(color: muted, height: 1.5),
+            style: TextStyle(color: context.palette.muted, height: 1.5),
           ),
           if (device.bootRecoverySupported == true &&
               device.recoveryError == null)
@@ -647,7 +653,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
   );
 
   List<Widget> _preview() => [
-    const Icon(Icons.visibility_outlined, color: morning, size: 48),
+    Icon(Icons.visibility_outlined, color: context.palette.morning, size: 48),
     const SizedBox(height: 24),
     const Text(
       'Знакомство с «Ещё пять»',
@@ -658,7 +664,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
       controller.device.error ??
           'На этой платформе настоящий будильник недоступен. '
               'Можно сохранить настройки черновика и попробовать задания без звука.',
-      style: const TextStyle(color: muted, height: 1.5),
+      style: TextStyle(color: context.palette.muted, height: 1.5),
     ),
     const SizedBox(height: 24),
     FilledButton.icon(
@@ -689,8 +695,8 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
         Text(
           'До звонка: $seconds сек',
           key: const ValueKey('device-check-countdown'),
-          style: const TextStyle(
-            color: morning,
+          style: TextStyle(
+            color: context.palette.morning,
             fontSize: 28,
             fontWeight: FontWeight.w600,
           ),
@@ -703,7 +709,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                   'Мы не можем проверить звук за тебя. Ответ остановит проверочный звонок, если он ещё звучит.'
             : 'Оставь телефон рядом и дождись звука. Затем открой приложение '
                   'и отметь результат. Проверка сохранится, даже если закрыть этот экран.',
-        style: const TextStyle(color: muted, height: 1.5),
+        style: TextStyle(color: context.palette.muted, height: 1.5),
       ),
       const SizedBox(height: 18),
       if (due) ...[
@@ -769,7 +775,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
               ? 'Повтори проверку, если поменяешь настройки телефона.'
               : 'Проверь громкость будильника, разрешения и ограничения батареи. '
                     'Затем повтори проверку с заблокированным экраном.',
-          style: const TextStyle(color: muted, height: 1.5),
+          style: TextStyle(color: context.palette.muted, height: 1.5),
         ),
       ],
     );
@@ -800,7 +806,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
             enabled
                 ? Icons.check_circle_outline_rounded
                 : Icons.error_outline_rounded,
-            color: enabled ? muted : morning,
+            color: enabled ? context.palette.muted : context.palette.morning,
             size: 22,
             semanticLabel: enabled ? 'Разрешено' : 'Выключено',
           ),
@@ -814,7 +820,11 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
               const SizedBox(height: 4),
               Text(
                 description,
-                style: const TextStyle(color: muted, fontSize: 13, height: 1.4),
+                style: TextStyle(
+                  color: context.palette.muted,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
               ),
               if (!enabled)
                 TextButton(
@@ -845,7 +855,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: morning, size: 22),
+            Icon(icon, color: context.palette.morning, size: 22),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -859,7 +869,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
           ],
         ),
         const SizedBox(height: 8),
-        Text(text, style: const TextStyle(color: muted, height: 1.5)),
+        Text(text, style: TextStyle(color: context.palette.muted, height: 1.5)),
         TextButton(onPressed: onPressed, child: Text(action)),
       ],
     ),

@@ -70,7 +70,8 @@ class MainActivity : FlutterActivity() {
                     "cancel" -> result.success(engine.cancel(id))
                     "snooze" -> result.success(engine.snooze(id, (args["minutes"] as? Number)?.toInt()))
                     "quiet" -> result.success(engine.quiet(id, args["occurrenceId"] as? String ?: "", (args["generation"] as? Number)?.toInt() ?: -1))
-                    "dismiss" -> result.success(engine.dismiss(id, emergency = args["emergency"] == true))
+                    "dismiss" -> result.success(engine.dismiss(id, emergency = args["emergency"] == true, occurrenceId = args["occurrenceId"] as? String, generation = (args["generation"] as? Number)?.toInt()))
+                    "getSnoozedAlarms" -> result.success(engine.getSnoozedAlarms())
                     "status" -> result.success(engine.status())
                     "restoreAlarms" -> result.success(engine.restoreAlarms())
                     "getRingingAlarm" -> {

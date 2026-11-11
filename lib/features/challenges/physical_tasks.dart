@@ -98,7 +98,7 @@ class _QrTaskState extends State<QrTask> with WidgetsBindingObserver {
         widget.expected == null
             ? 'Выбери QR-код в месте, до которого нужно дойти утром.'
             : 'Дойди до своего QR-кода и наведи камеру.',
-        style: const TextStyle(color: muted, height: 1.5),
+        style: TextStyle(color: context.palette.muted, height: 1.5),
       ),
       const SizedBox(height: 16),
       if (kIsWeb)
@@ -288,23 +288,23 @@ class _ShakeTaskState extends State<ShakeTask> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      const Icon(Icons.vibration_rounded, size: 64, color: morning),
+      Icon(Icons.vibration_rounded, size: 64, color: context.palette.morning),
       const SizedBox(height: 24),
       const Text(
         'Разбуди телефон',
         style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
       ),
       const SizedBox(height: 12),
-      const Text(
+      Text(
         'Держи крепко и встряхивай короткими движениями туда-обратно.',
-        style: TextStyle(color: muted),
+        style: TextStyle(color: context.palette.muted),
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 24),
       Text(
         '${(_counter.count / _counter.target * 100).round()}%',
         key: const ValueKey('shake-progress'),
-        style: const TextStyle(fontSize: 32, color: morning),
+        style: TextStyle(fontSize: 32, color: context.palette.morning),
       ),
       const SizedBox(height: 12),
       LinearProgressIndicator(
@@ -472,7 +472,7 @@ class _MazeTaskState extends State<MazeTask> with WidgetsBindingObserver {
         kIsWeb
             ? 'Предпросмотр: веди пальцем по полю. На телефоне управление наклоном.'
             : 'Наклоняй телефон. Отверстие вернёт на предыдущий этап.',
-        style: const TextStyle(color: muted),
+        style: TextStyle(color: context.palette.muted),
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 16),
@@ -489,7 +489,7 @@ class _MazeTaskState extends State<MazeTask> with WidgetsBindingObserver {
                   }
                 : null,
             onPanEnd: (_) => _tilt = Offset.zero,
-            child: CustomPaint(painter: _MazePainter(_maze)),
+            child: CustomPaint(painter: _MazePainter(_maze, context.palette)),
           ),
         ),
       ),
@@ -512,9 +512,9 @@ class _MazeTaskState extends State<MazeTask> with WidgetsBindingObserver {
         label: const Text('Настроить наклон', textAlign: TextAlign.center),
       ),
       const SizedBox(height: 8),
-      const Text(
+      Text(
         'Держи телефон удобно и нажми кнопку. Это положение станет исходным.',
-        style: TextStyle(color: muted, fontSize: 12),
+        style: TextStyle(color: context.palette.muted, fontSize: 12),
         textAlign: TextAlign.center,
       ),
     ],
@@ -522,13 +522,14 @@ class _MazeTaskState extends State<MazeTask> with WidgetsBindingObserver {
 }
 
 class _MazePainter extends CustomPainter {
-  _MazePainter(this.maze);
+  _MazePainter(this.maze, this.palette);
+  final AppPalette palette;
   final TiltMaze maze;
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawRRect(
       RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(12)),
-      Paint()..color = panel,
+      Paint()..color = palette.panel,
     );
     for (final wall in maze.walls) {
       canvas.drawRect(
@@ -538,7 +539,7 @@ class _MazePainter extends CustomPainter {
           wall.right * size.width,
           wall.bottom * size.height,
         ),
-        Paint()..color = muted,
+        Paint()..color = palette.muted,
       );
     }
     for (final hole in maze.holes) {
@@ -551,12 +552,12 @@ class _MazePainter extends CustomPainter {
     canvas.drawCircle(
       Offset(maze.goal.dx * size.width, maze.goal.dy * size.height),
       .05 * size.width,
-      Paint()..color = const Color(0xFF8EDDAB),
+      Paint()..color = palette.green,
     );
     canvas.drawCircle(
       Offset(maze.ball.dx * size.width, maze.ball.dy * size.height),
       maze.radius * size.width,
-      Paint()..color = morning,
+      Paint()..color = palette.morning,
     );
   }
 

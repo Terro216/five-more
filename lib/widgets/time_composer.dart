@@ -120,7 +120,7 @@ class _TimeComposerState extends State<TimeComposer> {
             FilteringTextInputFormatter.digitsOnly,
             LengthLimitingTextInputFormatter(2),
           ],
-          style: const TextStyle(fontSize: 36, color: morning),
+          style: TextStyle(fontSize: 36, color: context.palette.morning),
           decoration: InputDecoration(
             labelText: minutes ? 'Минуты' : 'Часы',
             errorText:
@@ -173,9 +173,9 @@ class _TimeComposerState extends State<TimeComposer> {
         ],
       ),
       const SizedBox(height: 8),
-      const Text(
+      Text(
         'Введи время или прокрути цифры вверх / вниз',
-        style: TextStyle(color: muted, fontSize: 12),
+        style: TextStyle(color: context.palette.muted, fontSize: 12),
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 8),
@@ -250,6 +250,7 @@ class _TimeComposerState extends State<TimeComposer> {
                   widget.time,
                   _minutes,
                   MediaQuery.textScalerOf(context).scale(1).clamp(1, 1.3),
+                  context.palette,
                 ),
               ),
             ),
@@ -261,14 +262,15 @@ class _TimeComposerState extends State<TimeComposer> {
 }
 
 class _ClockPainter extends CustomPainter {
-  _ClockPainter(this.time, this.minutes, this.scale);
+  _ClockPainter(this.time, this.minutes, this.scale, this.palette);
+  final AppPalette palette;
   final TimeOfDay time;
   final bool minutes;
   final double scale;
   @override
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
-    canvas.drawCircle(center, size.width / 2, Paint()..color = panel);
+    canvas.drawCircle(center, size.width / 2, Paint()..color = palette.panel);
     final selected = minutes ? time.minute / 5 : time.hour % 12;
     final radius = size.width * (!minutes && time.hour >= 12 ? .24 : .40);
     final angle = selected * pi / 6 - pi / 2;
@@ -277,11 +279,11 @@ class _ClockPainter extends CustomPainter {
       center,
       tip,
       Paint()
-        ..color = morning
+        ..color = palette.morning
         ..strokeWidth = 2,
     );
-    canvas.drawCircle(tip, 20, Paint()..color = morning);
-    canvas.drawCircle(center, 4, Paint()..color = morning);
+    canvas.drawCircle(tip, 20, Paint()..color = palette.morning);
+    canvas.drawCircle(center, 4, Paint()..color = palette.morning);
     for (var ring = 0; ring < (minutes ? 1 : 2); ring++) {
       for (var i = 0; i < 12; i++) {
         final value = minutes ? i * 5 : i + ring * 12;
@@ -296,7 +298,7 @@ class _ClockPainter extends CustomPainter {
             style: TextStyle(
               fontFamily: 'Roboto',
               fontSize: (ring == 0 ? 17 : 14) * scale,
-              color: chosen ? ink : foreground,
+              color: chosen ? palette.ink : palette.foreground,
             ),
           ),
           textDirection: TextDirection.ltr,
@@ -309,7 +311,10 @@ class _ClockPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ClockPainter old) =>
-      old.time != time || old.minutes != minutes || old.scale != scale;
+      old.palette != palette ||
+      old.time != time ||
+      old.minutes != minutes ||
+      old.scale != scale;
 }
 
 Future<TimeOfDay?> editClock(
@@ -389,7 +394,7 @@ class _ClockSheetState extends State<_ClockSheet> {
                 child: Text(
                   'До звонка ${remainingLabel(widget.nextAt!(_time), widget.now())}',
                   key: const ValueKey('time-remaining'),
-                  style: const TextStyle(color: morning),
+                  style: TextStyle(color: context.palette.morning),
                 ),
               ),
             TimeComposer(

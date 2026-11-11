@@ -154,10 +154,16 @@ abstract class AlarmGateway {
   Future<AlarmResult> cancel(String id);
   Future<AlarmResult> quiet(String id, String occurrenceId, int generation);
   Future<AlarmResult> snooze(String id, {int? minutes});
-  Future<AlarmResult> dismiss(String id, {bool emergency = false});
+  Future<AlarmResult> dismiss(
+    String id, {
+    bool emergency = false,
+    String? occurrenceId,
+    int? generation,
+  });
   Future<AlarmResult> testAlarm(String id, {int delaySeconds = 5});
   Future<AlarmResult> cancelTestAlarm(String id);
   Future<RingingAlarm?> getRingingAlarm();
+  Future<List<RingingAlarm>> getSnoozedAlarms();
   Future<List<AlarmEvent>> drainEvents();
   Future<void> ackEvents(List<String> eventIds);
 }
@@ -229,8 +235,17 @@ class NativeAlarmGateway implements AlarmGateway {
   Future<AlarmResult> snooze(String id, {int? minutes}) =>
       _action('snooze', {'id': id, 'minutes': ?minutes});
   @override
-  Future<AlarmResult> dismiss(String id, {bool emergency = false}) =>
-      _action('dismiss', {'id': id, 'emergency': emergency});
+  Future<AlarmResult> dismiss(
+    String id, {
+    bool emergency = false,
+    String? occurrenceId,
+    int? generation,
+  }) => _action('dismiss', {
+    'id': id,
+    'emergency': emergency,
+    'occurrenceId': ?occurrenceId,
+    'generation': ?generation,
+  });
   @override
   Future<AlarmResult> testAlarm(String id, {int delaySeconds = 5}) =>
       _action('testAlarm', {'id': id, 'delaySeconds': delaySeconds});
@@ -246,6 +261,17 @@ class NativeAlarmGateway implements AlarmGateway {
     final map = Map<String, dynamic>.from(result);
     if (map['state'] == 'snoozed' || map['state'] == 'dismissed') return null;
     return RingingAlarm.fromJson(map);
+  }
+
+  @override
+  Future<List<RingingAlarm>> getSnoozedAlarms() async {
+    final result = await _channel.invokeMethod<Object?>('getSnoozedAlarms');
+    if (result is! List) return [];
+    return result
+        .whereType<Map>()
+        .map((raw) => RingingAlarm.fromJson(Map<String, dynamic>.from(raw)))
+        .where((alarm) => alarm.isSnoozed)
+        .toList();
   }
 
   @override

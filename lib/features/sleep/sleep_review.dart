@@ -143,9 +143,9 @@ class _SleepReviewState extends State<SleepReview> {
           ),
         ),
       ),
-      const Text(
+      Text(
         '1 — тяжело · 5 — отлично',
-        style: TextStyle(color: muted, fontSize: 12),
+        style: TextStyle(color: context.palette.muted, fontSize: 12),
       ),
     ],
   );
@@ -225,12 +225,12 @@ class _SleepReviewState extends State<SleepReview> {
           ),
         Text(
           'Расчётный сон: ${remainingLabel(_wakeAt, _bedAt)}',
-          style: const TextStyle(color: morning),
+          style: TextStyle(color: context.palette.morning),
         ),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'Время можно уточнить. Отключение будильника не подтверждает пробуждение.',
-          style: TextStyle(color: muted, height: 1.5),
+          style: TextStyle(color: context.palette.muted, height: 1.5),
         ),
         if (_error != null)
           Text(

@@ -6,21 +6,71 @@ const morning = Color(0xFFF3C96B);
 const muted = Color(0xFFAAB5A8);
 const foreground = Color(0xFFF6F4E9);
 
-ThemeData fiveMoreTheme() {
+class AppPalette {
+  const AppPalette({
+    required this.ink,
+    required this.panel,
+    required this.morning,
+    required this.muted,
+    required this.foreground,
+    required this.green,
+    required this.blue,
+    required this.red,
+  });
+  final Color ink, panel, morning, muted, foreground, green, blue, red;
+  static const dark = AppPalette(
+    ink: Color(0xFF101612),
+    panel: Color(0xFF1C251E),
+    morning: Color(0xFFF3C96B),
+    muted: Color(0xFFAAB5A8),
+    foreground: Color(0xFFF6F4E9),
+    green: Color(0xFF8EDDAB),
+    blue: Color(0xFF7FBFFF),
+    red: Color(0xFFFFB4AB),
+  );
+  static const light = AppPalette(
+    ink: Color(0xFFF8F6EE),
+    panel: Color(0xFFE8EDE3),
+    morning: Color(0xFF765600),
+    muted: Color(0xFF53614F),
+    foreground: Color(0xFF182219),
+    green: Color(0xFF28643E),
+    blue: Color(0xFF245C93),
+    red: Color(0xFF9C3028),
+  );
+}
+
+extension AppPaletteContext on BuildContext {
+  AppPalette get palette => Theme.of(this).brightness == Brightness.light
+      ? AppPalette.light
+      : AppPalette.dark;
+}
+
+ThemeData fiveMoreTheme({Brightness brightness = Brightness.dark}) {
+  final palette = brightness == Brightness.light
+      ? AppPalette.light
+      : AppPalette.dark;
+  final ink = palette.ink,
+      panel = palette.panel,
+      morning = palette.morning,
+      foreground = palette.foreground,
+      muted = palette.muted;
   final scheme = ColorScheme.fromSeed(
     seedColor: morning,
-    brightness: Brightness.dark,
+    brightness: brightness,
     surface: ink,
     primary: morning,
     onSurface: foreground,
+    onPrimary: ink,
+    onSurfaceVariant: muted,
   );
   return ThemeData(
     useMaterial3: true,
-    brightness: Brightness.dark,
+    brightness: brightness,
     colorScheme: scheme,
     scaffoldBackgroundColor: ink,
     cardColor: panel,
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: ink,
       foregroundColor: foreground,
       surfaceTintColor: Colors.transparent,
@@ -66,6 +116,6 @@ ThemeData fiveMoreTheme() {
       contentTextStyle: const TextStyle(color: Colors.white),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
-    dividerColor: Colors.white.withValues(alpha: .08),
+    dividerColor: foreground.withValues(alpha: .12),
   );
 }

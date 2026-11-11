@@ -122,6 +122,14 @@ class ExtrasBridge(private val activity: MainActivity, private val channel: Meth
                             activity.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "audio/*"; addCategory(Intent.CATEGORY_OPENABLE) }, 602)
                         } catch (e: Exception) { pendingFile = null; throw e }
                     }
+                    "readBackground" -> result.success(AlarmBackgrounds.read(activity, args["file"] as? String ?: ""))
+                    "pickBackground" -> {
+                        check(pendingFile == null) { "Выбор файла уже открыт" }
+                        pendingFile = result
+                        try {
+                            activity.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type = "image/*"; addCategory(Intent.CATEGORY_OPENABLE) }, 603)
+                        } catch (e: Exception) { pendingFile = null; throw e }
+                    }
                     else -> result.notImplemented()
                 }
             } catch (e: Exception) { result.error("extras_error", e.message ?: "Не удалось выполнить действие", null) }
@@ -182,10 +190,21 @@ class ExtrasBridge(private val activity: MainActivity, private val channel: Meth
         return true
     }
     fun fileResult(code: Int, resultCode: Int, data: Intent?): Boolean {
-        if (code != 602) return false
+        if (code != 602 && code != 603) return false
         val result = pendingFile ?: return true
         pendingFile = null
         if (resultCode != Activity.RESULT_OK || data?.data == null) { result.success(null); return true }
+        if (code == 603) {
+            Thread {
+                try {
+                    val name = AlarmBackgrounds.importImage(activity, data.data!!)
+                    activity.runOnUiThread { result.success(name) }
+                } catch (e: Exception) {
+                    activity.runOnUiThread { result.error("background_file", e.message ?: "Не удалось открыть фото.", null) }
+                }
+            }.start()
+            return true
+        }
         val file = File(soundDir, "${UUID.randomUUID()}.audio")
         Thread {
         try {

@@ -75,7 +75,13 @@ void main() {
       textScale: 1.5,
       home: (controller) => AlarmHome(controller: controller),
     );
-    expect(find.text('ещё пять'), findsOneWidget);
+    expect(find.byTooltip('Ещё пять'), findsOneWidget);
+    for (final tooltip in ['Светлая тема', 'Проверка телефона']) {
+      expect(find.byTooltip(tooltip).hitTestable(), findsOneWidget);
+      final rect = tester.getRect(find.byTooltip(tooltip));
+      expect(rect.left, greaterThanOrEqualTo(0));
+      expect(rect.right, lessThanOrEqualTo(320));
+    }
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

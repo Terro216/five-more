@@ -2,6 +2,7 @@ import Flutter
 import Foundation
 import CoreFoundation
 import UIKit
+import ImageIO
 
 #if canImport(AlarmKit) && !targetEnvironment(macCatalyst)
 import AlarmKit
@@ -231,7 +232,7 @@ private enum FiveMoreAlarmStore {
       let sameDay = Calendar.current.isDateInToday(Date(timeIntervalSince1970: timestamp / 1000))
       if sameDay { return }
     }
-    if record["state"] as? String != "ringing" {
+    if record["state"] as? String != "ringing" && !(record["kind"] as? String == "snooze" && record["state"] as? String == "scheduled") {
       guard let activeRecord = markFired(systemID: systemID) else { return }
       record = activeRecord
     }
@@ -347,6 +348,7 @@ private final class FiveMoreAlarmEngine {
       case "requestPermissions":
         result(try await requestPermission(args["target"] as? String))
       case "getRingingAlarm": result(try ringingAlarm())
+      case "getSnoozedAlarms": result(try snoozedAlarms())
       case "drainEvents": result(FiveMoreAlarmStore.drainEvents())
       case "ackEvents":
         FiveMoreAlarmStore.acknowledgeEvents(args["eventIds"] as? [String] ?? [])
@@ -467,6 +469,20 @@ private final class FiveMoreAlarmEngine {
     return nil
   }
 
+  private func snoozedAlarms() throws -> [[String: Any]] {
+    let alarms = try manager.alarms
+    observe(alarms)
+    return alarms.compactMap { alarm -> [String: Any]? in
+      guard alarm.state != .alerting,
+        var record = FiveMoreAlarmStore.instances[alarm.id.uuidString],
+        record["kind"] as? String == "snooze", record["state"] as? String == "scheduled",
+        let id = record["id"] as? String, let config = FiveMoreAlarmStore.configurations[id] else { return nil }
+      record["alarm"] = config
+      record["state"] = "snoozed"
+      return record
+    }.sorted { (($0["nextAt"] as? NSNumber)?.int64Value ?? 0) < (($1["nextAt"] as? NSNumber)?.int64Value ?? 0) }
+  }
+
   private func validate(_ args: [String: Any]) throws -> [String: Any] {
     guard let id = args["id"] as? String, UUID(uuidString: id) != nil,
       let hour = args["hour"] as? Int, (0...23).contains(hour),
@@ -524,6 +540,7 @@ private final class FiveMoreAlarmEngine {
       "id": id, "title": String((args["title"] as? String ?? "").prefix(100)),
       "hour": hour, "minute": minute, "weekdays": Array(Set(days)).sorted(),
       "enabled": args["enabled"] as? Bool ?? true, "snoozeMinutes": snooze,
+      "background": FiveMoreExtrasBridge.backgroundName(args["background"]),
       "maxSnoozes": maximum, "challengeKind": kind, "difficulty": difficulty,
       "escalateOnSnooze": escalateOnSnooze,
       "moveSnoozeButton": moveSnoozeButton,
@@ -625,7 +642,7 @@ private final class FiveMoreAlarmEngine {
     return ["ok": true, "alarm": config]
   }
 
-  private func active(_ id: String) throws -> (UUID, [String: Any], [String: Any]) {
+  private func active(_ id: String, includeSnoozed: Bool = false) throws -> (UUID, [String: Any], [String: Any]) {
     let alarms = try manager.alarms
     observe(alarms)
     for alarm in alarms where alarm.state == .alerting {
@@ -636,7 +653,16 @@ private final class FiveMoreAlarmEngine {
         return (alarm.id, record, config)
       }
     }
-    throw failure("Этот будильник сейчас не звонит.")
+    if includeSnoozed {
+      for alarm in alarms {
+        if let record = FiveMoreAlarmStore.instances[alarm.id.uuidString],
+          record["kind"] as? String == "snooze", record["state"] as? String == "scheduled",
+          record["id"] as? String == id, let config = FiveMoreAlarmStore.configurations[id] {
+          return (alarm.id, record, config)
+        }
+      }
+    }
+    throw failure("Этот подъём уже завершён.")
   }
 
   private func snooze(_ args: [String: Any]) async throws -> [String: Any] {
@@ -686,9 +712,16 @@ private final class FiveMoreAlarmEngine {
 
   private func dismiss(_ args: [String: Any]) throws -> [String: Any] {
     guard let id = args["id"] as? String else { throw failure("Не указан будильник.") }
-    let (uuid, record, config) = try active(id)
+    let (uuid, record, config) = try active(id, includeSnoozed: true)
+    if let occurrence = args["occurrenceId"] as? String {
+      guard record["occurrenceId"] as? String == occurrence,
+        record["snoozesUsed"] as? Int == args["generation"] as? Int else { throw failure("Этот подъём уже изменился. Открой его заново.") }
+    }
     FiveMoreAlarmStore.suppressSystemStop(uuid.uuidString, until: FiveMoreAlarmStore.now() + 15_000)
-    do { try manager.stop(id: uuid) }
+    do {
+      if record["state"] as? String == "scheduled" { try manager.cancel(id: uuid) }
+      else { try manager.stop(id: uuid) }
+    }
     catch {
       FiveMoreAlarmStore.suppressSystemStop(uuid.uuidString, until: nil)
       throw error
@@ -836,6 +869,7 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
   private var player: AVAudioPlayer?
   private var recordURL: URL?
   private var pickerResult: FlutterResult?
+  private var pickingBackground = false
   private var bedtimeOpen = false
   private let channel: FlutterMethodChannel
   private static var noteDirectory: URL {
@@ -843,6 +877,36 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
   }
   private static var soundDirectory: URL {
     FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Sounds", isDirectory: true)
+  }
+  private static var backgroundDirectory: URL {
+    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("AlarmBackgrounds", isDirectory: true)
+  }
+  static func backgroundName(_ value: Any?) -> String {
+    guard let name = value as? String, name.count == 40, name.hasSuffix(".jpg"), UUID(uuidString: String(name.dropLast(4))) != nil else { return "" }
+    return name
+  }
+  private static func importBackground(_ source: URL) throws -> String {
+    let size = try source.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+    guard size > 0, size <= 20 * 1024 * 1024 else { throw NSError(domain: "background", code: 1, userInfo: [NSLocalizedDescriptionKey: "Выбери изображение до 20 МБ."]) }
+    let options = [kCGImageSourceShouldCache: false] as CFDictionary
+    guard let image = CGImageSourceCreateWithURL(source as CFURL, options),
+      let thumbnail = CGImageSourceCreateThumbnailAtIndex(image, 0, [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceThumbnailMaxPixelSize: 1600,
+      ] as CFDictionary),
+      let data = UIImage(cgImage: thumbnail).jpegData(compressionQuality: 0.85), data.count <= 4 * 1024 * 1024 else {
+      throw NSError(domain: "background", code: 2, userInfo: [NSLocalizedDescriptionKey: "Не удалось прочитать фото. Попробуй JPEG или PNG."])
+    }
+    try FileManager.default.createDirectory(at: backgroundDirectory, withIntermediateDirectories: true)
+    var directory = backgroundDirectory
+    var values = URLResourceValues(); values.isExcludedFromBackup = true
+    try directory.setResourceValues(values)
+    let name = "\(UUID().uuidString).jpg"
+    let destination = backgroundDirectory.appendingPathComponent(name)
+    try data.write(to: destination, options: .atomic)
+    try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: destination.path)
+    return name
   }
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(name: "five_more/extras", binaryMessenger: messenger)
@@ -976,9 +1040,17 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
       }
       result(nil)
-    case "pickSound":
+    case "readBackground":
+      let name = Self.backgroundName(args["file"])
+      guard !name.isEmpty else { result(nil); return }
+      let file = Self.backgroundDirectory.appendingPathComponent(name)
+      guard let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 4 * 1024 * 1024,
+        let bytes = try? Data(contentsOf: file) else { result(nil); return }
+      result(FlutterStandardTypedData(bytes: bytes))
+    case "pickSound", "pickBackground":
       guard pickerResult == nil else { throw fail("Выбор файла уже открыт.") }
-      let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.audio], asCopy: true)
+      pickingBackground = call.method == "pickBackground"
+      let picker = UIDocumentPickerViewController(forOpeningContentTypes: pickingBackground ? [.image] : [.audio], asCopy: true)
       picker.delegate = self
       guard let root = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.keyWindow?.rootViewController }).first else { throw fail("Не удалось открыть выбор файла.") }
       var presenter = root
@@ -1023,6 +1095,12 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
     guard let source = urls.first else { result(nil); return }
     let security = source.startAccessingSecurityScopedResource()
     defer { if security { source.stopAccessingSecurityScopedResource() } }
+    if pickingBackground {
+      pickingBackground = false
+      do { result(try Self.importBackground(source)) }
+      catch { result(FlutterError(code: "background_file", message: error.localizedDescription, details: nil)) }
+      return
+    }
     var destination: URL?
     do {
       let size = try source.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0

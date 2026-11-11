@@ -34,6 +34,10 @@ class AlarmController extends ChangeNotifier {
   List<AlarmEvent> get events => List.unmodifiable(_events.reversed);
   AlarmDeviceStatus device = const AlarmDeviceStatus();
   RingingAlarm? ringing;
+  List<RingingAlarm> snoozedAlarms = [];
+  RingingAlarm? activeOccurrence(String id) => ringing?.alarm.id == id
+      ? ringing
+      : snoozedAlarms.where((active) => active.alarm.id == id).firstOrNull;
   bool loading = true;
   bool nativeStateKnown = false;
   bool busy = false;
@@ -308,16 +312,21 @@ class AlarmController extends ChangeNotifier {
 
   Future<AlarmResult> dismiss({
     bool emergency = false,
+    bool disableAlarm = false,
     String? alarmId,
     String? occurrenceId,
+    int? generation,
   }) {
     final expectedAlarmId = alarmId ?? ringing?.alarm.id;
     final expectedOccurrenceId = occurrenceId ?? ringing?.occurrenceId;
     return _mutate(() async {
-      final active = ringing;
+      final active = expectedAlarmId == null
+          ? null
+          : activeOccurrence(expectedAlarmId);
       if (active == null ||
           active.alarm.id != expectedAlarmId ||
-          active.occurrenceId != expectedOccurrenceId) {
+          active.occurrenceId != expectedOccurrenceId ||
+          (generation != null && active.snoozesUsed != generation)) {
         return const AlarmResult(
           ok: false,
           error: 'Этот подъём уже завершён. Проверьте текущий будильник.',
@@ -326,10 +335,34 @@ class AlarmController extends ChangeNotifier {
       final result = await gateway.dismiss(
         active.alarm.id,
         emergency: emergency,
+        occurrenceId: active.occurrenceId,
+        generation: active.snoozesUsed,
       );
       if (result.ok) {
-        ringing = null;
-        await _refreshNative();
+        if (ringing?.occurrenceId == active.occurrenceId) ringing = null;
+        snoozedAlarms.removeWhere((a) => a.occurrenceId == active.occurrenceId);
+        AlarmResult? disabled;
+        if (disableAlarm) {
+          try {
+            disabled = await gateway.cancel(active.alarm.id);
+          } catch (_) {
+            disabled = const AlarmResult(ok: false);
+          }
+        }
+        try {
+          await _refreshNative();
+          device = await gateway.status();
+          if (storageHealthy) await _mergeNativeConfigs();
+        } catch (_) {
+          error = 'Подъём завершён. Не удалось обновить данные; они будут загружены повторно.';
+        }
+        if (disabled != null && !disabled.ok) {
+          return AlarmResult(
+            ok: false,
+            error:
+                'Подъём завершён, но выключить будущие звонки не удалось. ${disabled.error ?? "Проверь расписание."}',
+          );
+        }
       }
       return result;
     }, requiresStorage: false);
@@ -588,6 +621,16 @@ class AlarmController extends ChangeNotifier {
             ringing!.alarm.toJson(),
           ],
     'known': nativeStateKnown,
+    'snoozed': snoozedAlarms
+        .map(
+          (a) => [
+            a.alarm.id,
+            a.occurrenceId,
+            a.snoozesUsed,
+            a.snoozedUntil?.millisecondsSinceEpoch,
+          ],
+        )
+        .toList(),
     'error': error,
   });
 
@@ -595,6 +638,7 @@ class AlarmController extends ChangeNotifier {
     // Alarm controls must remain usable even if local history cannot be read or
     // written. Native scheduling/audio are independent of this UI storage.
     ringing = await gateway.getRingingAlarm();
+    snoozedAlarms = await gateway.getSnoozedAlarms();
     nativeStateKnown = true;
     if (!storageHealthy) return;
     // Native keeps pending entries until local storage succeeds. Replays after

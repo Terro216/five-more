@@ -123,8 +123,8 @@ class _EmergencyStopState extends State<_EmergencyStop>
             '${_code.substring(0, 4)} ${_code.substring(4, 8)} ${_code.substring(8)}',
             key: const ValueKey('emergency-code'),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: morning,
+            style: TextStyle(
+              color: context.palette.morning,
               fontSize: 24,
               fontWeight: FontWeight.w700,
               letterSpacing: 2,
@@ -206,7 +206,7 @@ class _EmergencyStopState extends State<_EmergencyStop>
                   constraints: const BoxConstraints(minHeight: 80),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: panel,
+                    color: context.palette.panel,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
@@ -225,9 +225,9 @@ class _EmergencyStopState extends State<_EmergencyStop>
               ),
             ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Остановка будет отмечена как аварийная.',
-            style: TextStyle(color: muted, fontSize: 12),
+            style: TextStyle(color: context.palette.muted, fontSize: 12),
           ),
         ],
       ],

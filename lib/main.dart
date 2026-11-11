@@ -8,9 +8,13 @@ import 'services/alarm_gateway.dart';
 import 'services/alarm_storage.dart';
 import 'services/phrase_library.dart';
 import 'services/sync_service.dart';
+import 'services/appearance_settings.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await AppearanceSettings.instance.load();
+  } catch (_) {}
   try {
     await PhraseLibrary.instance.load();
   } catch (_) {}

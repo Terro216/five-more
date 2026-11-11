@@ -14,6 +14,7 @@ import '../../models/sleep_session.dart';
 import '../challenges/challenge_models.dart';
 import '../challenges/challenge_screen.dart';
 import 'alarm_editor.dart';
+import 'ringing_screen.dart';
 import 'device_check_screen.dart';
 import '../history/history_view.dart';
 import '../sleep/bedtime_screen.dart';
@@ -21,6 +22,7 @@ import '../sleep/sleep_review.dart';
 import '../../services/sleep_journal.dart';
 import '../../services/native_extras.dart';
 import '../../widgets/time_composer.dart';
+import '../../services/appearance_settings.dart';
 
 class AlarmHome extends StatefulWidget {
   const AlarmHome({super.key, required this.controller});
@@ -87,6 +89,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
     if (time == null) return;
     final result = await controller.saveAlarm(
       alarm.copyWith(
+        enabled: true,
         hour: time.hour,
         minute: time.minute,
         clearOneShotAt: true,
@@ -123,9 +126,9 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
             'Как спалось?',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           ),
-          const Text(
+          Text(
             'Оцени утро и оставь вечернему себе голосовое.',
-            style: TextStyle(color: muted),
+            style: TextStyle(color: context.palette.muted),
           ),
           Wrap(
             spacing: 8,
@@ -190,11 +193,28 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
   }
 
   Future<void> _toggle(Alarm alarm, bool value) async {
+    final active = controller.activeOccurrence(alarm.id);
+    if (!value && active != null) {
+      await _openWake(active, disableAlarm: true);
+      return;
+    }
     final result = await controller.setEnabled(alarm, value);
     if (!result.ok && mounted) {
       _message(result.error ?? 'Не удалось изменить будильник');
     }
   }
+
+  Future<void> _openWake(RingingAlarm active, {bool disableAlarm = false}) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => RingingScreen(
+            controller: controller,
+            ringing: active,
+            allowBack: true,
+            disableAlarm: disableAlarm,
+          ),
+        ),
+      );
 
   Future<void> _delete(Alarm alarm) async {
     final confirmed = await showDialog<bool>(
@@ -253,25 +273,53 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
     animation: controller,
     builder: (context, _) => Scaffold(
       appBar: AppBar(
-        title: const Row(
-          children: [
-            _SunMark(size: 30),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'ещё пять',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 23,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -.8,
-                ),
-              ),
-            ),
-          ],
+        title: LayoutBuilder(
+          builder: (context, constraints) {
+            final showName =
+                constraints.maxWidth >=
+                42 + MediaQuery.textScalerOf(context).scale(110);
+            return Row(
+              children: [
+                const Tooltip(message: 'Ещё пять', child: _SunMark(size: 30)),
+                if (showName) ...[
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'ещё пять',
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 23,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -.8,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
         ),
         actions: [
+          IconButton(
+            key: const ValueKey('toggle-theme'),
+            tooltip: Theme.of(context).brightness == Brightness.dark
+                ? 'Светлая тема'
+                : 'Тёмная тема',
+            icon: Icon(
+              Theme.of(context).brightness == Brightness.dark
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined,
+            ),
+            onPressed: () async {
+              try {
+                await AppearanceSettings.instance.toggle();
+              } catch (_) {
+                if (mounted) {
+                  _message('Не удалось сохранить тему. Попробуй ещё раз.');
+                }
+              }
+            },
+          ),
           IconButton(
             tooltip: 'Проверка телефона',
             onPressed: () => _checkDevice(),
@@ -385,9 +433,26 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
         children: [
           Text(
             _dayTitle(now),
-            style: const TextStyle(color: muted, fontSize: 13),
+            style: TextStyle(color: context.palette.muted, fontSize: 13),
           ),
           const SizedBox(height: 14),
+          for (final active in controller.snoozedAlarms.where(
+            (a) => !a.alarm.id.startsWith('preview:'),
+          ))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: ListTile(
+                key: ValueKey('snoozed-${active.alarm.id}'),
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.snooze_rounded),
+                title: Text(
+                  'Подъём отложен до ${clockLabel(TimeOfDay.fromDateTime(active.snoozedUntil!))}',
+                ),
+                subtitle: const Text('Открыть и завершить подъём'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => _openWake(active),
+              ),
+            ),
           _HomeClock(
             builder: () {
               final current = controller.nextAlarm(controller.now);
@@ -406,7 +471,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                 icon: Icons.error_outline_rounded,
                 title: 'Нужно проверить',
                 text: controller.error!,
-                color: const Color(0xFFFFB4AB),
+                color: context.palette.red,
               ),
             ),
           if (todaySnoozes > 0)
@@ -430,7 +495,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                 ),
                 Text(
                   '${controller.alarms.length}',
-                  style: const TextStyle(color: muted),
+                  style: TextStyle(color: context.palette.muted),
                 ),
               ],
             ),
@@ -464,12 +529,12 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
         : '$minutes мин';
     final time = Text(
       '${nextAt.hour.toString().padLeft(2, '0')}:${nextAt.minute.toString().padLeft(2, '0')}',
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 56,
         fontWeight: FontWeight.w400,
         height: 1.1,
         letterSpacing: -1.5,
-        color: morning,
+        color: context.palette.morning,
       ),
     );
     final detail = Column(
@@ -482,12 +547,12 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
         const SizedBox(height: 4),
         Text(
           'До будильника $left',
-          style: const TextStyle(color: muted, fontSize: 13),
+          style: TextStyle(color: context.palette.muted, fontSize: 13),
         ),
       ],
     );
     return Material(
-      color: panel,
+      color: context.palette.panel,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         key: const ValueKey('next-alarm'),
@@ -547,9 +612,13 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
         ),
         if (controller.alarms.isEmpty) ...[
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Выбери время, переносы и задание для пробуждения.',
-            style: TextStyle(color: muted, height: 1.5, fontSize: 14),
+            style: TextStyle(
+              color: context.palette.muted,
+              height: 1.5,
+              fontSize: 14,
+            ),
           ),
         ],
       ],
@@ -626,7 +695,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                     !device.supported
                         ? Icons.visibility_outlined
                         : Icons.phonelink_ring_rounded,
-                    color: morning,
+                    color: context.palette.morning,
                     size: 22,
                   ),
                 ),
@@ -645,8 +714,8 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                       const SizedBox(height: 4),
                       Text(
                         text,
-                        style: const TextStyle(
-                          color: muted,
+                        style: TextStyle(
+                          color: context.palette.muted,
                           fontSize: 12,
                           height: 1.4,
                         ),
@@ -655,7 +724,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Icon(Icons.chevron_right_rounded, color: muted),
+                Icon(Icons.chevron_right_rounded, color: context.palette.muted),
               ],
             ),
           ),
@@ -691,7 +760,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
               _delete(alarm),
         },
         child: Material(
-          color: panel,
+          color: context.palette.panel,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             onTap: controller.isAlarmBusy(alarm.id) ? null : () => _edit(alarm),
@@ -728,7 +797,9 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                                 style: TextStyle(
                                   fontSize: 36,
                                   fontWeight: FontWeight.w400,
-                                  color: alarm.enabled ? foreground : muted,
+                                  color: alarm.enabled
+                                      ? context.palette.foreground
+                                      : context.palette.muted,
                                 ),
                               ),
                             ),
@@ -752,7 +823,10 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                   ),
                   Text(
                     alarm.repeatLabel,
-                    style: const TextStyle(color: muted, fontSize: 13),
+                    style: TextStyle(
+                      color: context.palette.muted,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Wrap(
@@ -763,25 +837,37 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                         alarm.requiresChallenge
                             ? '${alarm.challengeKind.label} · ${alarm.difficulty.label.toLowerCase()}'
                             : 'Обычный звонок',
-                        style: const TextStyle(color: muted, fontSize: 12),
+                        style: TextStyle(
+                          color: context.palette.muted,
+                          fontSize: 12,
+                        ),
                       ),
                       Text(
                         alarm.snoozeBudget == 0
                             ? 'Без переносов'
                             : '${alarm.snoozeBudget} мин на переносы',
-                        style: const TextStyle(color: morning, fontSize: 12),
+                        style: TextStyle(
+                          color: context.palette.morning,
+                          fontSize: 12,
+                        ),
                       ),
                       if (alarm.requiresChallenge &&
                           alarm.escalateOnSnooze &&
                           alarm.snoozeBudget > 0)
-                        const Text(
+                        Text(
                           'Сложнее после переноса',
-                          style: TextStyle(color: morning, fontSize: 12),
+                          style: TextStyle(
+                            color: context.palette.morning,
+                            fontSize: 12,
+                          ),
                         ),
                       if (!controller.device.supported)
-                        const Text(
+                        Text(
                           'Черновик',
-                          style: TextStyle(color: muted, fontSize: 12),
+                          style: TextStyle(
+                            color: context.palette.muted,
+                            fontSize: 12,
+                          ),
                         ),
                     ],
                   ),
@@ -806,9 +892,13 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
         ),
       ),
       const SizedBox(height: 8),
-      const Text(
+      Text(
         'Попробуй задания заранее. В тренировке будильник не звучит.',
-        style: TextStyle(color: muted, height: 1.4, fontSize: 14),
+        style: TextStyle(
+          color: context.palette.muted,
+          height: 1.4,
+          fontSize: 14,
+        ),
       ),
       const SizedBox(height: 16),
       Wrap(
@@ -833,27 +923,34 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
           key: ValueKey('practice-kind-${kind.name}'),
           contentPadding: EdgeInsets.zero,
           minVerticalPadding: 8,
-          leading: Icon(challengeIcon(kind), color: morning),
+          leading: Icon(challengeIcon(kind), color: context.palette.morning),
           title: Text(
             kind.label,
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
           subtitle: Text(
             kind.description,
-            style: const TextStyle(color: muted, fontSize: 13),
+            style: TextStyle(color: context.palette.muted, fontSize: 13),
           ),
-          trailing: const ExcludeSemantics(
-            child: Icon(Icons.play_arrow_rounded, color: morning),
+          trailing: ExcludeSemantics(
+            child: Icon(
+              Icons.play_arrow_rounded,
+              color: context.palette.morning,
+            ),
           ),
           onTap: () => _practice(kind),
         ),
       ),
-      const Padding(
+      Padding(
         padding: EdgeInsets.only(top: 16),
         child: Text(
           'Сложность можно менять отдельно для каждого будильника. '
           'Аварийное отключение всегда доступно.',
-          style: TextStyle(color: muted, fontSize: 12, height: 1.5),
+          style: TextStyle(
+            color: context.palette.muted,
+            fontSize: 12,
+            height: 1.5,
+          ),
         ),
       ),
     ],
@@ -939,10 +1036,14 @@ class _SunMark extends StatelessWidget {
     width: size,
     height: size,
     decoration: BoxDecoration(
-      color: morning,
+      color: context.palette.morning,
       borderRadius: BorderRadius.circular(size * .32),
     ),
-    child: Icon(Icons.wb_twilight_rounded, color: ink, size: size * .65),
+    child: Icon(
+      Icons.wb_twilight_rounded,
+      color: context.palette.ink,
+      size: size * .65,
+    ),
   );
 }
 
@@ -951,26 +1052,28 @@ class _InfoCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.text,
-    this.color = morning,
+    this.color,
   });
   final IconData icon;
   final String title;
   final String text;
-  final Color color;
+  final Color? color;
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: color.withValues(alpha: .06),
+      color: (color ?? context.palette.morning).withValues(alpha: .06),
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: color.withValues(alpha: .12)),
+      border: Border.all(
+        color: (color ?? context.palette.morning).withValues(alpha: .12),
+      ),
     ),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 2),
-          child: Icon(icon, color: color, size: 21),
+          child: Icon(icon, color: color ?? context.palette.morning, size: 21),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -980,7 +1083,7 @@ class _InfoCard extends StatelessWidget {
               Text(
                 title,
                 style: TextStyle(
-                  color: color,
+                  color: color ?? context.palette.morning,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                 ),
@@ -988,7 +1091,11 @@ class _InfoCard extends StatelessWidget {
               const SizedBox(height: 5),
               Text(
                 text,
-                style: const TextStyle(color: muted, fontSize: 12, height: 1.5),
+                style: TextStyle(
+                  color: context.palette.muted,
+                  fontSize: 12,
+                  height: 1.5,
+                ),
               ),
             ],
           ),

@@ -106,7 +106,9 @@ class _FlagTaskState extends State<FlagTask> {
             'Флаг: ${_flag.vertical ? 'вертикальные' : 'горизонтальные'} полосы. Визуальное задание.',
         child: AspectRatio(
           aspectRatio: 1.5,
-          child: CustomPaint(painter: _FlagPainter(_flag)),
+          child: CustomPaint(
+            painter: _FlagPainter(_flag, context.palette.muted),
+          ),
         ),
       ),
       const SizedBox(height: 24),
@@ -138,7 +140,8 @@ class _FlagTaskState extends State<FlagTask> {
 }
 
 class _FlagPainter extends CustomPainter {
-  _FlagPainter(this.flag);
+  _FlagPainter(this.flag, this.border);
+  final Color border;
   final CountryFlag flag;
   @override
   void paint(Canvas canvas, Size size) {
@@ -174,12 +177,13 @@ class _FlagPainter extends CustomPainter {
     canvas.drawRect(
       Offset.zero & size,
       Paint()
-        ..color = muted
+        ..color = border
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
   }
 
   @override
-  bool shouldRepaint(_FlagPainter old) => old.flag != flag;
+  bool shouldRepaint(_FlagPainter old) =>
+      old.flag != flag || old.border != border;
 }

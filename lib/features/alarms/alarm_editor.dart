@@ -16,6 +16,7 @@ import '../challenges/challenge_screen.dart';
 import '../challenges/physical_tasks.dart';
 import '../../services/native_extras.dart';
 import '../../widgets/time_composer.dart';
+import '../../widgets/alarm_background.dart';
 
 class AlarmEditor extends StatefulWidget {
   const AlarmEditor({
@@ -247,10 +248,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                     child: Text(
                       _error!,
                       key: const ValueKey('alarm-save-error'),
-                      style: const TextStyle(
-                        color: Color(0xFFFFB4AB),
-                        height: 1.4,
-                      ),
+                      style: TextStyle(color: context.palette.red, height: 1.4),
                     ),
                   ),
                 ),
@@ -309,7 +307,10 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                       ? 'Звонок в ${clockLabel(TimeOfDay.fromDateTime(widget.controller.now.add(Duration(minutes: _napMinutes))))}'
                       : 'До звонка ${remainingLabel(_draft.nextOccurrence(widget.controller.now), widget.controller.now)}',
                   key: const ValueKey('alarm-time-remaining'),
-                  style: const TextStyle(color: morning, fontSize: 16),
+                  style: TextStyle(
+                    color: context.palette.morning,
+                    fontSize: 16,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -391,13 +392,17 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                                 height: 48,
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: selected ? morning : panel,
+                                  color: selected
+                                      ? context.palette.morning
+                                      : context.palette.panel,
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                                 child: Text(
                                   shortWeekdays[index],
                                   style: TextStyle(
-                                    color: selected ? ink : muted,
+                                    color: selected
+                                        ? context.palette.ink
+                                        : context.palette.muted,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
@@ -451,19 +456,25 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                               ),
                         child: ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: Icon(challengeIcon(kind), color: muted),
+                          leading: Icon(
+                            challengeIcon(kind),
+                            color: context.palette.muted,
+                          ),
                           title: Text(kind.label),
                           subtitle: Text(
                             kind.description,
-                            style: const TextStyle(color: muted, height: 1.4),
+                            style: TextStyle(
+                              color: context.palette.muted,
+                              height: 1.4,
+                            ),
                           ),
                           trailing: Icon(
                             _draft.challengeKind == kind
                                 ? Icons.radio_button_checked_rounded
                                 : Icons.radio_button_unchecked_rounded,
                             color: _draft.challengeKind == kind
-                                ? morning
-                                : muted,
+                                ? context.palette.morning
+                                : context.palette.muted,
                           ),
                           onTap: _saving
                               ? null
@@ -509,8 +520,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                         _draft.snoozeBudget == 0
                             ? 'Сейчас переносы выключены.'
                             : 'Каждый перенос повышает сложность на один уровень',
-                        style: const TextStyle(
-                          color: muted,
+                        style: TextStyle(
+                          color: context.palette.muted,
                           fontSize: 12,
                           height: 1.5,
                         ),
@@ -631,6 +642,65 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
               ),
               const _Heading('Звук и вибрация'),
               _soundSettings(),
+              const _Heading('Фон экрана звонка'),
+              if (_draft.background.isNotEmpty)
+                SizedBox(
+                  height: 180,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: AlarmBackground(
+                      name: _draft.background,
+                      child: Center(
+                        child: Text(
+                          _draft.timeLabel,
+                          style: const TextStyle(fontSize: 48),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  TextButton.icon(
+                    key: const ValueKey('pick-alarm-background'),
+                    onPressed: _saving || _soundBusy
+                        ? null
+                        : () => _soundAction(() async {
+                            final name = await NativeExtras.call<String>(
+                              'pickBackground',
+                            );
+                            if (mounted && validBackgroundName(name)) {
+                              setState(
+                                () =>
+                                    _draft = _draft.copyWith(background: name),
+                              );
+                            }
+                          }),
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    label: Text(
+                      _draft.background.isEmpty
+                          ? 'Выбрать фото'
+                          : 'Заменить фото',
+                    ),
+                  ),
+                  if (_draft.background.isNotEmpty)
+                    TextButton(
+                      onPressed: _saving || _soundBusy
+                          ? null
+                          : () => setState(
+                              () => _draft = _draft.copyWith(background: ''),
+                            ),
+                      child: const Text('Убрать фон'),
+                    ),
+                ],
+              ),
+              Text(
+                widget.controller.device.platform == 'ios'
+                    ? 'Фото хранится на телефоне. На iPhone фон виден после открытия приложения.'
+                    : 'Фото хранится только на телефоне.',
+                style: TextStyle(fontSize: 12, color: context.palette.muted),
+              ),
               const _Heading('Название · необязательно'),
               TextField(
                 key: const ValueKey('alarm-title'),
@@ -700,9 +770,9 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
               ),
       ),
       if (_draft.mixOrder.isNotEmpty) ...[
-        const Text(
+        Text(
           'Перетаскивай за ручку. Можно повторить один вид несколько раз.',
-          style: TextStyle(color: muted, fontSize: 12),
+          style: TextStyle(color: context.palette.muted, fontSize: 12),
         ),
         ReorderableListView.builder(
           shrinkWrap: true,
@@ -748,9 +818,12 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
               .where((k) => k != ChallengeKind.mixed)
               .map((k) => PopupMenuItem(value: k, child: Text(k.label)))
               .toList(),
-          child: const Padding(
+          child: Padding(
             padding: EdgeInsets.all(16),
-            child: Text('Добавить этап', style: TextStyle(color: morning)),
+            child: Text(
+              'Добавить этап',
+              style: TextStyle(color: context.palette.morning),
+            ),
           ),
         ),
       ],
@@ -879,9 +952,9 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
         ],
       ),
       if (widget.controller.device.platform == 'ios')
-        const Text(
+        Text(
           'Для iPhone берём первые 29 секунд файла.',
-          style: TextStyle(color: muted, fontSize: 12),
+          style: TextStyle(color: context.palette.muted, fontSize: 12),
         ),
     ],
   );
@@ -894,7 +967,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
         setState(
           () => _error = e is PlatformException
               ? e.message
-              : 'Не удалось открыть аудио.',
+              : 'Не удалось открыть файл. Попробуй ещё раз.',
         );
       }
     }
@@ -971,13 +1044,13 @@ class _Note extends StatelessWidget {
     margin: const EdgeInsets.only(bottom: 16),
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
-      color: morning.withValues(alpha: .08),
+      color: context.palette.morning.withValues(alpha: .08),
       borderRadius: BorderRadius.circular(16),
     ),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: morning),
+        Icon(icon, size: 20, color: context.palette.morning),
         const SizedBox(width: 10),
         Expanded(
           child: Text(text, style: const TextStyle(fontSize: 13, height: 1.5)),

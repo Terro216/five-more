@@ -106,9 +106,9 @@ class _SyncScreenState extends State<SyncScreen> {
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'История звонков и оценки сна сохранятся на сервере и будут доступны на другом телефоне. Сервер сможет читать эти данные. Будильники работают и без аккаунта.',
-              style: TextStyle(color: muted, height: 1.5),
+              style: TextStyle(color: context.palette.muted, height: 1.5),
             ),
             const SizedBox(height: 20),
             if (SyncService.defaultEndpoint.isEmpty) ...[
@@ -220,7 +220,7 @@ class _SyncScreenState extends State<SyncScreen> {
                   : sync.lastSynced == null
                   ? 'Ещё не синхронизировано'
                   : 'Последняя синхронизация: ${sync.lastSynced!.toLocal().toString().substring(0, 16)}',
-              style: const TextStyle(color: muted),
+              style: TextStyle(color: context.palette.muted),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(

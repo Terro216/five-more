@@ -43,6 +43,9 @@ class FakeAlarmGateway implements AlarmGateway {
   final acknowledged = <String>[];
   final pendingEvents = <AlarmEvent>[];
   RingingAlarm? ringing;
+  final snoozedAlarms = <RingingAlarm>[];
+  @override
+  Future<List<RingingAlarm>> getSnoozedAlarms() async => [...snoozedAlarms];
   Future<void> Function()? beforeSchedule;
   void Function(List<String>)? beforeAck;
 
@@ -104,8 +107,14 @@ class FakeAlarmGateway implements AlarmGateway {
   }
 
   @override
-  Future<AlarmResult> dismiss(String id, {bool emergency = false}) async {
+  Future<AlarmResult> dismiss(
+    String id, {
+    bool emergency = false,
+    String? occurrenceId,
+    int? generation,
+  }) async {
     dismissCalls.add(id);
+    snoozedAlarms.removeWhere((a) => a.alarm.id == id);
     ringing = null;
     return const AlarmResult(ok: true);
   }

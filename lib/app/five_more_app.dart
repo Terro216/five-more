@@ -8,6 +8,7 @@ import '../features/alarms/ringing_screen.dart';
 import 'alarm_controller.dart';
 import 'theme.dart';
 import '../services/sync_service.dart';
+import '../services/appearance_settings.dart';
 
 class FiveMoreApp extends StatefulWidget {
   const FiveMoreApp({super.key, required this.controller});
@@ -51,39 +52,46 @@ class _FiveMoreAppState extends State<FiveMoreApp> with WidgetsBindingObserver {
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Ещё пять',
-    debugShowCheckedModeBanner: false,
-    theme: fiveMoreTheme(),
-    locale: const Locale('ru'),
-    supportedLocales: const [Locale('ru'), Locale('en')],
-    localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    home: AlarmHome(controller: widget.controller),
-    builder: (context, child) => AnimatedBuilder(
-      animation: widget.controller,
-      builder: (context, _) {
-        final ringing = widget.controller.ringing;
-        // Above the Navigator so an open editor cannot cover an actual alarm.
-        return Stack(
-          children: [
-            ?child,
-            if (ringing != null)
-              Positioned.fill(
-                child: HeroControllerScope.none(
-                  child: Navigator(
-                    key: ValueKey('ring:${ringing.occurrenceId}'),
-                    onGenerateRoute: (_) => MaterialPageRoute<void>(
-                      builder: (_) => RingingScreen(
-                        controller: widget.controller,
-                        ringing: ringing,
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: AppearanceSettings.instance,
+    builder: (context, _) => MaterialApp(
+      title: 'Ещё пять',
+      debugShowCheckedModeBanner: false,
+      theme: fiveMoreTheme(brightness: Brightness.light),
+      darkTheme: fiveMoreTheme(),
+      themeMode: AppearanceSettings.instance.mode,
+      locale: const Locale('ru'),
+      supportedLocales: const [Locale('ru'), Locale('en')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      home: AlarmHome(controller: widget.controller),
+      builder: (context, child) => AnimatedBuilder(
+        animation: widget.controller,
+        builder: (context, _) {
+          final ringing = widget.controller.ringing;
+          // Above the Navigator so an open editor cannot cover an actual alarm.
+          return Stack(
+            children: [
+              ?child,
+              if (ringing != null)
+                Positioned.fill(
+                  child: HeroControllerScope.none(
+                    child: Navigator(
+                      key: ValueKey(
+                        'ring:${ringing.occurrenceId}:${ringing.snoozesUsed}',
+                      ),
+                      onGenerateRoute: (_) => MaterialPageRoute<void>(
+                        builder: (_) => RingingScreen(
+                          controller: widget.controller,
+                          ringing: ringing,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     ),
   );
 }

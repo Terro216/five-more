@@ -419,13 +419,13 @@ class _HistoryViewState extends State<HistoryView> {
                 : _cached
                 ? 'Сохранённый расчёт с сервера · обновление недоступно'
                 : 'Графики по всем синхронизированным данным периода',
-            style: const TextStyle(color: muted, fontSize: 12),
+            style: TextStyle(color: context.palette.muted, fontSize: 12),
           ),
           const SizedBox(height: 24),
           if (events.isEmpty && outcomes.every((n) => n == 0) && snoozes == 0)
-            const Text(
+            Text(
               'Пока нет утренних событий.',
-              style: TextStyle(color: muted),
+              style: TextStyle(color: context.palette.muted),
             )
           else ...[
             _heading('Переносы', '$snoozes за выбранный период'),
@@ -438,12 +438,12 @@ class _HistoryViewState extends State<HistoryView> {
                   .toList(),
               unit: 'переносов',
               bars: true,
-              color: morning,
+              color: context.palette.morning,
             ),
             if (bucketDays > 1)
               Text(
                 'Один столбик — $bucketDays ${_dayWord(bucketDays)}',
-                style: const TextStyle(color: muted, fontSize: 12),
+                style: TextStyle(color: context.palette.muted, fontSize: 12),
               ),
             const SizedBox(height: 24),
             _heading('Чем закончился звонок', 'По отдельным подъёмам'),
@@ -456,33 +456,36 @@ class _HistoryViewState extends State<HistoryView> {
                   : 'Среднее за день · обычное отключение',
             ),
             if (wakePoints.isEmpty)
-              const Text(
+              Text(
                 'Пока нет пары «звонок — обычное отключение».',
-                style: TextStyle(color: muted),
+                style: TextStyle(color: context.palette.muted),
               )
             else
               DataPlot(
                 points: wakePoints,
                 unit: 'мин',
-                color: const Color(0xFF8EDDAB),
+                color: context.palette.green,
               ),
           ],
           const SizedBox(height: 28),
           _heading('Сон и самочувствие', 'Расчётное время сна и твои оценки'),
           _goals(sleep, cutoff, until),
           if (sleepPoints.isEmpty)
-            const Text('Пока нет оценок сна.', style: TextStyle(color: muted))
+            Text(
+              'Пока нет оценок сна.',
+              style: TextStyle(color: context.palette.muted),
+            )
           else ...[
             DataPlot(
               points: sleepPoints,
               unit: 'ч · расчётный сон',
-              color: const Color(0xFF7FBFFF),
+              color: context.palette.blue,
             ),
             const SizedBox(height: 16),
             DataPlot(
               points: ratingPoints,
               unit: 'средняя оценка из 5',
-              color: morning,
+              color: context.palette.morning,
               ceiling: 5,
             ),
           ],
@@ -490,7 +493,7 @@ class _HistoryViewState extends State<HistoryView> {
             const SizedBox(height: 12),
             Text(
               'Лучшие оценки за период — после примерно ${insight.hours.toStringAsFixed(1)} ч: ${insight.rating.toStringAsFixed(1)} из 5, наблюдений: ${insight.samples}. Это наблюдение по твоим ответам.',
-              style: const TextStyle(color: muted, height: 1.5),
+              style: TextStyle(color: context.palette.muted, height: 1.5),
             ),
           ],
           const SizedBox(height: 28),
@@ -506,7 +509,7 @@ class _HistoryViewState extends State<HistoryView> {
                         : event.type == 'dismissed'
                         ? Icons.check_rounded
                         : Icons.alarm_rounded,
-                    color: muted,
+                    color: context.palette.muted,
                   ),
                   title: Text(event.label),
                   subtitle: Text(
@@ -523,9 +526,9 @@ class _HistoryViewState extends State<HistoryView> {
               child: Text(_olderLoading ? 'Загружаю…' : 'Показать ещё 50'),
             ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'Тренировки в историю не попадают.',
-            style: TextStyle(color: muted, fontSize: 12),
+            style: TextStyle(color: context.palette.muted, fontSize: 12),
           ),
         ],
       );
@@ -540,7 +543,10 @@ class _HistoryViewState extends State<HistoryView> {
           title,
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         ),
-        Text(subtitle, style: const TextStyle(color: muted, fontSize: 12)),
+        Text(
+          subtitle,
+          style: TextStyle(color: context.palette.muted, fontSize: 12),
+        ),
       ],
     ),
   );
@@ -652,11 +658,11 @@ class _HistoryViewState extends State<HistoryView> {
         if (!goals.isEmpty) ...[
           Text(
             'На телефоне: ${eligible.length} оценок сна, из них $manual с ручной правкой времени. Дат без оценки: ${max(0, days - dates.length)}. Пропуски не считаются нулём.',
-            style: const TextStyle(color: muted, fontSize: 12),
+            style: TextStyle(color: context.palette.muted, fontSize: 12),
           ),
           Text(
             'Время засыпания: ${eligible.where((e) => e.bedSource == 'alarm_setup').length} по настройке будильника, ${eligible.where((e) => e.bedSource == 'habit').length} по обычному времени, ${eligible.where((e) => e.bedSource == 'manual').length} указано вручную.',
-            style: const TextStyle(color: muted, fontSize: 12),
+            style: TextStyle(color: context.palette.muted, fontSize: 12),
           ),
           if (goals.durationMinutes != null) ...[
             const SizedBox(height: 12),
@@ -674,13 +680,13 @@ class _HistoryViewState extends State<HistoryView> {
                     )
                     .toList(),
                 unit: 'ч',
-                color: const Color(0xFF7FBFFF),
+                color: context.palette.blue,
                 target: goals.durationMinutes! / 60,
                 connect: false,
               ),
-            const Text(
+            Text(
               'Каждая точка — отдельный сон, включая дневной. Время не измерено устройством.',
-              style: TextStyle(color: muted, fontSize: 12),
+              style: TextStyle(color: context.palette.muted, fontSize: 12),
             ),
           ],
           if (goals.hasSchedule) ...[
@@ -693,17 +699,17 @@ class _HistoryViewState extends State<HistoryView> {
               DataPlot(
                 points: regime,
                 unit: 'мин',
-                color: morning,
+                color: context.palette.morning,
                 target: goals.toleranceMinutes!.toDouble(),
                 connect: false,
               ),
             Text(
               'Подходящих оценок: ${regime.length}. Вне окна подъёма ±6 ч: $outside — показаны отдельно в длительности. Без исходной оценки или часового пояса: $unknownBed.',
-              style: const TextStyle(color: muted, fontSize: 12),
+              style: TextStyle(color: context.palette.muted, fontSize: 12),
             ),
-            const Text(
+            Text(
               'Укладывание оценено как засыпание минус сохранённое время засыпания. Используем местное время при сохранении оценки, с переходом через полночь.',
-              style: TextStyle(color: muted, fontSize: 12),
+              style: TextStyle(color: context.palette.muted, fontSize: 12),
             ),
           ],
           const SizedBox(height: 24),
@@ -714,7 +720,11 @@ class _HistoryViewState extends State<HistoryView> {
 
   Widget _outcomes(List<int> values) {
     const names = ['Отключён', 'Аварийно', 'Пропуск / тайм-аут'];
-    const colors = [Color(0xFF8EDDAB), Color(0xFFF3C96B), Color(0xFFFFB4AB)];
+    final colors = [
+      context.palette.green,
+      context.palette.morning,
+      context.palette.red,
+    ];
     final total = values.fold(0, (sum, n) => sum + n);
     return Column(
       children: [
@@ -789,7 +799,7 @@ class _DataPlotState extends State<DataPlot> {
         if (widget.target != null)
           Text(
             'Линия цели: ${widget.target!.toStringAsFixed(1)} ${widget.unit}',
-            style: const TextStyle(color: morning, fontSize: 12),
+            style: TextStyle(color: context.palette.morning, fontSize: 12),
           ),
         const SizedBox(height: 8),
         Semantics(
@@ -815,6 +825,7 @@ class _DataPlotState extends State<DataPlot> {
                   index,
                   widget.target,
                   widget.connect,
+                  context.palette,
                 ),
               ),
             ),
@@ -825,11 +836,11 @@ class _DataPlotState extends State<DataPlot> {
           children: [
             Text(
               points.first.label,
-              style: const TextStyle(color: muted, fontSize: 12),
+              style: TextStyle(color: context.palette.muted, fontSize: 12),
             ),
             Text(
               points.last.label,
-              style: const TextStyle(color: muted, fontSize: 12),
+              style: TextStyle(color: context.palette.muted, fontSize: 12),
             ),
           ],
         ),
@@ -847,6 +858,7 @@ class _PlotPainter extends CustomPainter {
     this.selected,
     this.target,
     this.connect,
+    this.palette,
   );
   final List<({String label, double value})> points;
   final Color color;
@@ -855,6 +867,7 @@ class _PlotPainter extends CustomPainter {
   final int selected;
   final double? target;
   final bool connect;
+  final AppPalette palette;
   @override
   void paint(Canvas canvas, Size size) {
     final high =
@@ -868,13 +881,13 @@ class _PlotPainter extends CustomPainter {
       canvas.drawLine(
         Offset(left, y),
         Offset(size.width, y),
-        Paint()..color = muted.withValues(alpha: .18),
+        Paint()..color = palette.muted.withValues(alpha: .18),
       );
       final text = TextPainter(
         text: TextSpan(
           text: (high * (1 - i / 2)).toStringAsFixed(0),
-          style: const TextStyle(
-            color: muted,
+          style: TextStyle(
+            color: palette.muted,
             fontSize: 10,
             fontFamily: 'Roboto',
           ),
@@ -890,7 +903,7 @@ class _PlotPainter extends CustomPainter {
         Offset(left, y),
         Offset(left + width, y),
         Paint()
-          ..color = morning
+          ..color = palette.morning
           ..strokeWidth = 2,
       );
     }

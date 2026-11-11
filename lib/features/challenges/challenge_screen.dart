@@ -45,11 +45,11 @@ class ChallengeScreen extends StatefulWidget {
 }
 
 class _ChallengeScreenState extends State<ChallengeScreen> {
-  static const _background = ink;
-  static const _surface = panel;
-  static const _accent = morning;
-  static const _text = foreground;
-  static const _muted = muted;
+  Color get _background => context.palette.ink;
+  Color get _surface => context.palette.panel;
+  Color get _accent => context.palette.morning;
+  Color get _text => context.palette.foreground;
+  Color get _muted => context.palette.muted;
 
   final _random = Random();
   late ChallengeSession _session;
@@ -382,20 +382,14 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                         children: [
                           if (!keyboardVisible) ...[
                             if (widget.alarmAction == null)
-                              const Icon(
-                                Icons.wb_twilight_rounded,
-                                color: _accent,
-                              ),
+                              Icon(Icons.wb_twilight_rounded, color: _accent),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
                                 widget.practice
                                     ? 'Пробный подъём'
                                     : 'Доброе утро',
-                                style: const TextStyle(
-                                  color: _muted,
-                                  fontSize: 15,
-                                ),
+                                style: TextStyle(color: _muted, fontSize: 15),
                               ),
                             ),
                           ] else
@@ -406,7 +400,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                             IconButton(
                               tooltip: 'Закрыть тренировку',
                               onPressed: () => Navigator.maybePop(context),
-                              icon: const Icon(Icons.close, color: _muted),
+                              icon: Icon(Icons.close, color: _muted),
                             ),
                         ],
                       ),
@@ -458,7 +452,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                                       ),
                                       Text(
                                         '$currentNumber / ${_session.totalSteps}',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: _accent,
                                           fontSize: 18,
                                           fontWeight: FontWeight.w600,
@@ -569,7 +563,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       Text(
         title,
         textAlign: TextAlign.center,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 22,
           fontWeight: FontWeight.w600,
           color: _text,
@@ -579,7 +573,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       Text(
         subtitle,
         textAlign: TextAlign.center,
-        style: const TextStyle(color: _muted, fontSize: 15, height: 1.5),
+        style: TextStyle(color: _muted, fontSize: 15, height: 1.5),
       ),
     ],
   );
@@ -602,7 +596,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             ? 'Прочитай отражённую фразу и введи её обычным текстом.'
             : 'Введи буквы и цифры с картинки. Буквы — латинские.',
         textAlign: TextAlign.center,
-        style: const TextStyle(color: _muted, fontSize: 15, height: 1.5),
+        style: TextStyle(color: _muted, fontSize: 15, height: 1.5),
       ),
       const SizedBox(height: 20),
       Semantics(
@@ -626,7 +620,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                       _mirror!.text,
                       key: const ValueKey('mirror-phrase'),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: _text,
                         fontSize: 26,
                         height: 1.5,
@@ -681,7 +675,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       ),
       if (_accessibleNavigation) ...[
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'Это визуальное задание. В тренировке можно выбрать другое. '
           'Во время звонка доступно аварийное отключение.',
           style: TextStyle(color: _muted, height: 1.5),
@@ -691,7 +685,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   );
 
   Widget _captchaImage(CaptchaQuestion question) => CustomPaint(
-    foregroundPainter: _CaptchaLines(seed: question.decorationSeed),
+    foregroundPainter: _CaptchaLines(
+      seed: question.decorationSeed,
+      palette: context.palette,
+    ),
     child: Row(
       key: const ValueKey('captcha-glyphs'),
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -707,7 +704,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                   child: Text(
                     question.code[index],
                     key: ValueKey('captcha-glyph-$index'),
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: _text,
                       fontSize: 34,
                       fontWeight: FontWeight.w700,
@@ -727,10 +724,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             'Введи ответ',
             textAlign: TextAlign.center,
-            style: TextStyle(color: muted),
+            style: TextStyle(color: context.palette.muted),
           ),
           const SizedBox(height: 20),
           Text(
@@ -768,7 +765,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Выбери правильный ответ',
           textAlign: TextAlign.center,
           style: TextStyle(color: _muted, fontSize: 15, height: 1.5),
@@ -784,7 +781,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             fit: BoxFit.scaleDown,
             child: Text(
               question.expression,
-              style: const TextStyle(
+              style: TextStyle(
                 color: _text,
                 fontSize: 42,
                 fontWeight: FontWeight.w600,
@@ -844,7 +841,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
           ),
           Text(
             '${pattern.cells.length} отмеченных клеток',
-            style: const TextStyle(color: muted),
+            style: TextStyle(color: context.palette.muted),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -871,12 +868,16 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             color: pattern.cells.contains(index)
-                                ? morning
-                                : panel,
+                                ? context.palette.morning
+                                : context.palette.panel,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: pattern.cells.contains(index)
-                              ? const Icon(Icons.circle, color: ink, size: 12)
+                              ? Icon(
+                                  Icons.circle,
+                                  color: context.palette.ink,
+                                  size: 12,
+                                )
                               : null,
                         ),
                       ),
@@ -1060,7 +1061,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                 : 'Следующее: ${_sequenceCompleted + 1}',
             key: const ValueKey('sequence-next'),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               color: _accent,
               fontSize: 19,
               fontWeight: FontWeight.w600,
@@ -1112,7 +1113,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                             ),
                           ),
                           if (completed)
-                            const Positioned(
+                            Positioned(
                               top: 6,
                               right: 6,
                               child: Icon(
@@ -1173,24 +1174,28 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   );
 
   Color _inkColor(ChallengeInk ink) => switch (ink) {
-    ChallengeInk.red => const Color(0xFFFF8C8C),
-    ChallengeInk.blue => const Color(0xFF7FBFFF),
-    ChallengeInk.yellow => const Color(0xFFFFDA7A),
-    ChallengeInk.green => const Color(0xFF8EDDAB),
-    ChallengeInk.purple => const Color(0xFFD5ABFF),
+    ChallengeInk.red => context.palette.red,
+    ChallengeInk.blue => context.palette.blue,
+    ChallengeInk.yellow => context.palette.morning,
+    ChallengeInk.green => context.palette.green,
+    ChallengeInk.purple =>
+      Theme.of(context).brightness == Brightness.dark
+          ? const Color(0xFFD5ABFF)
+          : const Color(0xFF763A91),
   };
 }
 
 class _CaptchaLines extends CustomPainter {
-  const _CaptchaLines({required this.seed});
+  const _CaptchaLines({required this.seed, required this.palette});
 
   final int seed;
+  final AppPalette palette;
 
   @override
   void paint(Canvas canvas, Size size) {
     final random = Random(seed);
     final paint = Paint()
-      ..color = muted.withValues(alpha: .35)
+      ..color = palette.muted.withValues(alpha: .35)
       ..strokeWidth = 1.2
       ..style = PaintingStyle.stroke;
     for (var line = 0; line < 3; line += 1) {
@@ -1210,5 +1215,5 @@ class _CaptchaLines extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CaptchaLines oldDelegate) =>
-      seed != oldDelegate.seed;
+      seed != oldDelegate.seed || palette != oldDelegate.palette;
 }
