@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'background_frame.dart';
+
 import '../features/challenges/challenge_models.dart';
 
 String newAlarmId() {
@@ -52,6 +54,7 @@ class Alarm {
     this.mixOrder = const [],
     this.qrValue = '',
     this.background = '',
+    this.backgroundFrame = const BackgroundFrame(),
     this.sound = 'system',
     this.soundLabel = 'Системный будильник',
   });
@@ -93,6 +96,7 @@ class Alarm {
   final List<ChallengeKind> mixOrder;
   final String qrValue;
   final String background;
+  final BackgroundFrame backgroundFrame;
   final String sound;
   final String soundLabel;
 
@@ -165,6 +169,7 @@ class Alarm {
     List<ChallengeKind>? mixOrder,
     String? qrValue,
     String? background,
+    BackgroundFrame? backgroundFrame,
     String? sound,
     String? soundLabel,
   }) => Alarm(
@@ -173,6 +178,7 @@ class Alarm {
     mixOrder: List.unmodifiable(mixOrder ?? this.mixOrder),
     qrValue: qrValue ?? this.qrValue,
     background: background ?? this.background,
+    backgroundFrame: backgroundFrame ?? this.backgroundFrame,
     sound: sound ?? this.sound,
     soundLabel: soundLabel ?? this.soundLabel,
     hour: hour ?? this.hour,
@@ -204,6 +210,7 @@ class Alarm {
     'mixOrder': mixOrder.map((kind) => kind.name).toList(),
     'qrValue': qrValue,
     'background': background,
+    'backgroundFrame': backgroundFrame.toJson(),
     'sound': sound,
     'soundLabel': soundLabel,
     'hour': hour,
@@ -253,6 +260,7 @@ class Alarm {
       background: validBackgroundName(json['background'])
           ? json['background'] as String
           : '',
+      backgroundFrame: BackgroundFrame.fromJson(json['backgroundFrame']),
       sound: json['sound'] as String? ?? 'system',
       soundLabel: json['soundLabel'] as String? ?? 'Системный будильник',
       hour: intValue(json['hour'], 7).clamp(0, 23),

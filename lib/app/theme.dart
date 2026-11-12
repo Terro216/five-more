@@ -6,6 +6,20 @@ const morning = Color(0xFFF3C96B);
 const muted = Color(0xFFAAB5A8);
 const foreground = Color(0xFFF6F4E9);
 
+abstract final class AppTypography {
+  static const title = TextStyle(
+    fontSize: 20,
+    fontWeight: FontWeight.w600,
+    height: 1.2,
+  );
+  static const heading = TextStyle(
+    fontSize: 22,
+    fontWeight: FontWeight.w600,
+    height: 1.25,
+    letterSpacing: -.2,
+  );
+}
+
 class AppPalette {
   const AppPalette({
     required this.ink,
@@ -70,7 +84,12 @@ ThemeData fiveMoreTheme({Brightness brightness = Brightness.dark}) {
     colorScheme: scheme,
     scaffoldBackgroundColor: ink,
     cardColor: panel,
+    textTheme: const TextTheme(
+      titleLarge: AppTypography.title,
+      headlineSmall: AppTypography.heading,
+    ),
     appBarTheme: AppBarTheme(
+      titleTextStyle: AppTypography.title.copyWith(color: foreground),
       backgroundColor: ink,
       foregroundColor: foreground,
       surfaceTintColor: Colors.transparent,

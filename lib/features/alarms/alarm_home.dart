@@ -480,7 +480,6 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
               child: _InfoCard(
                 icon: Icons.snooze_rounded,
                 title: 'Переносы сегодня: $todaySnoozes',
-                text: '',
               ),
             ),
           if (controller.alarms.isNotEmpty) ...[
@@ -883,14 +882,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
   Widget _challenges() => ListView(
     padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
     children: [
-      const Text(
-        'Разбуди голову.',
-        style: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.w600,
-          letterSpacing: -.6,
-        ),
-      ),
+      const Text('Разбуди голову.', style: AppTypography.heading),
       const SizedBox(height: 8),
       Text(
         'Попробуй задания заранее. В тренировке будильник не звучит.',
@@ -1051,7 +1043,7 @@ class _InfoCard extends StatelessWidget {
   const _InfoCard({
     required this.icon,
     required this.title,
-    required this.text,
+    this.text = '',
     this.color,
   });
   final IconData icon;
@@ -1088,15 +1080,17 @@ class _InfoCard extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 5),
-              Text(
-                text,
-                style: TextStyle(
-                  color: context.palette.muted,
-                  fontSize: 12,
-                  height: 1.5,
+              if (text.isNotEmpty) ...[
+                const SizedBox(height: 5),
+                Text(
+                  text,
+                  style: TextStyle(
+                    color: context.palette.muted,
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

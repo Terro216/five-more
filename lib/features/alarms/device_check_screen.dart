@@ -308,10 +308,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                 if (!device.supported)
                   ..._preview()
                 else ...[
-                  const Text(
-                    'Проверим звонок',
-                    style: TextStyle(fontSize: 27, fontWeight: FontWeight.w600),
-                  ),
+                  const Text('Проверим звонок', style: AppTypography.heading),
                   const SizedBox(height: 12),
                   Text(
                     'Запусти тест и заблокируй экран.',
@@ -655,10 +652,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
   List<Widget> _preview() => [
     Icon(Icons.visibility_outlined, color: context.palette.morning, size: 48),
     const SizedBox(height: 24),
-    const Text(
-      'Знакомство с «Ещё пять»',
-      style: TextStyle(fontSize: 27, fontWeight: FontWeight.w600),
-    ),
+    const Text('Знакомство с «Ещё пять»', style: AppTypography.heading),
     const SizedBox(height: 12),
     Text(
       controller.device.error ??

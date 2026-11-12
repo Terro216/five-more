@@ -357,10 +357,7 @@ class _HistoryViewState extends State<HistoryView> {
           Row(
             children: [
               const Expanded(
-                child: Text(
-                  'Как прошло утро',
-                  style: TextStyle(fontSize: 30, fontWeight: FontWeight.w600),
-                ),
+                child: Text('Как прошло утро', style: AppTypography.heading),
               ),
               if (widget.archive)
                 IconButton(

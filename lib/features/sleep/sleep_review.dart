@@ -217,7 +217,10 @@ class _SleepReviewState extends State<SleepReview> {
         if ((_session?.occurrences.length ?? 0) > 1)
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Последний звонок — отдельный сон'),
+            title: const Text('Считать отдельным сном'),
+            subtitle: const Text(
+              'Включи, если между соседними звонками ты снова ложился спать.',
+            ),
             value: _separate,
             onChanged: _saving
                 ? null

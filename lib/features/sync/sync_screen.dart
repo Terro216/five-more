@@ -101,10 +101,7 @@ class _SyncScreenState extends State<SyncScreen> {
           if (kIsWeb)
             const Text('Синхронизация доступна в приложении для телефона.')
           else if (!sync.signedIn) ...[
-            const Text(
-              'История с тобой',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
-            ),
+            const Text('История с тобой', style: AppTypography.heading),
             const SizedBox(height: 12),
             Text(
               'История звонков и оценки сна сохранятся на сервере и будут доступны на другом телефоне. Сервер сможет читать эти данные. Будильники работают и без аккаунта.',

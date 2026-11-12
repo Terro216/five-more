@@ -203,6 +203,7 @@ class _RingingScreenState extends State<RingingScreen> {
         }
         return AlarmBackground(
           name: ringing.alarm.background,
+          frame: ringing.alarm.backgroundFrame,
           child: Scaffold(
             backgroundColor: Colors.transparent,
             appBar:

@@ -12,6 +12,13 @@ import java.io.File
 import java.util.UUID
 
 object BackgroundRules {
+    fun frame(value: Any?): Map<String, Any> {
+        val raw = value as? Map<*, *> ?: emptyMap<Any, Any>()
+        fun number(key: String, fallback: Double, min: Double, max: Double): Double =
+            (raw[key] as? Number)?.toDouble()?.takeIf { it.isFinite() }?.coerceIn(min, max) ?: fallback
+        return mapOf("x" to number("x", .5, 0.0, 1.0), "y" to number("y", .5, 0.0, 1.0),
+            "zoom" to number("zoom", 1.0, 1.0, 4.0), "turns" to number("turns", 0.0, 0.0, 3.0).toInt())
+    }
     const val MAX_INPUT_BYTES = 20 * 1024 * 1024
     const val MAX_STORED_BYTES = 4 * 1024 * 1024
     fun validName(name: String) = Regex("[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}\\.jpg").matches(name)

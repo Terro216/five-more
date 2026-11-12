@@ -9,6 +9,8 @@ import 'package:flutter/services.dart';
 import '../../app/alarm_controller.dart';
 import '../../app/theme.dart';
 import '../../models/alarm.dart';
+import '../../models/background_frame.dart';
+import 'background_editor.dart';
 import '../../widgets/exact_slider.dart';
 import '../challenges/challenge_models.dart';
 import '../challenges/phrase_settings.dart';
@@ -217,6 +219,28 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  Future<void> _frameBackground({String? name}) async {
+    final selected = name ?? _draft.background;
+    final frame = await Navigator.of(context).push<BackgroundFrame>(
+      MaterialPageRoute(
+        builder: (_) => BackgroundEditor(
+          name: selected,
+          initial: name == null
+              ? _draft.backgroundFrame
+              : const BackgroundFrame(),
+        ),
+      ),
+    );
+    if (frame != null && mounted) {
+      setState(
+        () => _draft = _draft.copyWith(
+          background: selected,
+          backgroundFrame: frame,
+        ),
+      );
+    }
   }
 
   @override
@@ -646,14 +670,28 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
               if (_draft.background.isNotEmpty)
                 SizedBox(
                   height: 180,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: AlarmBackground(
-                      name: _draft.background,
-                      child: Center(
-                        child: Text(
-                          _draft.timeLabel,
-                          style: const TextStyle(fontSize: 48),
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: MediaQuery.sizeOf(context).aspectRatio,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: AlarmBackground(
+                          name: _draft.background,
+                          frame: _draft.backgroundFrame,
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  _draft.timeLabel,
+                                  style: const TextStyle(fontSize: 48),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -671,10 +709,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                               'pickBackground',
                             );
                             if (mounted && validBackgroundName(name)) {
-                              setState(
-                                () =>
-                                    _draft = _draft.copyWith(background: name),
-                              );
+                              await _frameBackground(name: name);
                             }
                           }),
                     icon: const Icon(Icons.add_photo_alternate_outlined),
@@ -685,11 +720,23 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                     ),
                   ),
                   if (_draft.background.isNotEmpty)
+                    TextButton.icon(
+                      key: const ValueKey('edit-background-frame'),
+                      onPressed: _saving || _soundBusy
+                          ? null
+                          : () => _soundAction(() => _frameBackground()),
+                      icon: const Icon(Icons.crop),
+                      label: const Text('Настроить кадр'),
+                    ),
+                  if (_draft.background.isNotEmpty)
                     TextButton(
                       onPressed: _saving || _soundBusy
                           ? null
                           : () => setState(
-                              () => _draft = _draft.copyWith(background: ''),
+                              () => _draft = _draft.copyWith(
+                                background: '',
+                                backgroundFrame: const BackgroundFrame(),
+                              ),
                             ),
                       child: const Text('Убрать фон'),
                     ),

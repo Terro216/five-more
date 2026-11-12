@@ -125,10 +125,7 @@ class _BedtimeScreenState extends State<BedtimeScreen>
     builder: (context, _) => ListView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       children: [
-        const Text(
-          'Голос из утра',
-          style: TextStyle(fontSize: 30, fontWeight: FontWeight.w600),
-        ),
+        const Text('Голос из утра', style: AppTypography.heading),
         const SizedBox(height: 12),
         Text(
           'Утром запиши, как тебе вставалось. Вечером послушай свой сонный голос — и вспомни, зачем сегодня лечь пораньше.',

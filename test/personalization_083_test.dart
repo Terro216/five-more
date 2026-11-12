@@ -523,9 +523,27 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('add-alarm')));
       await tester.pumpAndSettle();
       final pick = find.byKey(const ValueKey('pick-alarm-background'));
+      Future<void> applyFrame() async {
+        await tester.pump();
+        for (var i = 0; i < 30; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump(const Duration(milliseconds: 20));
+          if (find
+              .byKey(const ValueKey('background-apply'))
+              .evaluate()
+              .isNotEmpty) {
+            break;
+          }
+        }
+        await tester.tap(find.byKey(const ValueKey('background-apply')));
+        await tester.pumpAndSettle();
+      }
+
       await _reveal(tester, pick);
       await tester.tap(pick);
-      await tester.pumpAndSettle();
+      await applyFrame();
       expect(
         tester.widget<AlarmBackground>(find.byType(AlarmBackground)).name,
         _photo,
@@ -535,7 +553,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AlarmBackground), findsNothing);
       await tester.tap(pick);
-      await tester.pumpAndSettle();
+      await applyFrame();
       await tester.tap(find.byKey(const ValueKey('save-alarm')));
       await tester.pumpAndSettle();
       expect(gateway.scheduleCalls.single.background, _photo);

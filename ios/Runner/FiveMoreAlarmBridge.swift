@@ -541,6 +541,7 @@ private final class FiveMoreAlarmEngine {
       "hour": hour, "minute": minute, "weekdays": Array(Set(days)).sorted(),
       "enabled": args["enabled"] as? Bool ?? true, "snoozeMinutes": snooze,
       "background": FiveMoreExtrasBridge.backgroundName(args["background"]),
+      "backgroundFrame": FiveMoreExtrasBridge.backgroundFrame(args["backgroundFrame"]),
       "maxSnoozes": maximum, "challengeKind": kind, "difficulty": difficulty,
       "escalateOnSnooze": escalateOnSnooze,
       "moveSnoozeButton": moveSnoozeButton,
@@ -884,6 +885,15 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
   static func backgroundName(_ value: Any?) -> String {
     guard let name = value as? String, name.count == 40, name.hasSuffix(".jpg"), UUID(uuidString: String(name.dropLast(4))) != nil else { return "" }
     return name
+  }
+  static func backgroundFrame(_ value: Any?) -> [String: Any] {
+    let raw = value as? [String: Any] ?? [:]
+    func number(_ key: String, _ fallback: Double, _ lower: Double, _ upper: Double) -> Double {
+      guard let value = raw[key] as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID(), value.doubleValue.isFinite else { return fallback }
+      return min(upper, max(lower, value.doubleValue))
+    }
+    return ["x": number("x", 0.5, 0, 1), "y": number("y", 0.5, 0, 1),
+      "zoom": number("zoom", 1, 1, 4), "turns": Int(number("turns", 0, 0, 3))]
   }
   private static func importBackground(_ source: URL) throws -> String {
     let size = try source.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0

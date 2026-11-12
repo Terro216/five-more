@@ -117,6 +117,7 @@ class AlarmEngine(private val context: Context) {
             .put("mixOrder", JSONArray(order)).put("qrValue", qr)
             .put("sound", sound).put("soundLabel", (arguments["soundLabel"] as? String ?: "Системный будильник").take(80))
             .put("background", (arguments["background"] as? String ?: "").takeIf(BackgroundRules::validName) ?: "")
+            .put("backgroundFrame", JSONObject(BackgroundRules.frame(arguments["backgroundFrame"])))
             .put("snoozesUsed", 0).put("occurrenceId", UUID.randomUUID().toString())
             .put("state", if (enabled) "scheduled" else "disabled")
         val nextAt = if (enabled) {
