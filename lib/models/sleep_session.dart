@@ -48,14 +48,15 @@ class SleepSession {
               .firstOrNull
               ?.at ??
           end.at;
-      // Only a recent manual setup of this alarm can be its bedtime estimate.
-      // No clock-hour or minimum-duration rule pretends to define human sleep.
+      // Setting an alarm shortly before it rings is not evidence of bedtime.
+      // Short sleeps need an explicit time in the review instead of this guess.
       final armed = events
           .where(
             (e) =>
                 e.type == 'armed' &&
                 e.alarmId == end.alarmId &&
                 !e.at.isAfter(start) &&
+                start.difference(e.at) >= const Duration(hours: 3) &&
                 start.difference(e.at) <= const Duration(hours: 36) &&
                 (e.nextAt == null ||
                     e.nextAt!.difference(start).abs() <=

@@ -227,6 +227,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
       MaterialPageRoute(
         builder: (_) => BackgroundEditor(
           name: selected,
+          alarm: _draft,
           initial: name == null
               ? _draft.backgroundFrame
               : const BackgroundFrame(),

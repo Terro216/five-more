@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app/alarm_controller.dart';
@@ -22,13 +23,15 @@ Future<void> main() async {
     gateway: NativeAlarmGateway(),
     storage: LocalAlarmStorage(),
   );
+  PhraseLibrary.instance.setAlarmRinging(!kIsWeb);
   controller.addListener(() {
     final blocked =
         controller.loading ||
         !controller.nativeStateKnown ||
         controller.ringing != null;
     SyncService.instance.setAlarmRinging(blocked);
-    PhraseLibrary.instance.setAlarmRinging(blocked);
+    // The browser preview never runs a native alarm.
+    PhraseLibrary.instance.setAlarmRinging(!kIsWeb && blocked);
   });
   runApp(FiveMoreApp(controller: controller));
   unawaited(SyncService.instance.load());

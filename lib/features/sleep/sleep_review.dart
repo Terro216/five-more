@@ -8,6 +8,9 @@ import '../../models/sleep_session.dart';
 import '../../services/sleep_journal.dart';
 import '../../widgets/time_composer.dart';
 
+String sleepDateLabel(DateTime at) =>
+    '${at.day.toString().padLeft(2, '0')}.${at.month.toString().padLeft(2, '0')}.${at.year}';
+
 class SleepReview extends StatefulWidget {
   const SleepReview({
     super.key,
@@ -26,6 +29,7 @@ class SleepReview extends StatefulWidget {
 
 class _SleepReviewState extends State<SleepReview> {
   int _sleep = 3, _wake = 3;
+  final _comment = TextEditingController();
   bool _saving = false, _separate = false;
   bool _bedEdited = false, _wakeEdited = false;
   late SleepSession? _session = widget.session;
@@ -53,6 +57,10 @@ class _SleepReviewState extends State<SleepReview> {
     final existing = widget.journal.entries
         .where((e) => e.occurrenceId == (_session?.id ?? _event.occurrenceId))
         .firstOrNull;
+    _comment.text =
+        widget.journal.comments[_session?.id ?? _event.occurrenceId]
+            as String? ??
+        '';
     if (existing != null) {
       _confirmed = true;
       _originalBedAt = existing.bedAt;
@@ -96,6 +104,7 @@ class _SleepReviewState extends State<SleepReview> {
   @override
   void dispose() {
     widget.controller?.removeListener(_newEvents);
+    _comment.dispose();
     super.dispose();
   }
 
@@ -126,7 +135,12 @@ class _SleepReviewState extends State<SleepReview> {
     return value;
   }
 
-  Widget _rating(String title, int value, ValueChanged<int> change) => Column(
+  Widget _rating(
+    String title,
+    String endpoints,
+    int value,
+    ValueChanged<int> change,
+  ) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(title, style: Theme.of(context).textTheme.titleMedium),
@@ -144,7 +158,7 @@ class _SleepReviewState extends State<SleepReview> {
         ),
       ),
       Text(
-        '1 — тяжело · 5 — отлично',
+        endpoints,
         style: TextStyle(color: context.palette.muted, fontSize: 12),
       ),
     ],
@@ -155,9 +169,24 @@ class _SleepReviewState extends State<SleepReview> {
     body: ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        _rating('Качество сна', _sleep, (v) => setState(() => _sleep = v)),
+        Text(
+          'Сон к ${sleepDateLabel(_wakeAt)}',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
         const SizedBox(height: 24),
-        _rating('Как дался подъём', _wake, (v) => setState(() => _wake = v)),
+        _rating(
+          'Как спалось',
+          '1 — плохо · 5 — хорошо',
+          _sleep,
+          (v) => setState(() => _sleep = v),
+        ),
+        const SizedBox(height: 24),
+        _rating(
+          'Как дался подъём',
+          '1 — с трудом · 5 — легко',
+          _wake,
+          (v) => setState(() => _wake = v),
+        ),
         const SizedBox(height: 24),
         ListTile(
           contentPadding: EdgeInsets.zero,
@@ -214,21 +243,54 @@ class _SleepReviewState extends State<SleepReview> {
                   }
                 },
         ),
-        if ((_session?.occurrences.length ?? 0) > 1)
+        if (!_confirmed && (_session?.occurrences.length ?? 0) > 1)
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Считать отдельным сном'),
+            title: const Text('Между звонками был ещё один сон'),
             subtitle: const Text(
-              'Включи, если между соседними звонками ты снова ложился спать.',
+              'Выключено: все эти звонки относятся к одному сну. Включено: последний подъём станет отдельной записью. Укажи, когда снова заснул(а).',
             ),
             value: _separate,
             onChanged: _saving
                 ? null
-                : (value) => setState(() => _separate = value),
+                : (value) async {
+                    if (!value) {
+                      setState(() => _separate = false);
+                      return;
+                    }
+                    final bed = await editClock(
+                      context,
+                      TimeOfDay.fromDateTime(
+                        _session?.firstStartedAt ?? _wakeAt,
+                      ),
+                      title: 'Когда снова заснул(а)',
+                    );
+                    if (!mounted || bed == null) return;
+                    setState(() {
+                      _separate = true;
+                      _bed = bed;
+                      _bedTouched = true;
+                      _bedEdited = true;
+                    });
+                  },
           ),
         Text(
           'Расчётный сон: ${remainingLabel(_wakeAt, _bedAt)}',
           style: TextStyle(color: context.palette.morning),
+        ),
+        const SizedBox(height: 24),
+        TextField(
+          controller: _comment,
+          enabled: !_saving,
+          minLines: 2,
+          maxLines: 5,
+          maxLength: 1000,
+          decoration: const InputDecoration(
+            labelText: 'Заметка о сне',
+            hintText: 'Что хочется запомнить об этой ночи',
+            helperText: 'Необязательно · хранится на этом устройстве',
+            helperMaxLines: 2,
+          ),
         ),
         const SizedBox(height: 16),
         Text(
@@ -290,6 +352,7 @@ class _SleepReviewState extends State<SleepReview> {
                         sleepQuality: _sleep,
                         wakeQuality: _wake,
                       ),
+                      comment: _comment.text,
                     );
                     if (context.mounted) Navigator.pop(context);
                   } catch (_) {

@@ -13,6 +13,7 @@ class SleepJournal extends ChangeNotifier {
   List<SleepEntry> entries = [];
   SleepGoals goals = const SleepGoals();
   Map<String, dynamic> sleepEstimates = {};
+  Map<String, dynamic> comments = {};
   // Local wall times keep historical regularity stable after travel. These
   // offsets are not added to the existing statistics-sync contract.
   Map<String, dynamic> sleepTimezones = {};
@@ -69,6 +70,7 @@ class SleepJournal extends ChangeNotifier {
         goals = SleepGoals.fromJson(
           Map<String, dynamic>.from(data['goals'] as Map? ?? {}),
         );
+        comments = Map<String, dynamic>.from(data['comments'] as Map? ?? {});
         sleepEstimates = Map<String, dynamic>.from(
           data['sleepEstimates'] as Map? ?? {},
         );
@@ -153,6 +155,7 @@ class SleepJournal extends ChangeNotifier {
         'fallingAsleepMinutes': fallingAsleepMinutes,
         'goals': goals.toJson(),
         'sleepEstimates': sleepEstimates,
+        'comments': comments,
         'sleepTimezones': sleepTimezones,
       });
       _notify();
@@ -170,6 +173,7 @@ class SleepJournal extends ChangeNotifier {
         'fallingAsleepMinutes': fallingAsleepMinutes,
         'goals': goals.toJson(),
         'sleepEstimates': sleepEstimates,
+        'comments': comments,
         'sleepTimezones': sleepTimezones,
       }),
     );
@@ -177,8 +181,16 @@ class SleepJournal extends ChangeNotifier {
     _notify();
   }
 
-  Future<void> saveEntry(SleepEntry entry) async {
+  Future<void> saveEntry(SleepEntry entry, {String? comment}) async {
     if (!ready) throw StateError('Дневник недоступен');
+    final previousComments = Map<String, dynamic>.from(comments);
+    if (comment != null) {
+      if (comment.trim().isEmpty) {
+        comments.remove(entry.occurrenceId);
+      } else {
+        comments[entry.occurrenceId] = comment.trim();
+      }
+    }
     final previousEntry = entries
         .where((e) => e.occurrenceId == entry.occurrenceId)
         .firstOrNull;
@@ -225,6 +237,7 @@ class SleepJournal extends ChangeNotifier {
       await _persist();
     } catch (_) {
       entries = old;
+      comments = previousComments;
       if (previousZone == null) {
         sleepTimezones.remove(entry.occurrenceId);
       } else {
@@ -234,12 +247,15 @@ class SleepJournal extends ChangeNotifier {
     }
   }
 
-  Future<void> skip(String occurrence) async {
-    skipped.add(occurrence);
+  Future<void> skip(String occurrence) => skipAll([occurrence]);
+
+  Future<void> skipAll(Iterable<String> occurrences) async {
+    final old = Set<String>.from(skipped);
+    skipped.addAll(occurrences);
     try {
       await _persist();
     } catch (_) {
-      skipped.remove(occurrence);
+      skipped = old;
       rethrow;
     }
   }

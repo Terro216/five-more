@@ -182,13 +182,21 @@ Future<String?> registerQr(BuildContext context) => Navigator.push<String>(
 );
 
 class ShakeCounter {
-  ShakeCounter(this.target);
+  ShakeCounter(this.target, {this.minimumDuration = Duration.zero});
+  factory ShakeCounter.forDifficulty(ChallengeDifficulty difficulty) =>
+      ShakeCounter(
+        [12, 28, 60, 100][difficulty.index],
+        minimumDuration: Duration(seconds: [0, 8, 20, 40][difficulty.index]),
+      );
   final int target;
+  final Duration minimumDuration;
+  Duration? _started;
   int count = 0;
   int _direction = 0;
   Duration? _last;
   bool add(double x, double y, double z, Duration elapsed) {
     if (count >= target) return true;
+    if (![x, y, z].every((axis) => axis.isFinite)) return false;
     final axes = [x, y, z]..sort((a, b) => b.abs().compareTo(a.abs()));
     final peak = axes.first;
     if (!peak.isFinite || peak.abs() < 9) return false;
@@ -199,9 +207,15 @@ class ShakeCounter {
     if (direction == _direction) return false;
     if (_last != null && elapsed - _last! > const Duration(seconds: 2)) {
       count = max(0, count - 3);
+      _started = elapsed;
     }
+    _started ??= elapsed;
+    // Duration and repetitions both matter. More force never earns extra credit.
     _last = elapsed;
     _direction = direction;
+    if (count == target - 1 && elapsed - _started! < minimumDuration) {
+      return false;
+    }
     count++;
     return count >= target;
   }
@@ -220,7 +234,7 @@ class ShakeTask extends StatefulWidget {
 }
 
 class _ShakeTaskState extends State<ShakeTask> with WidgetsBindingObserver {
-  late final _counter = ShakeCounter([12, 20, 32, 48][widget.difficulty.index]);
+  late final _counter = ShakeCounter.forDifficulty(widget.difficulty);
   final _clock = Stopwatch();
   StreamSubscription<UserAccelerometerEvent>? _subscription;
   String? _error;
@@ -296,8 +310,14 @@ class _ShakeTaskState extends State<ShakeTask> with WidgetsBindingObserver {
       ),
       const SizedBox(height: 12),
       Text(
-        'Держи крепко и встряхивай короткими движениями туда-обратно.',
+        'Держи крепко и встряхивай короткими движениями туда-обратно. Не нужно трясти сильнее.',
         style: TextStyle(color: context.palette.muted),
+        textAlign: TextAlign.center,
+      ),
+      const SizedBox(height: 12),
+      Text(
+        '${_counter.count} / ${_counter.target} движений'
+        '${_counter.minimumDuration == Duration.zero ? '' : ' · не меньше ${_counter.minimumDuration.inSeconds} с'}',
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 24),

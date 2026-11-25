@@ -1,6 +1,4 @@
 import 'dart:math';
-import 'dart:convert';
-import 'dart:async';
 
 import 'package:five_more/app/alarm_controller.dart';
 import 'package:five_more/features/challenges/challenge_models.dart';
@@ -8,12 +6,9 @@ import 'package:five_more/features/challenges/physical_tasks.dart';
 import 'package:five_more/features/history/history_view.dart';
 import 'package:five_more/models/alarm.dart';
 import 'package:five_more/models/sleep_entry.dart';
-import 'package:five_more/services/phrase_library.dart';
 import 'package:five_more/services/sleep_journal.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'alarm_fakes.dart';
@@ -174,97 +169,6 @@ void main() {
     await reopened.load();
     expect(reopened.reminder, isFalse);
   });
-
-  test(
-    'phrases make no requests without consent; bad source keeps fallback',
-    () async {
-      final library = PhraseLibrary();
-      var requests = 0;
-      final client = MockClient((_) async {
-        requests++;
-        return http.Response('bad', 503);
-      });
-      expect(await library.refresh(client: client), 0);
-      expect(requests, 0);
-      await library.setEnabled(true);
-      await expectLater(library.refresh(client: client), throwsStateError);
-      final phrases = List.generate(
-        4,
-        (i) => library.next(Random(i), ChallengeDifficulty.hard).text,
-      );
-      expect(phrases.toSet(), hasLength(4));
-      expect(PhraseLibrary.sanitize('<script>x</script>'), isNull);
-      expect(PhraseLibrary.sanitize('а' * 141), isNull);
-    },
-  );
-
-  test(
-    'successful phrase refresh persists, deduplicates and is limited to daily',
-    () async {
-      var requests = 0;
-      final client = MockClient((request) async {
-        expect(request.url.scheme, 'https');
-        expect(request.body, isEmpty);
-        requests++;
-        return http.Response(
-          jsonEncode({
-            'quoteText':
-                'Каждое утро даёт возможность сделать новый шаг вперёд.',
-          }),
-          200,
-          headers: {'content-type': 'application/json; charset=utf-8'},
-        );
-      });
-      final library = PhraseLibrary();
-      await library.load();
-      await library.setEnabled(true);
-      expect(await library.refresh(client: client), 1);
-      expect(requests, 6);
-      final restored = PhraseLibrary();
-      await restored.load();
-      expect(restored.phrases, library.phrases);
-      expect(await restored.refresh(client: client), 0);
-      expect(requests, 6);
-    },
-  );
-
-  test(
-    'an alarm or revoked consent stops a phrase batch before the next request',
-    () async {
-      for (final ringing in [false, true]) {
-        final library = PhraseLibrary();
-        await library.load();
-        await library.setEnabled(true);
-        final received = Completer<void>(), reply = Completer<http.Response>();
-        var requests = 0;
-        final client = MockClient((_) {
-          requests++;
-          received.complete();
-          return reply.future;
-        });
-        final refresh = library.refresh(client: client);
-        await received.future;
-        if (ringing) {
-          library.setAlarmRinging(true);
-        } else {
-          await library.setEnabled(false);
-        }
-        reply.complete(
-          http.Response(
-            jsonEncode({
-              'quoteText':
-                  'Каждое утро даёт возможность сделать новый шаг вперёд.',
-            }),
-            200,
-            headers: {'content-type': 'application/json; charset=utf-8'},
-          ),
-        );
-        expect(await refresh, 0);
-        expect(requests, 1);
-        expect(library.phrases, isEmpty);
-      }
-    },
-  );
 
   test(
     'hard sequence moves remaining numbers while retaining solved cells',

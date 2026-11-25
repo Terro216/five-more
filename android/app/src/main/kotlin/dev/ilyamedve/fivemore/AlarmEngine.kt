@@ -50,6 +50,7 @@ class AlarmEngine(private val context: Context) {
                 source.isBlank() || source.startsWith("preview:") || started <= 0 || due < started) null
             else mapOf("sourceAlarmId" to source, "previewAlarmId" to id, "startedAt" to started, "dueAt" to due)
         }?.let { result["activeTest"] = it }
+        UpcomingAlarmNotification.refresh(context)
         return result
     }
 
@@ -146,6 +147,7 @@ class AlarmEngine(private val context: Context) {
             return fail("schedule_failed", error.message)
         }
         silencedAlarmIds.remove(id)
+        UpcomingAlarmNotification.refresh(context)
         return success(alarm)
     }
 
@@ -156,6 +158,7 @@ class AlarmEngine(private val context: Context) {
         cancelPending(id)
         alarm.put("enabled", false).put("state", "disabled").put("nextAt", 0L)
         store.put(alarm)
+        UpcomingAlarmNotification.refresh(context)
         return success(alarm)
     }
 
@@ -238,6 +241,7 @@ class AlarmEngine(private val context: Context) {
         alarm.put("state", "ringing").put("ringingSince", ringingSince).put("nextAt", 0L)
         store.put(alarm)
         store.event(alarm, "fired", now)
+        UpcomingAlarmNotification.refresh(context)
         return true
     }
 
@@ -377,6 +381,7 @@ class AlarmEngine(private val context: Context) {
         recoveryFailure = failure
         try { store.recoveryError = failure }
         catch (_: Exception) { recoveryFailure = "schedule_failed" }
+        UpcomingAlarmNotification.refresh(context)
     }
 
     private fun resolve(alarm: JSONObject, onScheduleFailure: (() -> Unit)? = null) {
@@ -436,6 +441,7 @@ class AlarmEngine(private val context: Context) {
     }
 
     private fun refreshService() {
+        UpcomingAlarmNotification.refresh(context)
         if (ringing() == null) {
             context.stopService(Intent(context, AlarmRingingService::class.java))
         } else {

@@ -19,6 +19,7 @@ import 'device_check_screen.dart';
 import '../history/history_view.dart';
 import '../sleep/bedtime_screen.dart';
 import '../sleep/sleep_review.dart';
+import '../sleep/sleep_reviews.dart';
 import '../../services/sleep_journal.dart';
 import '../../services/native_extras.dart';
 import '../../widgets/time_composer.dart';
@@ -100,11 +101,20 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
     }
   }
 
+  Widget _reviewArchive() => TextButton.icon(
+    onPressed: () => Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => SleepReviews(journal: _journal, controller: controller),
+      ),
+    ),
+    icon: const Icon(Icons.history_rounded),
+    label: const Text('Дневник сна'),
+  );
+
   Widget _morningReview() {
     final session = SleepSession.fromEvents(
-      controller.sleepEvents
-          .where((e) => !_journal.reported(e.occurrenceId))
-          .toList(),
+      controller.sleepEvents,
       separateOccurrences: _journal.entries
           .where((e) => e.separate)
           .map((e) => e.occurrenceId)
@@ -112,10 +122,11 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
     ).lastOrNull;
     final event = session?.lastEvent;
     if (!_journal.ready ||
+        session == null ||
         event == null ||
-        _journal.reported(event.occurrenceId) ||
+        session.occurrences.any(_journal.reported) ||
         controller.now.difference(event.at) > const Duration(hours: 18)) {
-      return const SizedBox.shrink();
+      return _reviewArchive();
     }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20),
@@ -127,7 +138,8 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           ),
           Text(
-            'Оцени утро и оставь вечернему себе голосовое.',
+            '${sleepDateLabel(event.at)} · подъём в ${clockLabel(TimeOfDay.fromDateTime(event.at))}'
+            '${session.occurrences.length > 1 ? ' · звонков: ${session.occurrences.length}' : ''}',
             style: TextStyle(color: context.palette.muted),
           ),
           Wrap(
@@ -155,7 +167,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
               TextButton(
                 onPressed: () async {
                   try {
-                    await _journal.skip(event.occurrenceId);
+                    await _journal.skipAll(session.occurrences);
                   } catch (_) {
                     if (mounted) {
                       _message('Не удалось сохранить. Попробуй ещё раз.');
@@ -164,6 +176,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                 },
                 child: const Text('Пропустить'),
               ),
+              _reviewArchive(),
             ],
           ),
         ],

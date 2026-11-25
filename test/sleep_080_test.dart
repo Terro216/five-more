@@ -26,42 +26,30 @@ AlarmEvent e(
 );
 
 void main() {
-  test(
-    'bedtime uses a fresh matching alarm setup even for short daytime sleep',
-    () {
-      final start = DateTime(2026, 11, 10, 15);
-      final session = SleepSession.fromEvents([
-        e(
-          'own',
-          'a',
-          'setup',
-          'armed',
-          start.subtract(const Duration(minutes: 40)),
-          due: start,
-        ),
-        e(
-          'other',
-          'b',
-          'setup2',
-          'armed',
-          start.subtract(const Duration(minutes: 30)),
-          due: start,
-        ),
-        e('ring', 'a', 'wake', 'fired', start),
-        e(
-          'end',
-          'a',
-          'wake',
-          'dismissed',
-          start.add(const Duration(minutes: 5)),
-        ),
-      ]).single;
-      expect(
-        session.bedtimeCandidate,
+  test('short daytime setup is not evidence of bedtime', () {
+    final start = DateTime(2026, 11, 10, 15);
+    final session = SleepSession.fromEvents([
+      e(
+        'own',
+        'a',
+        'setup',
+        'armed',
         start.subtract(const Duration(minutes: 40)),
-      );
-    },
-  );
+        due: start,
+      ),
+      e(
+        'other',
+        'b',
+        'setup2',
+        'armed',
+        start.subtract(const Duration(minutes: 30)),
+        due: start,
+      ),
+      e('ring', 'a', 'wake', 'fired', start),
+      e('end', 'a', 'wake', 'dismissed', start.add(const Duration(minutes: 5))),
+    ]).single;
+    expect(session.bedtimeCandidate, isNull);
+  });
   test('prepared alarms share final wake boundary; explicit split and later nap stay separate', () {
     final morning = DateTime(2026, 11, 10, 7);
     final events = [

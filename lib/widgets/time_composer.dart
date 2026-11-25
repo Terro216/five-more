@@ -402,6 +402,7 @@ class _ClockSheetState extends State<_ClockSheet> {
               onValidityChanged: (valid) => setState(() => _valid = valid),
               onChanged: (value) => setState(() => _time = value),
             ),
+            const SizedBox(height: 24),
             FilledButton(
               onPressed: _valid ? () => Navigator.pop(context, _time) : null,
               child: const Text('Готово'),

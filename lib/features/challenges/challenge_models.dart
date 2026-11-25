@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import '../../models/quote_credit.dart';
+
 /// Wake-up tasks contain no network, storage, or alarm dependencies.
 enum ChallengeKind {
   math,
@@ -273,18 +275,38 @@ StroopQuestion generateStroopQuestion(
 /// The stored phrase is ordinary text; only its visual presentation is mirrored.
 /// Tolerate typing conventions, not missing words or reversed answers.
 class MirrorTextQuestion {
-  const MirrorTextQuestion(this.text);
+  const MirrorTextQuestion(this.text, {this.credit});
 
   final String text;
+  final QuoteCredit? credit;
 
-  bool accepts(String candidate) =>
-      _normalizePhrase(candidate) == _normalizePhrase(text);
+  bool accepts(String candidate) => answerKey(candidate) == answerKey(text);
 
-  static String _normalizePhrase(String value) => value
-      .trim()
+  static String answerKey(String value) => value
       .toLowerCase()
       .replaceAll('ё', 'е')
-      .replaceAll(RegExp(r'\s+'), ' ');
+      .replaceAll(RegExp(r'[\u0300-\u036f]'), '')
+      .replaceAll(RegExp(r'[^а-яa-z0-9]+'), ' ')
+      .trim();
+
+  static String? clean(String? value) {
+    if (value == null) return null;
+    final phrase = value
+        .replaceAll(RegExp(r'[\u0300-\u036f]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (phrase.length < 12 ||
+        phrase.length > 140 ||
+        RegExp(
+          r'[<>\x00-\x1f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]|https?://|www\.',
+          caseSensitive: false,
+        ).hasMatch(phrase) ||
+        !RegExp(r'[а-яё]', caseSensitive: false).hasMatch(phrase) ||
+        answerKey(phrase).split(' ').length < 2) {
+      return null;
+    }
+    return phrase;
+  }
 }
 
 MirrorTextQuestion generateMirrorTextQuestion(

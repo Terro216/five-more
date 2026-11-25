@@ -5,6 +5,8 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/background_frame.dart';
+import '../../models/alarm.dart';
+import '../../widgets/time_composer.dart';
 import '../../widgets/alarm_background.dart';
 import '../../widgets/framed_photo.dart';
 
@@ -13,8 +15,10 @@ class BackgroundEditor extends StatefulWidget {
     super.key,
     required this.name,
     this.initial = const BackgroundFrame(),
+    this.alarm,
   });
   final String name;
+  final Alarm? alarm;
   final BackgroundFrame initial;
   @override
   State<BackgroundEditor> createState() => _BackgroundEditorState();
@@ -24,6 +28,7 @@ class _BackgroundEditorState extends State<BackgroundEditor> {
   late BackgroundFrame _frame = widget.initial;
   ui.Image? _image;
   bool _loading = true;
+  bool _showGuide = true;
   Size _viewport = Size.zero;
   Offset _anchor = Offset.zero;
   double _gestureZoom = 1;
@@ -132,12 +137,11 @@ class _BackgroundEditorState extends State<BackgroundEditor> {
             )
           : Column(
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 8, 20, 12),
-                  child: Text(
-                    'Перемещай фото и меняй масштаб двумя пальцами.',
-                    textAlign: TextAlign.center,
-                  ),
+                SwitchListTile.adaptive(
+                  title: const Text('Силуэт экрана звонка'),
+                  subtitle: const Text('Перемещай фото под часами и кнопками.'),
+                  value: _showGuide,
+                  onChanged: (value) => setState(() => _showGuide = value),
                 ),
                 Expanded(
                   child: Padding(
@@ -206,9 +210,27 @@ class _BackgroundEditorState extends State<BackgroundEditor> {
                                       d.pointerCount,
                                     ),
                                     onScaleUpdate: _scale,
-                                    child: FramedPhoto(
-                                      image: _image!,
-                                      frame: _frame,
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        FramedPhoto(
+                                          image: _image!,
+                                          frame: _frame,
+                                        ),
+                                        if (_showGuide)
+                                          Positioned.fill(
+                                            child: IgnorePointer(
+                                              child: ExcludeSemantics(
+                                                child: Opacity(
+                                                  opacity: .6,
+                                                  child: _PhotoGuide(
+                                                    alarm: widget.alarm,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -288,6 +310,106 @@ class _BackgroundEditorState extends State<BackgroundEditor> {
                 ),
               ],
             ),
+    ),
+  );
+}
+
+class _PhotoGuide extends StatelessWidget {
+  const _PhotoGuide({this.alarm});
+  final Alarm? alarm;
+  @override
+  Widget build(BuildContext context) => FittedBox(
+    fit: BoxFit.contain,
+    child: SizedBox(
+      width: 390,
+      height: 844,
+      child: Theme(
+        data: ThemeData.dark(),
+        child: DefaultTextStyle(
+          style: const TextStyle(color: Colors.white),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 40, 20, 20),
+            child: Column(
+              children: [
+                const Align(
+                  alignment: Alignment.centerRight,
+                  child: Text('Тише · 30 с'),
+                ),
+                Expanded(
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: SizedBox(
+                        width: 350,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.wb_twilight_rounded,
+                              color: Colors.white,
+                              size: 36,
+                            ),
+                            const SizedBox(height: 12),
+                            const Text('Доброе утро'),
+                            const SizedBox(height: 12),
+                            Text(
+                              clockLabel(
+                                TimeOfDay(
+                                  hour: alarm?.hour ?? 7,
+                                  minute: alarm?.minute ?? 0,
+                                ),
+                              ),
+                              style: const TextStyle(
+                                fontSize: 96,
+                                fontWeight: FontWeight.w300,
+                                height: 1.1,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            if (alarm?.displayTitle.isNotEmpty ?? false)
+                              Text(
+                                alarm!.displayTitle,
+                                style: const TextStyle(fontSize: 22),
+                                textAlign: TextAlign.center,
+                              ),
+                            const SizedBox(height: 16),
+                            if (alarm?.requiresChallenge ?? true)
+                              const Text('Задание для подъёма'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                for (final label in [
+                  alarm?.requiresChallenge == false
+                      ? 'Выключить'
+                      : 'Пройти задание',
+                  if (alarm == null || alarm!.snoozeBudget > 0) 'Ещё пять',
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.white),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 18),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                const Text('Проблема с заданием'),
+              ],
+            ),
+          ),
+        ),
+      ),
     ),
   );
 }

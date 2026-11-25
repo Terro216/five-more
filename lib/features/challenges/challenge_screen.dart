@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/theme.dart';
+import '../../models/quote_credit.dart';
 import 'challenge_models.dart';
 import 'physical_tasks.dart';
 import 'flag_task.dart';
@@ -127,6 +128,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   bool get _hard => widget.difficulty.index >= 2;
   final _selected = <int>{};
   bool _showPattern = false;
+  bool _memoryMistake = false;
   bool _accessibleNavigation = false;
   bool _transitioning = false;
   bool _finished = false;
@@ -180,6 +182,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     _feedback = null;
     _transitioning = false;
     _selected.clear();
+    _memoryMistake = false;
     _sequenceCompleted = 0;
     _typedAnswer.clear();
     _activeKind = _session.currentKind;
@@ -411,6 +414,22 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                       padding: const EdgeInsets.all(12),
                       child: Text(_progressError!),
                     ),
+                  if (_feedback != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                      child: Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          _feedback!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _feedbackCorrect
+                                ? _accent
+                                : Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    ),
                   Expanded(
                     child: IgnorePointer(
                       ignoring: _restoringProgress,
@@ -476,21 +495,6 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                                   IgnorePointer(
                                     ignoring: _transitioning,
                                     child: _buildTask(),
-                                  ),
-                                  const SizedBox(height: 20),
-                                  Semantics(
-                                    liveRegion: true,
-                                    child: Text(
-                                      _feedback ?? '',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: _feedbackCorrect
-                                            ? _accent
-                                            : _muted,
-                                        fontSize: 14,
-                                        height: 1.5,
-                                      ),
-                                    ),
                                   ),
                                 ],
                               ),
@@ -658,7 +662,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         decoration: InputDecoration(
           labelText: mirrored ? 'Ответ' : 'Код',
           floatingLabelBehavior: FloatingLabelBehavior.never,
-          helperText: 'Регистр не важен',
+          helperText: mirrored ? 'Можно без знаков' : 'Регистр не важен',
           errorText: _feedback != null && !_feedbackCorrect
               ? 'Неверный ответ'
               : null,
@@ -673,6 +677,30 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         onPressed: _transitioning || _finished ? null : _submitTextAnswer,
         child: const Text('Проверить ответ'),
       ),
+      if ((mirrored ? _mirror?.credit : null) case final credit?)
+        ExpansionTile(
+          key: ValueKey(credit.link),
+          tilePadding: EdgeInsets.zero,
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          title: Text(
+            credit.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(credit.source.label),
+          children: [
+            SelectableText(credit.link.toString()),
+            if (credit.source == QuoteSource.wikiquote) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Страница Викицитатника · CC BY-SA 4.0. Разметка и переносы строк убраны.',
+              ),
+              const SelectableText(
+                'https://creativecommons.org/licenses/by-sa/4.0/',
+              ),
+            ],
+          ],
+        ),
       if (_accessibleNavigation) ...[
         const SizedBox(height: 16),
         Text(
@@ -906,8 +934,14 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _instruction(
-          _showPattern ? 'Запомни рисунок' : 'Повтори рисунок',
-          _showPattern
+          _memoryMistake
+              ? 'Разберём рисунок'
+              : _showPattern
+              ? 'Запомни рисунок'
+              : 'Повтори рисунок',
+          _memoryMistake
+              ? 'Галочка — верно, крестик — лишняя клетка, кружок — пропущенная.'
+              : _showPattern
               ? 'Здесь ${pattern.cells.length} отмеченных клеток'
               : 'Выбрано ${_selected.length} из ${pattern.cells.length}',
         ),
@@ -933,18 +967,34 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                   final marked = _showPattern
                       ? pattern.cells.contains(index)
                       : _selected.contains(index);
+                  final missed =
+                      _memoryMistake &&
+                      pattern.cells.contains(index) &&
+                      !_selected.contains(index);
+                  final wrong =
+                      _memoryMistake &&
+                      _selected.contains(index) &&
+                      !pattern.cells.contains(index);
                   return Semantics(
-                    button: !_showPattern,
+                    button: !_showPattern && !_memoryMistake,
                     selected: marked,
                     label:
                         'Ряд ${index ~/ pattern.side + 1}, '
-                        'столбец ${index % pattern.side + 1}',
+                        'столбец ${index % pattern.side + 1}${missed
+                            ? ', пропущено'
+                            : wrong
+                            ? ', лишняя клетка'
+                            : ''}',
                     child: Material(
-                      color: marked ? _accent : _surface,
+                      color: wrong
+                          ? Theme.of(context).colorScheme.error
+                          : marked || missed
+                          ? _accent
+                          : _surface,
                       borderRadius: BorderRadius.circular(16),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(16),
-                        onTap: _showPattern
+                        onTap: _showPattern || _memoryMistake
                             ? null
                             : () => setState(() {
                                 _feedback = null;
@@ -953,9 +1003,13 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                                   _selected.add(index);
                                 }
                               }),
-                        child: marked
+                        child: marked || missed
                             ? Icon(
-                                _showPattern
+                                wrong
+                                    ? Icons.close
+                                    : missed
+                                    ? Icons.radio_button_unchecked
+                                    : _showPattern
                                     ? Icons.circle
                                     : Icons.check_rounded,
                                 color: _background,
@@ -972,18 +1026,35 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         ),
         const SizedBox(height: 20),
         _answerButton(
-          label: _showPattern ? 'Запомнил, начнём' : 'Проверить',
+          label: _memoryMistake
+              ? 'Попробовать ещё раз'
+              : _showPattern
+              ? 'Запомнил, начнём'
+              : 'Проверить',
           accent: true,
-          onPressed: _showPattern
+          onPressed: _memoryMistake
+              ? () => setState(_prepareRound)
+              : _showPattern
               ? () {
                   _previewTimer?.cancel();
                   setState(() => _showPattern = false);
                 }
               : _selected.length == pattern.cells.length
-              ? () => _answer(pattern.accepts(_selected))
+              ? () {
+                  if (widget.practice && !pattern.accepts(_selected)) {
+                    setState(() {
+                      _session.submitIncorrect();
+                      _memoryMistake = true;
+                      _feedback = 'Есть ошибки. Сравни свой ответ с рисунком.';
+                      _feedbackCorrect = false;
+                    });
+                  } else {
+                    _answer(pattern.accepts(_selected));
+                  }
+                }
               : null,
         ),
-        if (!_showPattern && !_hard)
+        if (!_showPattern && !_memoryMistake && (!_hard || widget.practice))
           TextButton(
             onPressed: () => setState(_startPreview),
             style: TextButton.styleFrom(
