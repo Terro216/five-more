@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../l10n/strings.dart';
 import '../models/alarm.dart';
 import '../models/device_alarm_check.dart';
 
@@ -90,32 +91,25 @@ class AlarmDeviceStatus {
 }
 
 String? alarmErrorMessage(String? error) => switch (error) {
-  'exact_alarm_permission' =>
-    'Разреши точное срабатывание в настройках телефона.',
-  'alarm_active' => 'Сначала заверши текущий подъём, затем меняй расписание.',
-  'snooze_limit' => 'Запас минут переноса закончился.',
-  'quiet_unavailable' =>
-    'Сейчас приглушение недоступно. Проверь состояние звонка.',
-  'not_found' => 'Будильник не найден. Обнови список и попробуй ещё раз.',
-  'not_ringing' => 'Этот будильник уже не звонит.',
-  'test_alarm_active' => 'Сначала заверши или отмени текущую проверку звонка.',
-  'invalid_test_id' =>
-    'Этим действием можно отменить только проверочный звонок.',
-  'invalid_test_delay' =>
-    'Не удалось назначить время проверки. Попробуй ещё раз.',
-  'invalid_challenge' => 'Не удалось сохранить настройки задания. Выбери задание и сложность заново.',
-  'unsupported_permission' => 'Эта настройка недоступна на данном устройстве.',
-  'settings_unavailable' =>
-    'Не удалось открыть настройку. Открой её вручную в настройках телефона.',
+  'exact_alarm_permission' => appStrings.allowExactAlarmsInYourPhoneSettings,
+  'alarm_active' => appStrings.dismissBeforeScheduleChange,
+  'snooze_limit' => appStrings.noSnoozeTimeLeftMessage,
+  'quiet_unavailable' => appStrings.quietUnavailable,
+  'not_found' => appStrings.alarmNotFoundHint,
+  'not_ringing' => appStrings.thisAlarmIsNoLongerRinging,
+  'test_alarm_active' => appStrings.finishOrCancelTheCurrentAlarmTest,
+  'invalid_test_id' => appStrings.thisActionCanOnlyCancelATest,
+  'invalid_test_delay' => appStrings.couldntScheduleTheTestAlarmTryAgain,
+  'invalid_challenge' => appStrings.challengeSettingsSaveError,
+  'unsupported_permission' => appStrings.thisSettingIsUnavailableOnThisDevice,
+  'settings_unavailable' => appStrings.openSystemSettingError,
   'invalid_id' ||
   'invalid_hour' ||
   'invalid_minute' ||
-  'invalid_schedule' => 'Проверь время, дни недели и настройки переноса.',
-  'schedule_failed' =>
-    'Не удалось поставить будильник. Проверь системные разрешения.',
-  'emergency_state_not_saved' =>
-    'Звук остановлен, но сохранение состояния не удалось подтвердить. '
-        'Освободи место и проверь расписание перед следующим использованием.',
+  'invalid_schedule' => appStrings.checkTheTimeRepeatDaysAndSnooze,
+  'sound_unavailable' => appStrings.soundUnavailable,
+  'schedule_failed' => appStrings.schedulePermissionError,
+  'emergency_state_not_saved' => appStrings.emergencyStateSaveError,
   _ => error,
 };
 
@@ -208,9 +202,9 @@ class NativeAlarmGateway implements AlarmGateway {
     try {
       return AlarmResult.fromJson(await _map(method, args));
     } on MissingPluginException {
-      return const AlarmResult(
+      return AlarmResult(
         ok: false,
-        error: 'На этой платформе доступна только тренировка.',
+        error: appStrings.onlyPracticeIsAvailableOnThisPlatform,
       );
     } on PlatformException catch (error) {
       return AlarmResult(ok: false, error: error.message ?? error.code);

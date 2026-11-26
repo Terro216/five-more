@@ -71,3 +71,6 @@ server/data/
 *.key
 __pycache__/
 .impeccable/review/
+
+# Generated from the ARB translation catalogs by Flutter.
+/lib/l10n/generated/

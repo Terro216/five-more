@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		FA0000000000000000000001 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = FB0000000000000000000001 /* InfoPlist.xcstrings */; };
+		FA0000000000000000000000 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = FB0000000000000000000000 /* Localizable.xcstrings */; };
 		F2A1A1A1A1A1A1A1A1A1A101 /* Sounds in Resources */ = {isa = PBXBuildFile; fileRef = F2A1A1A1A1A1A1A1A1A1A102 /* Sounds */; };
 		F1A1A1A1A1A1A1A1A1A1A101 /* FiveMoreAlarmBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1A1A1A1A1A1A1A1A1A102 /* FiveMoreAlarmBridge.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
@@ -44,6 +46,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		FB0000000000000000000001 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		FB0000000000000000000000 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		F2A1A1A1A1A1A1A1A1A1A102 /* Sounds */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Sounds; sourceTree = "<group>"; };
 		F1A1A1A1A1A1A1A1A1A1A102 /* FiveMoreAlarmBridge.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FiveMoreAlarmBridge.swift; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
@@ -120,6 +124,8 @@
 			isa = PBXGroup;
 			children = (
 				97C146FA1CF9000F007C117D /* Main.storyboard */,
+				FB0000000000000000000001 /* InfoPlist.xcstrings */,
+				FB0000000000000000000000 /* Localizable.xcstrings */,
 				97C146FD1CF9000F007C117D /* Assets.xcassets */,
 				97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */,
 				97C147021CF9000F007C117D /* Info.plist */,
@@ -202,6 +208,7 @@
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				ru,
 				en,
 				Base,
 			);
@@ -236,6 +243,8 @@
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				F2A1A1A1A1A1A1A1A1A1A101 /* Sounds in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
+				FA0000000000000000000001 /* InfoPlist.xcstrings in Resources */,
+				FA0000000000000000000000 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

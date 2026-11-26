@@ -1,0 +1,1354 @@
+{
+  "@@locale": "en",
+  "waitForThisAlarmToFinishUpdating": "Wait for this alarm to finish updating.",
+  "savedSettingsReadError": "Couldn’t read your saved settings. Restart the app. Your existing data is safe.",
+  "systemAlarmCheckError": "Couldn’t check the system alarm. Refresh its status and try again.",
+  "storageIsUnavailable": "Storage is unavailable.",
+  "couldntUpdateTheAlarm": "Couldn’t update the alarm.",
+  "alarmActionFailed": "Couldn’t finish the action. Check the alarm status before relying on it.",
+  "restoredTestNotSaved": "The phone check was restored, but its record couldn’t be saved. You can cancel it on the check screen.",
+  "thisAlarmHasAlreadyBeenDeleted": "This alarm has already been deleted.",
+  "youreInPreviewModeSystemAlarmsAre": "You’re in preview mode. System alarms are unavailable here.",
+  "thisAlarmHasAlreadyStoppedRinging": "This alarm has already stopped ringing.",
+  "alarmEndedCheckCurrent": "This alarm has already ended. Check the current alarm.",
+  "noSnoozeTimeLeft": "No snooze time left.",
+  "chooseASnoozeWithinYourRemainingTime": "Choose a snooze within your remaining time.",
+  "dismissedRefreshPending": "Alarm dismissed. Your data couldn’t be updated and will be loaded again.",
+  "alarmDismissedScheduleError": "Alarm dismissed, but future alarms couldn’t be turned off. {error}",
+  "@alarmDismissedScheduleError": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "checkTheSchedule": "Check the schedule.",
+  "chooseBetween1And60Seconds": "Choose between 1 and 60 seconds.",
+  "finishOrCancelTheCurrentAlarmTest": "Finish or cancel the current alarm test first.",
+  "testAlarmAlreadyPending": "A test alarm is already pending on this phone. Finish or cancel it first.",
+  "phoneRequiredForAlarmTest": "You can practice in the preview. Use a phone to test an alarm.",
+  "allowNotificationsAndExactAlarmsFirst": "Allow notifications and exact alarms first.",
+  "saveAnAlarmBeforeTestingIt": "Save an alarm before testing it.",
+  "dismissTheCurrentAlarmFirst": "Dismiss the current alarm first.",
+  "yourPhoneDidntConfirmTheTestTime": "Your phone didn’t confirm the test time. Check the alarm status.",
+  "testCanceledStorageError": "Test canceled because its status couldn’t be saved. Free up space and try again.",
+  "testCancellationUnconfirmed": "The test status couldn’t be saved and cancellation wasn’t confirmed. The test alarm may still ring. Cancel it on this screen.",
+  "thisTestHasAlreadyEndedOrBeen": "This test has already ended or been replaced.",
+  "waitForTheTestAlarmToRing": "Wait for the test alarm to ring.",
+  "testCanceledStorageUnavailable": "Test alarm canceled. Storage is unavailable. Your existing data is safe.",
+  "testCancellationSaveError": "Test alarm canceled, but the cancellation couldn’t be saved. Check your free space.",
+  "openPermissionsError": "Couldn’t open system permissions. Check permissions in app settings.",
+  "scheduleRecoveryIsUnavailableHere": "Schedule recovery is unavailable here.",
+  "scheduleRestoreUnconfirmed": "Couldn’t confirm the schedule was restored. Refresh its status.",
+  "systemAlarmStatusError": "Couldn’t refresh the system alarm status.",
+  "systemAlarmUnavailable": "The system alarm is temporarily unavailable.",
+  "historySavePending": "Your history couldn’t be saved yet. The alarm is still working and the events will be loaded again.",
+  "appName": "Five More",
+  "checkTheNumbersInYourSettings": "Check the numbers in your settings.",
+  "finishEnteringTheTime": "Finish entering the time.",
+  "registerAQrCodeFirst": "Register a QR code first.",
+  "newAlarm": "New alarm",
+  "editAlarm": "Edit alarm",
+  "done": "Done",
+  "saveDraft": "Save draft",
+  "draftPreviewNotice": "Preview mode saves your settings. The alarm won’t ring.",
+  "alarm": "Alarm",
+  "nap": "Nap",
+  "ringsAt": "Rings at {time}",
+  "@ringsAt": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "ringsIn": "Rings in {duration}",
+  "@ringsIn": {
+    "placeholders": {
+      "duration": {
+        "type": "Object"
+      }
+    }
+  },
+  "min": "min",
+  "repeat": "Repeat",
+  "once": "Once",
+  "weekdays": "Weekdays",
+  "everyDay": "Every day",
+  "repeatOnWeekday": "Repeat on {weekday}",
+  "@repeatOnWeekday": {
+    "placeholders": {
+      "weekday": {
+        "type": "Object"
+      }
+    }
+  },
+  "standardAlarm": "Standard alarm",
+  "withChallenge": "With challenge",
+  "wakeUpChallenge": "Wake-up challenge",
+  "harderAfterEachSnooze": "Harder after each snooze",
+  "snoozingIsTurnedOff": "Snoozing is turned off.",
+  "eachSnoozeRaisesTheDifficultyByOne": "Each snooze raises the difficulty by one level",
+  "chooseARingToTry": "Choose a ring to try",
+  "tryChallenge": "Try challenge",
+  "snooze": "Snooze",
+  "totalSnoozeTime": "Total snooze time",
+  "snoozeDuration": "Snooze duration",
+  "hideTheSnoozeButton": "Hide the snooze button",
+  "movingSnoozeExplanation": "Find the snooze button among identical tiles. It moves after each snooze.",
+  "soundAndVibration": "Sound and vibration",
+  "alarmBackground": "Alarm background",
+  "choosePhoto": "Choose photo",
+  "replacePhoto": "Replace photo",
+  "adjustPhoto": "Adjust photo",
+  "removeBackground": "Remove background",
+  "iphonePhotoPrivacy": "Your photo stays on this phone. On iPhone, it appears when you open the app.",
+  "yourPhotoStaysOnThisPhone": "Your photo stays on this phone.",
+  "nameOptional": "Name (optional)",
+  "eGMorningWalk": "e.g. Morning walk",
+  "delete": "Delete",
+  "afterDismissal": "After dismissal",
+  "iosChallengeNotice": "On iPhone, you can stop the system alarm without a challenge. Open the app to take the challenge.",
+  "customChallengeOrder": "Custom challenge order",
+  "reorderStagesHint": "Drag the handles to reorder. You can add the same challenge more than once.",
+  "removeStage": "Remove stage",
+  "addStage": "Add stage",
+  "registerQrCode": "Register QR code",
+  "qrCodeRegistered": "QR code registered",
+  "qrLocationHint": "Try a code in the bathroom or kitchen",
+  "fadeInDuration": "Fade-in duration",
+  "s": "s",
+  "vibration": "Vibration",
+  "systemAlarmSound": "System alarm sound",
+  "classicRing": "Classic ring",
+  "gentleSunrise": "Gentle sunrise",
+  "arcadeMorning": "Arcade morning",
+  "pulse": "Pulse",
+  "alarmSound": "Alarm sound",
+  "listen": "Listen",
+  "chooseAudioFile": "Choose audio file",
+  "iosAudioLengthHint": "On iPhone, the first 29 seconds of the file are used.",
+  "couldntOpenTheFileTryAgain": "Couldn’t open the file. Try again.",
+  "firstRing": "First ring",
+  "after1Snooze": "After 1 snooze",
+  "afterSnoozes": "{count, plural, one{After {count} snooze} other{After {count} snoozes}}",
+  "@afterSnoozes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "couldntChangeTheTime": "Couldn’t change the time",
+  "sleepDiary": "Sleep diary",
+  "howDidYouSleep": "How did you sleep?",
+  "sleepReviewSummary": "{date} · woke at {time}{details}",
+  "@sleepReviewSummary": {
+    "placeholders": {
+      "date": {
+        "type": "Object"
+      },
+      "time": {
+        "type": "Object"
+      },
+      "details": {
+        "type": "Object"
+      }
+    }
+  },
+  "alarmCountSuffix": " · alarms: {count}",
+  "@alarmCountSuffix": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      }
+    }
+  },
+  "rateYourMorning": "Rate your morning",
+  "recordAMessage": "Record a message",
+  "couldntSaveTryAgain": "Couldn’t save. Try again.",
+  "skip": "Skip",
+  "couldntUpdateTheAlarmLabel": "Couldn’t update the alarm",
+  "deleteThisAlarm": "Delete this alarm?",
+  "cancel": "Cancel",
+  "alarmDeleted": "Alarm deleted",
+  "couldntDeleteTheAlarm": "Couldn’t delete the alarm",
+  "appWordmark": "five more",
+  "lightTheme": "Light theme",
+  "darkTheme": "Dark theme",
+  "themeSaveError": "Couldn’t save the theme. Try again.",
+  "phoneCheck": "Phone check",
+  "syncLabel": "Sync",
+  "about": "About",
+  "addAlarm": "Add alarm",
+  "alarmsTab": "Alarms",
+  "challenges": "Challenges",
+  "bedtimeTab": "Bedtime",
+  "history": "History",
+  "alarmSnoozedUntil": "Alarm snoozed until {time}",
+  "@alarmSnoozedUntil": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "openAndDismissAlarm": "Open and dismiss alarm",
+  "needsAttention": "Needs attention",
+  "snoozesToday": "Snoozes today: {count}",
+  "@snoozesToday": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      }
+    }
+  },
+  "myAlarms": "My alarms",
+  "alarmsOnIphone": "Alarms on iPhone",
+  "iosSystemStopExplanation": "You can stop the system alarm without a challenge. Open the app to take the challenge.",
+  "hoursMinutes": "{hours} hr {minutes} min",
+  "@hoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "Object"
+      },
+      "minutes": {
+        "type": "Object"
+      }
+    }
+  },
+  "minutesShort": "{minutes} min",
+  "@minutesShort": {
+    "placeholders": {
+      "minutes": {
+        "type": "Object"
+      }
+    }
+  },
+  "nextAlarmIn": "Next alarm in {duration}",
+  "@nextAlarmIn": {
+    "placeholders": {
+      "duration": {
+        "type": "Object"
+      }
+    }
+  },
+  "setYourFirstAlarm": "Set your first alarm.",
+  "noUpcomingAlarm": "No upcoming alarm.",
+  "firstAlarmHint": "Choose a time, snooze duration and wake-up challenge.",
+  "previewMode": "Preview mode",
+  "checkPhonePermissions": "Check phone permissions",
+  "alarmVolumeIsOff": "Alarm volume is off",
+  "restoreYourAlarmSchedule": "Restore your alarm schedule",
+  "couldntCheckThisPhone": "Couldn’t check this phone",
+  "alarmTestStarted": "Alarm test started",
+  "youConfirmedYouHeardTheAlarm": "You confirmed you heard the alarm",
+  "youReportedTheAlarmWasSilent": "You reported the alarm was silent",
+  "thisPhoneHasntBeenTested": "This phone hasn’t been tested",
+  "previewCapabilities": "Create a draft alarm and try the challenges here.",
+  "permissionsBeforeNextAlarm": "Some permissions are off. Check them before your next alarm.",
+  "turnUpTheAlarmVolumeAndRun": "Turn up the alarm volume and run the test again.",
+  "retryRecoveryHint": "Open Phone check and try restoring the schedule again.",
+  "reportTestResultHint": "Return to the test and report whether you heard the alarm.",
+  "retestAfterSettingsChange": "Run the test again after changing your settings.",
+  "silentAlarmAdvice": "Check the volume and permissions, then try again.",
+  "testTheAlarmWithYourScreenLocked": "Test the alarm with your screen locked.",
+  "whatsAvailableHere": "What’s available here",
+  "deleteAlarm": "Delete alarm",
+  "toggleAlarmAt": "{action} the {time} alarm",
+  "@toggleAlarmAt": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      },
+      "action": {
+        "type": "Object"
+      }
+    }
+  },
+  "turnOff": "Turn off",
+  "turnOn": "Turn on",
+  "noSnoozes": "No snoozes",
+  "minOfSnoozeTime": "{minutes} min of snooze time",
+  "@minOfSnoozeTime": {
+    "placeholders": {
+      "minutes": {
+        "type": "Object"
+      }
+    }
+  },
+  "draft": "Draft",
+  "wakeUpYourMind": "Wake up your mind.",
+  "practiceDescription": "Try the challenges before your alarm rings. Practice is silent.",
+  "difficultyAndEmergencyHint": "Choose a difficulty for each alarm. Emergency dismissal is always available.",
+  "aboutDescription": "Version · {version}\n\nAn alarm clock with limited snooze time and wake-up challenges.\n\nWorks without an account or ads. You can choose to sync your history and sleep ratings. Voice uploads are available only to a server-approved account.\n\nTest the alarm on your phone before your first morning. If you force-stop the app, open it again.",
+  "@aboutDescription": {
+    "placeholders": {
+      "version": {
+        "type": "Object"
+      }
+    }
+  },
+  "gotIt": "Got it",
+  "today": "Today",
+  "tomorrow": "Tomorrow",
+  "monday": "Monday",
+  "tuesday": "Tuesday",
+  "wednesday": "Wednesday",
+  "thursday": "Thursday",
+  "friday": "Friday",
+  "saturday": "Saturday",
+  "sunday": "Sunday",
+  "framePhoto": "Frame photo",
+  "photoOpenError": "Couldn’t open this photo. Go back and choose another.",
+  "previewAlarmControls": "Preview alarm controls",
+  "framePhotoHint": "Move the photo behind the clock and buttons.",
+  "photoPosition": "Photo position",
+  "zoom": "Zoom {zoom}",
+  "@zoom": {
+    "placeholders": {
+      "zoom": {
+        "type": "Object"
+      }
+    }
+  },
+  "moveLeft": "Move left",
+  "moveRight": "Move right",
+  "moveUp": "Move up",
+  "moveDown": "Move down",
+  "zoomOut": "Zoom out",
+  "zoomIn": "Zoom in",
+  "rotate": "Rotate",
+  "reset": "Reset",
+  "apply": "Apply",
+  "quieter30S": "Quieter · 30 s",
+  "goodMorning": "Good morning",
+  "wakeUpChallengeLabel": "Wake-up challenge",
+  "dismiss": "Dismiss",
+  "startChallenge": "Start challenge",
+  "troubleWithTheChallenge": "Trouble with the challenge",
+  "couldntFinishTheTest": "Couldn’t finish the test.",
+  "turnOnUninstallProtection": "Turn on uninstall protection?",
+  "turnOffUninstallProtection": "Turn off uninstall protection?",
+  "uninstallProtectionConsent": "Android will ask you to make Five More a device administrator. You’ll need to turn this off before uninstalling the app, which makes it harder to uninstall while half asleep. You can turn protection off here or in system settings. The app cannot erase data or change your phone password.",
+  "uninstallProtectionRemovalNotice": "You’ll be able to uninstall the app as usual. Your alarms and settings will be kept.",
+  "openAndroidPrompt": "Open Android prompt",
+  "turnOffProtection": "Turn off protection",
+  "closeThePowerMenu": "Close the power menu?",
+  "powerMenuConsent": "Turn on “Five More – power menu” in Android accessibility settings. It closes recognized power menus only while a real alarm is ringing.\n\nThe service uses system window information. It never reads, saves or shares app content. You can turn it off here or in Android settings.\n\nSome phones are unsupported. You can still force a restart with the hardware buttons or use emergency dismissal.",
+  "openAndroidSettings": "Open Android settings",
+  "uninstallProtectionStillActive": "Android still reports protection is on. Refresh the status or turn it off in system settings.",
+  "refreshStatus": "Refresh status",
+  "scheduleRecoveryDetails": "Some alarms couldn’t be restored. {error}",
+  "@scheduleRecoveryDetails": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "restoredTestPrompt": "Schedule restored. Test an alarm on your phone.",
+  "tryRestoringAgain": "Try restoring again",
+  "testYourAlarm": "Test your alarm",
+  "startTheTestThenLockYourScreen": "Start the test, then lock your screen.",
+  "permissions": "Permissions",
+  "alarmsOnIphoneLabel": "Alarms on iPhone",
+  "allowSystemAlarmsToRing": "Allow system alarms to ring.",
+  "notifications": "Notifications",
+  "notificationPermissionHint": "Show the alarm and its controls.",
+  "exactAlarms": "Exact alarms",
+  "exactAlarmPermissionHint": "Ring at the time you choose.",
+  "lockScreenAccess": "Lock screen access",
+  "lockScreenPermissionHint": "Show the alarm when your screen is locked.",
+  "previousTestPermissionsChanged": "Some permissions are off. Your previous test used different settings.",
+  "alarmVolumeOf": "Alarm volume: {volume} of {maximum}",
+  "@alarmVolumeOf": {
+    "placeholders": {
+      "volume": {
+        "type": "Object"
+      },
+      "maximum": {
+        "type": "Object"
+      }
+    }
+  },
+  "mutedAlarmTestHint": "The alarm is muted. Turn up the volume before testing.",
+  "audibleVolumeHint": "Choose a volume you can hear from bed.",
+  "adjustVolume": "Adjust volume",
+  "testAlarm": "Test alarm",
+  "saveAlarmForTestHint": "Save an alarm first. The test will use its sound and snooze settings.",
+  "createAlarm": "Create alarm",
+  "alarmToTest": "Alarm to test",
+  "lockPhoneForTestHint": "Your regular schedule stays in place. Start the test, lock your phone and keep it nearby. Dismiss the test alarm when it rings.",
+  "ringAfter": "Ring after",
+  "testInSeconds": "{seconds, plural, one{Test in {seconds} second} other{Test in {seconds} seconds}}",
+  "@testInSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "allowNotificationsAndAlarmsFirst": "Allow notifications and alarms first.",
+  "iosTestStopHint": "On iPhone, the system Stop button dismisses the alarm without a challenge. Open the app to take the challenge.",
+  "reliabilityAndProtection": "Reliability and protection",
+  "restartAndSystemSettings": "Restart and system settings",
+  "afterARestart": "After a restart",
+  "androidRestartRecoveryDescription": "An active alarm resumes when Android restarts and keeps ringing until dismissed. Your schedule and snooze time used are saved. Test recovery on your phone.",
+  "recoverySupportUnknown": "Couldn’t confirm alarm recovery on this device. Refresh the status and test an alarm after restarting.",
+  "powerMenu": "Power menu",
+  "powerMenuProtectionActive": "Protection is on. Recognized power menus close while your alarm rings. Test it on your phone.",
+  "powerMenuPermissionHint": "Close the power menu while an alarm rings. Requires a separate Android permission. Some phones are unsupported.",
+  "turnOffPowerMenuProtection": "Turn off power menu protection",
+  "turnOnPowerMenuProtection": "Turn on power menu protection",
+  "batteryOptimizationIsRestrictingTheApp": "Battery optimization is restricting the app",
+  "batteryOptimizationExemptionIsOn": "Battery optimization exemption is on",
+  "checkBatteryRestrictions": "Check battery restrictions",
+  "batteryExemptionHint": "An exemption helps alarms work in the background. Some phones also require you to allow auto-start in app settings.",
+  "allowUnrestrictedBatteryUse": "Allow unrestricted battery use",
+  "openBatterySettings": "Open battery settings",
+  "appSettingsAndAutoStart": "App settings and auto-start",
+  "uninstallProtection": "Uninstall protection",
+  "deviceAdminEnabledHint": "Device administrator is active. Turn off protection before uninstalling the app. You can do this here or in system settings.",
+  "uninstallProtectionHint": "Adds a step before uninstalling the app while half asleep. Android will ask for permission separately.",
+  "deviceAdminUnavailableHint": "Device administrator is unavailable here. Alarms can ring without this protection.",
+  "turnOffUninstallProtectionLabel": "Turn off uninstall protection",
+  "turnOnUninstallProtectionLabel": "Turn on uninstall protection",
+  "androidIsTurningOffProtection": "Android is turning off protection…",
+  "androidRecoveryLimitations": "You can still force a restart with the hardware buttons or force-stop the app in Android settings. After a force stop, reopen the app and restore the schedule. If you use Do Not Disturb, allow alarms in your phone’s sound settings.",
+  "restoreSchedule": "Restore schedule",
+  "exploreFiveMore": "Explore Five More",
+  "previewPlatformDescription": "System alarms are unavailable on this platform. Save a draft and try the challenges in silent practice mode.",
+  "createADraft": "Create a draft",
+  "didYouHearTheAlarm": "Did you hear the alarm?",
+  "lockYourPhoneNow": "Lock your phone now",
+  "ringsInS": "Rings in {seconds} s",
+  "@ringsInS": {
+    "placeholders": {
+      "seconds": {
+        "type": "Object"
+      }
+    }
+  },
+  "reportAudibilityHint": "Tell us whether you heard the alarm with your screen locked. Only you can confirm the sound. Your answer stops the test alarm if it’s still ringing.",
+  "waitingForTestAlarmHint": "Keep your phone nearby and wait for the sound. Then open the app and record the result. You can leave this screen without canceling the test.",
+  "yesIHeardIt": "Yes, I heard it",
+  "iDidntHearIt": "I didn’t hear it",
+  "cancelTest": "Cancel test",
+  "reportedHeardOn": "You reported hearing the alarm{date}",
+  "@reportedHeardOn": {
+    "placeholders": {
+      "date": {
+        "type": "Object"
+      }
+    }
+  },
+  "reportedSilentOn": "You reported no sound{date}",
+  "@reportedSilentOn": {
+    "placeholders": {
+      "date": {
+        "type": "Object"
+      }
+    }
+  },
+  "runTheTestAgainIfYouChange": "Run the test again if you change your phone settings.",
+  "failedSoundTestAdvice": "Check alarm volume, permissions and battery restrictions. Then repeat the test with your screen locked.",
+  "allowed": "Allowed",
+  "off": "Off",
+  "allow": "Allow {permission}",
+  "@allow": {
+    "placeholders": {
+      "permission": {
+        "type": "Object"
+      }
+    }
+  },
+  "couldntDismissTheAlarmTryAgain": "Couldn’t dismiss the alarm. Try again.",
+  "couldntLowerTheVolume": "Couldn’t lower the volume.",
+  "quieterS": "Quieter · {seconds} s",
+  "@quieterS": {
+    "placeholders": {
+      "seconds": {
+        "type": "Object"
+      }
+    }
+  },
+  "quietLimitReached": "Quiet limit reached",
+  "thisAlarmHasAlreadyEnded": "This alarm has already ended.",
+  "alarmChangedReopenHint": "This alarm has changed. Go back to the home screen and open it again.",
+  "emergencyDismissal": "Emergency dismissal",
+  "alarmTest": "Alarm test",
+  "snoozedUntil": "Snoozed until {time}",
+  "@snoozedUntil": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "finishThisWakeUpToTurnOff": "Finish this wake-up to turn off the alarm.",
+  "youCanDismissTheAlarmNow": "You can dismiss the alarm now.",
+  "minOfSnoozeTimeLeft": "{minutes} min of snooze time left",
+  "@minOfSnoozeTimeLeft": {
+    "placeholders": {
+      "minutes": {
+        "type": "Object"
+      }
+    }
+  },
+  "noSnoozeTimeLeftLabel": "No snooze time left",
+  "difficultyAfterSnooze": "Difficulty after snooze: {level}",
+  "@difficultyAfterSnooze": {
+    "placeholders": {
+      "level": {
+        "type": "Object"
+      }
+    }
+  },
+  "dismissAndTurnOff": "Dismiss and turn off",
+  "dismissAlarm": "Dismiss alarm",
+  "tryDismissingAgain": "Try dismissing again",
+  "snoozeMinRingsAt": "Snooze {minutes} min · rings at {time}",
+  "@snoozeMinRingsAt": {
+    "placeholders": {
+      "minutes": {
+        "type": "Object"
+      },
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "minOfSnoozeTimeWillRemain": "{minutes} min of snooze time will remain",
+  "@minOfSnoozeTimeWillRemain": {
+    "placeholders": {
+      "minutes": {
+        "type": "Object"
+      }
+    }
+  },
+  "snoozeForMin": "Snooze for {minutes} min",
+  "@snoozeForMin": {
+    "placeholders": {
+      "minutes": {
+        "type": "Object"
+      }
+    }
+  },
+  "dawn": "DAWN",
+  "rise": "RISE",
+  "rest": "REST",
+  "noon": "NOON",
+  "five": "FIVE",
+  "findMoreHoldToChooseSnoozeTime": "Find MORE · hold to choose snooze time",
+  "more": "MORE",
+  "movingSnoozeHint": "MORE. Snooze for {minutes} min. Hold to choose snooze time.",
+  "@movingSnoozeHint": {
+    "placeholders": {
+      "minutes": {
+        "type": "Object"
+      }
+    }
+  },
+  "difficulty": "Difficulty: {level}",
+  "@difficulty": {
+    "placeholders": {
+      "level": {
+        "type": "Object"
+      }
+    }
+  },
+  "snoozeMin": "Snooze {minutes} min",
+  "@snoozeMin": {
+    "placeholders": {
+      "minutes": {
+        "type": "Object"
+      }
+    }
+  },
+  "mathChallenge": "Math",
+  "memory": "Memory",
+  "colors": "Colors",
+  "numberOrder": "Number order",
+  "mirrorText": "Mirror text",
+  "pictureCode": "Picture code",
+  "qrCode": "QR code",
+  "shake": "Shake",
+  "maze": "Maze",
+  "flags": "Flags",
+  "mix": "Mix",
+  "solveAFewSumsToWakeUp": "Solve a few sums to wake up your mind",
+  "rememberThePatternAndTapTheSame": "Remember the pattern and tap the same squares",
+  "chooseTheInkColorIgnoringTheWord": "Choose the ink color, ignoring the word",
+  "sequenceChallengeDescription": "Find the numbers and tap them in order",
+  "mirrorChallengeDescription": "Read the mirrored phrase and type it normally",
+  "readAndEnterTheLettersAndNumbers": "Read and enter the letters and numbers in the image",
+  "qrChallengeDescription": "Walk to your saved QR code and scan it",
+  "wakeUpYourPhoneWithASeries": "Wake up your phone with a series of shakes",
+  "tiltYourPhoneToGuideTheBall": "Tilt your phone to guide the ball around the holes",
+  "identifyTheCountryByItsFlag": "Identify the country by its flag",
+  "shuffleTheChallengesOrChooseYourOwn": "Shuffle the challenges or choose your own order",
+  "relaxed": "Relaxed",
+  "medium": "Medium",
+  "hard": "Hard",
+  "extreme": "Extreme",
+  "anEasyStart": "An easy start",
+  "timeToWakeUp": "Time to wake up",
+  "mentalMathAndFocusChallenges": "Mental math and focus challenges",
+  "moreStepsFewerHints": "More steps, fewer hints",
+  "red": "Red",
+  "blue": "Blue",
+  "yellow": "Yellow",
+  "green": "Green",
+  "purple": "Purple",
+  "mirrorEasyRise": "time to get up",
+  "mirrorEasyMorning": "morning is here",
+  "mirrorEasyDawn": "a brand new dawn",
+  "mirrorEasySleep": "sleep is over",
+  "mirrorMediumEarly": "I choose an early start",
+  "mirrorMediumMorning": "the morning begins today",
+  "mirrorMediumStep": "the first step is done",
+  "mirrorMediumDaybreak": "daybreak is just outside",
+  "mirrorExtremeBedtime": "tomorrow morning starts with choosing to go to bed on time tonight",
+  "mirrorExtremeMorning": "I choose to get up now and give myself a peaceful start to the day",
+  "mirrorExtremeStep": "a small step into the morning helps me take a bigger step toward my goal",
+  "mirrorHardAlarm": "today I get up when the first alarm rings",
+  "mirrorHardMorning": "a new morning begins with a small step",
+  "mirrorHardEyes": "I open my eyes and start a brand new day",
+  "mirrorHardDay": "it is time to wake up and greet the new day",
+  "challengeProgressRestoreError": "Couldn’t restore your challenge progress. You can start again.",
+  "incorrectStartAgainAtTheFirstStage": "Incorrect. Start again at the first stage.",
+  "incorrectGoBackOneStage": "Incorrect. Go back one stage.",
+  "challengeProgressSaveError": "Progress hasn’t been saved yet. This stage may repeat if you restart.",
+  "challengeComplete": "All done. Good morning!",
+  "correctKeepGoing": "Correct. Keep going.",
+  "testAlarmLabel": "Test alarm",
+  "leavePractice": "Leave practice",
+  "challengeProgress": "Challenges completed: {completed} of {total}",
+  "@challengeProgress": {
+    "placeholders": {
+      "completed": {
+        "type": "Object"
+      },
+      "total": {
+        "type": "Object"
+      }
+    }
+  },
+  "readTheMirroredPhraseAndTypeItLabel": "Read the mirrored phrase and type it normally.",
+  "captchaInstructions": "Enter the letters and numbers in the image. The letters are from the Latin alphabet.",
+  "mirroredPhraseForVisualReading": "Mirrored phrase for visual reading",
+  "imageOfACodeForVisualReading": "Image of a code for visual reading",
+  "answer": "Answer",
+  "code": "Code",
+  "punctuationIsOptional": "Punctuation is optional",
+  "caseDoesntMatter": "Case doesn’t matter",
+  "incorrectAnswer": "Incorrect answer",
+  "checkAnswer": "Check answer",
+  "wikiquoteAttribution": "Wikiquote page · CC BY-SA 4.0. Markup and line breaks removed.",
+  "visualChallengeAccessibilityHint": "This is a visual challenge. In practice, you can choose another one. During an alarm, emergency dismissal is available.",
+  "enterYourAnswer": "Enter your answer",
+  "check": "Check",
+  "chooseTheCorrectAnswer": "Choose the correct answer",
+  "rememberThePattern": "Remember the pattern",
+  "markedSquares": "{count, plural, one{{count} marked square} other{{count} marked squares}}",
+  "@markedSquares": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "rowColumn": "Row {row}, column {column}",
+  "@rowColumn": {
+    "placeholders": {
+      "row": {
+        "type": "Object"
+      },
+      "column": {
+        "type": "Object"
+      }
+    }
+  },
+  "imReady": "I’m ready",
+  "reviewThePattern": "Review the pattern",
+  "repeatThePattern": "Repeat the pattern",
+  "memoryFeedbackLegend": "A check marks a correct square, a cross marks an extra one and a circle marks a missed one.",
+  "thereAreMarkedSquares": "{count, plural, one{There is {count} marked square} other{There are {count} marked squares}}",
+  "@thereAreMarkedSquares": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ofSelected": "{selected} of {total} selected",
+  "@ofSelected": {
+    "placeholders": {
+      "selected": {
+        "type": "Object"
+      },
+      "total": {
+        "type": "Object"
+      }
+    }
+  },
+  "memoryCellFeedback": "Row {row}, column {column}{feedback}",
+  "@memoryCellFeedback": {
+    "placeholders": {
+      "row": {
+        "type": "Object"
+      },
+      "column": {
+        "type": "Object"
+      },
+      "feedback": {
+        "type": "Object"
+      }
+    }
+  },
+  "missed": ", missed",
+  "extraSquare": ", extra square",
+  "tryAgain": "Try again",
+  "someSquaresDontMatchCompareYourAnswer": "Some squares don’t match. Compare your answer with the pattern.",
+  "showAgain": "Show again",
+  "whatColorIsTheText": "What color is the text?",
+  "focusOnTheInkColor": "Focus on the ink color",
+  "theWordIsTheInkIsChoose": "The word is {word}. The ink is {ink}. Choose the ink color.",
+  "@theWordIsTheInkIsChoose": {
+    "placeholders": {
+      "word": {
+        "type": "Object"
+      },
+      "ink": {
+        "type": "Object"
+      }
+    }
+  },
+  "tapInOrder": "Tap in order",
+  "from1ToFindTheNextNumber": "From 1 to {count}. Find the next number.",
+  "@from1ToFindTheNextNumber": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      }
+    }
+  },
+  "allNumbersFound": "All numbers found",
+  "next": "Next: {number}",
+  "@next": {
+    "placeholders": {
+      "number": {
+        "type": "Object"
+      }
+    }
+  },
+  "number": "Number {number}",
+  "@number": {
+    "placeholders": {
+      "number": {
+        "type": "Object"
+      }
+    }
+  },
+  "selected": "Selected",
+  "notSelected": "Not selected",
+  "countryFrance": "France",
+  "countryItaly": "Italy",
+  "countryGermany": "Germany",
+  "countryNetherlands": "Netherlands",
+  "countryRussia": "Russia",
+  "countryUkraine": "Ukraine",
+  "countryPoland": "Poland",
+  "countryIndonesia": "Indonesia",
+  "countryJapan": "Japan",
+  "countryBangladesh": "Bangladesh",
+  "countryBelgium": "Belgium",
+  "countryIreland": "Ireland",
+  "countryIvoryCoast": "Ivory Coast",
+  "countryRomania": "Romania",
+  "countryHungary": "Hungary",
+  "countryBulgaria": "Bulgaria",
+  "countryAustria": "Austria",
+  "countryLithuania": "Lithuania",
+  "countryEstonia": "Estonia",
+  "countryLuxembourg": "Luxembourg",
+  "countryNigeria": "Nigeria",
+  "countryGuinea": "Guinea",
+  "countryMali": "Mali",
+  "countryYemen": "Yemen",
+  "flagQuestion": "Which country does this flag belong to?",
+  "flagDescription": "Flag with {direction} stripes. Visual challenge.",
+  "@flagDescription": {
+    "placeholders": {
+      "direction": {
+        "type": "Object"
+      }
+    }
+  },
+  "vertical": "vertical",
+  "horizontal": "horizontal",
+  "countryName": "Country name",
+  "couldntReadQuoteSettingsReopenThisScreen": "Couldn’t read quote settings. Reopen this screen.",
+  "couldntSaveTheSettingTryAgain": "Couldn’t save the setting. Try again.",
+  "quoteDownloadStopped": "Download stopped. Your saved quotes are still available.",
+  "youCanDownloadMoreQuotesLater": "You can download more quotes later.",
+  "quotesAdded": "Quotes added: {count}.",
+  "@quotesAdded": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      }
+    }
+  },
+  "noNewQuotesYet": "No new quotes yet.",
+  "quoteDownloadIncomplete": "{added}Couldn’t finish downloading from {sources}. Try again later.",
+  "@quoteDownloadIncomplete": {
+    "placeholders": {
+      "added": {
+        "type": "Object"
+      },
+      "sources": {
+        "type": "Object"
+      }
+    }
+  },
+  "couldntSaveTheNewQuotesTryAgain": "Couldn’t save the new quotes. Try again.",
+  "mirrorTextPhrases": "Mirror text phrases",
+  "downloadQuotes": "Download quotes",
+  "sayingsAndQuotesFromBooksAndFilms": "Sayings and quotes from books and films on Wikiquote and Citaty.info",
+  "sayingsAndQuotesFromWikiquote": "Sayings and quotes from Wikiquote",
+  "streetwiseQuotes": "Streetwise quotes",
+  "quotesToDigitalMayContainStrongLanguage": "quotes.to.digital · May contain strong language",
+  "availableInTheMobileApp": "Available in the mobile app",
+  "offlineQuotes": "Offline quotes: {count}",
+  "@offlineQuotes": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      }
+    }
+  },
+  "quotesWillBeAvailableOfflineAfterDownloading": "Quotes will be available offline after downloading.",
+  "downloading": "Downloading…",
+  "downloadMore": "Download more",
+  "cameraPermissionHint": "Camera unavailable. Allow camera access in your phone settings and try again.",
+  "couldntStartTheCameraTryAgain": "Couldn’t start the camera. Try again.",
+  "chooseAQrCodeSomewhereYoullNeed": "Choose a QR code somewhere you’ll need to walk to in the morning.",
+  "walkToYourQrCodeAndPoint": "Walk to your QR code and point the camera at it.",
+  "qrMobileOnly": "Use the mobile app to scan and verify your saved QR code.",
+  "openCamera": "Open camera",
+  "cameraUnavailableCheckCameraPermission": "Camera unavailable. Check camera permission.\n{error}",
+  "@cameraUnavailableCheckCameraPermission": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "qrMismatch": "That’s a different QR code. Find the one you registered.",
+  "retryCamera": "Retry camera",
+  "shakeIsAvailableOnPhonesTheBrowser": "Shake is available on phones. The browser can only preview the challenge.",
+  "motionSensorUnavailableYouCanUseEmergency": "Motion sensor unavailable. You can use emergency dismissal.",
+  "wakeUpYourPhone": "Wake up your phone",
+  "shakeInstructions": "Hold your phone securely and shake it back and forth in short strokes. There’s no need to shake harder.",
+  "shakeCount": "{count} / {target} shakes{duration}",
+  "@shakeCount": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      },
+      "target": {
+        "type": "Object"
+      },
+      "duration": {
+        "type": "Object"
+      }
+    }
+  },
+  "atLeastS": " · at least {seconds} s",
+  "@atLeastS": {
+    "placeholders": {
+      "seconds": {
+        "type": "Object"
+      }
+    }
+  },
+  "shakeProgress": "Shake progress",
+  "tiltSensorUnavailableYouCanStillUse": "Tilt sensor unavailable. You can still use emergency dismissal.",
+  "guideTheBallToTheFinish": "Guide the ball to the finish",
+  "inThisPreviewDragOnTheBoard": "In this preview, drag on the board. On a phone, tilt to move.",
+  "tiltYourPhoneFallingIntoAHole": "Tilt your phone. Falling into a hole takes you back one stage.",
+  "tiltCalibrated": "Tilt calibrated",
+  "calibrateTilt": "Calibrate tilt",
+  "tiltCalibrationHint": "Hold your phone comfortably and tap the button to set the neutral position.",
+  "historyRefreshError": "Couldn’t refresh history. Your saved data is available.",
+  "olderEventsHaventLoadedYetTryAgain": "Older events haven’t loaded yet. Try again.",
+  "yourMornings": "Your mornings",
+  "refreshHistory": "Refresh history",
+  "allTime": "All time",
+  "days": "{count, plural, one{{count} day} other{{count} days}}",
+  "@days": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "dateRange": "Date range…",
+  "historySavedOnThisPhone": "History saved on this phone",
+  "savedSummaryFromTheServerRefreshUnavailable": "Saved summary from the server · refresh unavailable",
+  "syncedChartScope": "Charts include all synced data for this period",
+  "noMorningEventsYet": "No morning events yet.",
+  "inTheSelectedPeriod": "{count} in the selected period",
+  "@inTheSelectedPeriod": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      }
+    }
+  },
+  "snoozes": "snoozes",
+  "daysPerBar": "{count, plural, one{Each bar represents {count} day} other{Each bar represents {count} days}}",
+  "@daysPerBar": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "howAlarmsEnded": "How alarms ended",
+  "byWakeUp": "By wake-up",
+  "timeToDismiss": "Time to dismiss",
+  "minutesStandardDismissal": "Minutes · standard dismissal",
+  "dailyAverageStandardDismissal": "Daily average · standard dismissal",
+  "noDismissalTimeSamples": "No alarms with both a ring and a standard dismissal yet.",
+  "sleepAndWellBeing": "Sleep and well-being",
+  "estimatedSleepAndYourRatings": "Estimated sleep and your ratings",
+  "noSleepRatingsYet": "No sleep ratings yet.",
+  "hrEstimatedSleep": "hr · estimated sleep",
+  "averageRatingOutOf5": "average rating out of 5",
+  "sleepRatingInsight": "Your highest ratings followed about {hours} hr of sleep: {rating} out of 5 across {samples} observations. This is based on your own ratings.",
+  "@sleepRatingInsight": {
+    "placeholders": {
+      "hours": {
+        "type": "Object"
+      },
+      "rating": {
+        "type": "Object"
+      },
+      "samples": {
+        "type": "Object"
+      }
+    }
+  },
+  "events": "Events",
+  "loadedForThisPeriod": "{count} loaded for this period",
+  "@loadedForThisPeriod": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      }
+    }
+  },
+  "loading": "Loading…",
+  "show50More": "Show 50 more",
+  "practiceSessionsAreExcludedFromHistory": "Practice sessions are excluded from history.",
+  "myGoal": "My goal",
+  "optionalOnlyOnThisPhone": "Optional · only on this phone",
+  "editPersonalGoal": "Edit personal goal",
+  "ratingCoverage": "Sleep ratings on this phone: {ratings}. Times edited manually: {edited}. Dates without a rating: {missing}. Missing ratings are excluded from averages.",
+  "@ratingCoverage": {
+    "placeholders": {
+      "ratings": {
+        "type": "Object"
+      },
+      "edited": {
+        "type": "Object"
+      },
+      "missing": {
+        "type": "Object"
+      }
+    }
+  },
+  "sleepEstimateSources": "Sleep start estimates: {fromAlarm} based on alarm setup, {usual} on your usual bedtime and {manual} entered manually.",
+  "@sleepEstimateSources": {
+    "placeholders": {
+      "fromAlarm": {
+        "type": "Object"
+      },
+      "usual": {
+        "type": "Object"
+      },
+      "manual": {
+        "type": "Object"
+      }
+    }
+  },
+  "targetDurationMin": "Target duration: {minutes} min",
+  "@targetDurationMin": {
+    "placeholders": {
+      "minutes": {
+        "type": "Object"
+      }
+    }
+  },
+  "noRatingsToCompareYet": "No ratings to compare yet.",
+  "hr": "hr",
+  "sleepDurationChartHint": "Each point represents one sleep, including naps. Times are estimates.",
+  "scheduleMin": "Schedule: {bedtime} – {wakeTime} · ±{tolerance} min",
+  "@scheduleMin": {
+    "placeholders": {
+      "bedtime": {
+        "type": "Object"
+      },
+      "wakeTime": {
+        "type": "Object"
+      },
+      "tolerance": {
+        "type": "Object"
+      }
+    }
+  },
+  "scheduleDeviationDescription": "The larger of the bedtime and wake-up deviations",
+  "regularityCoverage": "Eligible ratings: {eligible}. Outside the ±6 hr wake-up window: {outside}, shown separately under duration. Missing an original estimate or time zone: {missing}.",
+  "@regularityCoverage": {
+    "placeholders": {
+      "eligible": {
+        "type": "Object"
+      },
+      "outside": {
+        "type": "Object"
+      },
+      "missing": {
+        "type": "Object"
+      }
+    }
+  },
+  "bedtimeEstimateMethod": "Bedtime is estimated by subtracting the saved time to fall asleep from estimated sleep onset. Times use the local time zone saved with the rating and account for midnight.",
+  "dismissed": "Dismissed",
+  "emergency": "Emergency",
+  "missedTimedOut": "Missed / timed out",
+  "targetLine": "Target line: {value} {unit}",
+  "@targetLine": {
+    "placeholders": {
+      "value": {
+        "type": "Object"
+      },
+      "unit": {
+        "type": "Object"
+      }
+    }
+  },
+  "aMessageFromYourMorningSelf": "A message from your morning self",
+  "morningMessageDescription": "Record how it felt to get up. Tonight, listen to your sleepy self for a reminder of why you wanted an earlier bedtime.",
+  "save": "Save · {duration}",
+  "@save": {
+    "placeholders": {
+      "duration": {
+        "type": "Object"
+      }
+    }
+  },
+  "recordVoiceMessage": "Record voice message",
+  "add5MinutesLeft": "Add 5 minutes · {duration} left",
+  "@add5MinutesLeft": {
+    "placeholders": {
+      "duration": {
+        "type": "Object"
+      }
+    }
+  },
+  "recordForUpTo5MinutesAdd": "Record for up to 5 minutes. Add more time or save early.",
+  "timeToFallAsleep": "Time to fall asleep",
+  "remindMeAtBedtime": "Remind me at bedtime",
+  "theNotificationOpensYourMorningRecordings": "The notification opens your morning recordings",
+  "myBedtimeIs": "My bedtime is {time}",
+  "@myBedtimeIs": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "bedtime": "Bedtime",
+  "morningRecordings": "Morning recordings · {count}",
+  "@morningRecordings": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      }
+    }
+  },
+  "yourFirstMessageWillAppearHereAfter": "Your first message will appear here after you record it.",
+  "stopPlayback": "Stop playback",
+  "playRecording": "Play recording",
+  "deleteRecording": "Delete recording",
+  "deleteThisRecording": "Delete this recording?",
+  "keep": "Keep",
+  "wholeNumberFromTo": "Whole number from {minimum} to {maximum}",
+  "@wholeNumberFromTo": {
+    "placeholders": {
+      "minimum": {
+        "type": "Object"
+      },
+      "maximum": {
+        "type": "Object"
+      }
+    }
+  },
+  "personalGoalPrivacy": "Choose a personal goal. It stays on this phone and doesn’t change your alarms.",
+  "sleepDuration": "Sleep duration",
+  "targetDuration": "Target duration",
+  "regularSchedule": "Regular schedule",
+  "goToBedAt": "Go to bed at",
+  "hhMm": "HH:MM",
+  "enterATimeFrom0000To": "Enter a time from 00:00 to 23:59",
+  "wakeUpAt": "Wake up at",
+  "allowedVariation": "Allowed variation",
+  "bedtimeComparisonHint": "Times are compared in local time. Bedtime is estimated from your sleep entry.",
+  "couldntSaveTheGoalTryAgain": "Couldn’t save the goal. Try again.",
+  "saveGoal": "Save goal",
+  "sleepEnding": "Sleep ending {date}",
+  "@sleepEnding": {
+    "placeholders": {
+      "date": {
+        "type": "Object"
+      }
+    }
+  },
+  "sleepQuality": "Sleep quality",
+  "label1Poor5Good": "1 = poor · 5 = good",
+  "easeOfWaking": "Ease of waking",
+  "label1Difficult5Easy": "1 = difficult · 5 = easy",
+  "estimatedTimeYouFellAsleep": "Estimated time you fell asleep",
+  "enteredManually": "entered manually",
+  "usualBedtime": "usual bedtime",
+  "alarmSetupMin": "alarm setup + {minutes} min",
+  "@alarmSetupMin": {
+    "placeholders": {
+      "minutes": {
+        "type": "Object"
+      }
+    }
+  },
+  "whenDidYouFallAsleep": "When did you fall asleep?",
+  "wakeUpTime": "Wake-up time",
+  "whenDidYouWakeUp": "When did you wake up?",
+  "iSleptAgainBetweenAlarms": "I slept again between alarms",
+  "splitSleepExplanation": "When off, these alarms count as one sleep. Turn on to save the last wake-up separately, then enter when you fell asleep again.",
+  "whenDidYouFallAsleepAgain": "When did you fall asleep again?",
+  "estimatedSleep": "Estimated sleep: {duration}",
+  "@estimatedSleep": {
+    "placeholders": {
+      "duration": {
+        "type": "Object"
+      }
+    }
+  },
+  "sleepNote": "Sleep note",
+  "whatWouldYouLikeToRememberAbout": "What would you like to remember about this night?",
+  "optionalSavedOnThisDevice": "Optional · saved on this device",
+  "wakeTimeEstimateHint": "You can adjust these times. Dismissing an alarm doesn’t confirm when you woke up.",
+  "invalidSleepInterval": "Sleep start must be before wake-up. Check the times.",
+  "couldntSaveTheRatingTryAgain": "Couldn’t save the rating. Try again.",
+  "saveRating": "Save rating",
+  "chooseADateToRateYourSleep": "Choose a date to rate your sleep or edit a saved entry.",
+  "skipAllUnrated": "Skip all unrated ({count})",
+  "@skipAllUnrated": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      }
+    }
+  },
+  "sleepDiaryEmpty": "Sleep entries will appear here after you dismiss an alarm.",
+  "sleepRatingsSummary": "Sleep {sleep}/5 · waking up {wake}/5{note}",
+  "@sleepRatingsSummary": {
+    "placeholders": {
+      "sleep": {
+        "type": "Object"
+      },
+      "wake": {
+        "type": "Object"
+      },
+      "note": {
+        "type": "Object"
+      }
+    }
+  },
+  "ratingSkipped": "Rating skipped",
+  "unrated": "Unrated",
+  "couldntCompleteTheActionTryAgain": "Couldn’t complete the action. Try again.",
+  "saveYourRecoveryKey": "Save your recovery key",
+  "recoveryKeyExplanation": "This key lets you recover your account if you lose all your passkeys. Recovery replaces this key and revokes access for previous devices and passkeys. Save it in your password manager.",
+  "copyKey": "Copy key",
+  "iveSavedMyKey": "I’ve saved my key",
+  "syncIsAvailableInTheMobileApp": "Sync is available in the mobile app.",
+  "takeYourHistoryWithYou": "Take your history with you",
+  "historySyncPrivacy": "Sync your alarm history and sleep ratings to access them on another phone. The server can read this data. Your alarms work without an account.",
+  "serverAddress": "Server address",
+  "passkeyRegistrationError": "Couldn’t finish registering your passkey. Try again.",
+  "enableWithPasskey": "Enable with passkey",
+  "passkeySignInError": "Couldn’t sign in with your passkey. Try again.",
+  "signInWithPasskey": "Sign in with passkey",
+  "recoverAccess": "Recover access",
+  "recoveryKey": "Recovery key",
+  "accountRecoveryError": "Couldn’t recover access. Check your recovery key and try again.",
+  "recover": "Recover",
+  "saveRecoveryKey": "Save recovery key",
+  "historyAndSleepRatings": "History and sleep ratings",
+  "sendChangesWhileTheAppIsOpen": "Send changes while the app is open",
+  "uploadVoiceRecordings": "Upload voice recordings",
+  "theServerCanReadTheseRecordingsAvailable": "The server can read these recordings. Available only for this account.",
+  "syncing": "Syncing…",
+  "notSyncedYet": "Not synced yet",
+  "lastSynced": "Last synced: {date}",
+  "@lastSynced": {
+    "placeholders": {
+      "date": {
+        "type": "Object"
+      }
+    }
+  },
+  "syncNow": "Sync now",
+  "ratingConflictPrompt": "This rating changed on two devices. Which version do you want to keep?",
+  "thisPhonesVersion": "This phone’s version",
+  "serverVersion": "Server version",
+  "accountAccess": "Account access",
+  "couldntAddAPasskeyTryAgain": "Couldn’t add a passkey. Try again.",
+  "addPasskey": "Add passkey",
+  "thisSession": "This session",
+  "anotherDeviceOrSession": "Another device or session",
+  "revokeAccess": "Revoke access",
+  "accountId": "Account ID",
+  "accountIdCopied": "Account ID copied",
+  "copy": "Copy",
+  "signOutOnThisPhone": "Sign out on this phone?",
+  "signOutConfirmation": "Sync will stop. Your alarms and local history will stay on this phone.",
+  "signOut": "Sign out",
+  "signOutOnThisPhoneLabel": "Sign out on this phone",
+  "deleteAccount": "Delete account?",
+  "deleteAccountConfirmation": "This removes your account, history and audio from active server storage. Local recordings and alarms stay on this phone.",
+  "deleteAccountAndServerHistory": "Delete account and server history",
+  "alarmFor": "Alarm for {time}",
+  "@alarmFor": {
+    "placeholders": {
+      "time": {
+        "type": "Object"
+      }
+    }
+  },
+  "shortMonday": "Mon",
+  "shortTuesday": "Tue",
+  "shortWednesday": "Wed",
+  "shortThursday": "Thu",
+  "shortFriday": "Fri",
+  "shortSaturday": "Sat",
+  "shortSunday": "Sun",
+  "weekends": "Weekends",
+  "alarmSet": "Alarm set",
+  "alarmRang": "Alarm rang",
+  "snoozeLabel": "Snooze #{count}",
+  "@snoozeLabel": {
+    "placeholders": {
+      "count": {
+        "type": "Object"
+      }
+    }
+  },
+  "alarmDismissed": "Alarm dismissed",
+  "stoppedAfter15Minutes": "Stopped after 15 minutes",
+  "alarmCanceled": "Alarm canceled",
+  "alarmMissed": "Alarm missed",
+  "couldntScheduleTheNextAlarm": "Couldn’t schedule the next alarm",
+  "alarmEvent": "Alarm event",
+  "wikiquote": "Wikiquote",
+  "gentle": "Gentle",
+  "buildUp": "Build up",
+  "relaxedMath5MinOfSnoozeTime": "Relaxed · math · 5 min of snooze time",
+  "math15MinOfSnoozeTimeIncreasing": "Math · 15 min of snooze time · increasing difficulty",
+  "mixedChallengesMediumDifficulty": "Mixed challenges · medium difficulty",
+  "allowExactAlarmsInYourPhoneSettings": "Allow exact alarms in your phone settings.",
+  "dismissBeforeScheduleChange": "Finish the current alarm before changing the schedule.",
+  "noSnoozeTimeLeftMessage": "No snooze time left.",
+  "quietUnavailable": "Lowering the volume is unavailable right now. Check the alarm status.",
+  "alarmNotFoundHint": "Alarm not found. Refresh the list and try again.",
+  "thisAlarmIsNoLongerRinging": "This alarm is no longer ringing.",
+  "thisActionCanOnlyCancelATest": "This action can only cancel a test alarm.",
+  "couldntScheduleTheTestAlarmTryAgain": "Couldn’t schedule the test alarm. Try again.",
+  "challengeSettingsSaveError": "Couldn’t save the challenge settings. Choose a challenge and difficulty again.",
+  "thisSettingIsUnavailableOnThisDevice": "This setting is unavailable on this device.",
+  "openSystemSettingError": "Couldn’t open this setting. Open it manually in your phone settings.",
+  "checkTheTimeRepeatDaysAndSnooze": "Check the time, repeat days and snooze settings.",
+  "schedulePermissionError": "Couldn’t schedule the alarm. Check system permissions.",
+  "emergencyStateSaveError": "The sound has stopped, but the alarm status couldn’t be confirmed. Free up space and check the schedule before relying on it.",
+  "onlyPracticeIsAvailableOnThisPlatform": "Only practice is available on this platform.",
+  "couldntSaveSettingsOnThisDevice": "Couldn’t save settings on this device.",
+  "thisFeatureIsAvailableInTheMobile": "This feature is available in the mobile app.",
+  "preview": "Preview",
+  "versionUnavailable": "Version unavailable",
+  "couldntSaveYourChoice": "Couldn’t save your choice",
+  "couldntSaveQuotes": "Couldn’t save quotes",
+  "bedtimeNotScheduled": "Bedtime reminder wasn’t scheduled. Turn it on again.",
+  "bedtimeVerificationError": "Couldn’t verify the bedtime reminder. Turn it on again.",
+  "sleepDiaryReadError": "Couldn’t read the sleep diary. Restart the app.",
+  "sleepDiaryUnavailable": "Sleep diary unavailable",
+  "couldntSaveTheSleepDiary": "Couldn’t save the sleep diary",
+  "turnOnHistorySync": "Turn on history sync.",
+  "syncUnavailableLocalAlarmsAvailable": "Couldn’t open sync. Local alarms are available.",
+  "dismissBeforeSignIn": "Dismiss the alarm, then try signing in again.",
+  "signOutOfYourAccountFirst": "Sign out of your account first.",
+  "invalidServerAddress": "Enter an HTTPS server address without a path.",
+  "syncWillResumeAfterTheAlarm": "Sync will resume after the alarm.",
+  "enterTheHttpsServerAddressFirst": "Enter the HTTPS server address first.",
+  "signInToYourAccount": "Sign in to your account.",
+  "theServerResponseIsTooLarge": "The server response is too large.",
+  "syncPaused": "Sync paused.",
+  "yourSessionHasEndedSignInAgain": "Your session has ended. Sign in again.",
+  "recentPasskeyRequired": "To delete your account, sign out, sign in again with a passkey and retry within 5 minutes.",
+  "theServerDidntAllowThisAction": "The server didn’t allow this action.",
+  "storageOrRecordingSizeLimitReached": "Storage or recording size limit reached.",
+  "syncRateLimit": "Too many requests. Try again in a minute.",
+  "serverRejectedChanges": "The server didn’t accept the data. Your local copy is safe.",
+  "localHistoryAccountMismatch": "Local history belongs to another account. Sign in to that account.",
+  "historyAlreadyLinked": "This history is already linked to an account. Sign in with a passkey or recover access.",
+  "historyServerMismatch": "History is linked to another server. Restore the previous server address.",
+  "audioUploadsAreUnavailableForThisAccount": "Audio uploads are unavailable for this account.",
+  "syncConflictHint": "Another device made changes. Choose which version to keep.",
+  "syncOfflineRetry": "Server unavailable. Your data is saved on this phone. Sync will retry later.",
+  "turnOnAudioSync": "Turn on audio sync.",
+  "emergencyStop": "Emergency stop",
+  "emergencyCountdownInstructions": "Enter the code on screen, then start the one-minute countdown. The alarm keeps ringing.",
+  "emergencyHoldInstructions": "Enter the code on screen, then hold the button for 60 seconds. The alarm keeps ringing.",
+  "codeOnScreen": "Code on screen",
+  "codeDoesntMatch": "Code doesn’t match",
+  "accessibleEmergencyCountdownHint": "Start the countdown, wait one minute, then confirm. Leaving the app resets the countdown.",
+  "emergencyHoldResetHint": "Keep holding until the timer ends. Releasing the button or leaving the app resets the timer.",
+  "confirmStop": "Confirm stop",
+  "secondsRemaining": "{seconds} s left",
+  "@secondsRemaining": {
+    "placeholders": {
+      "seconds": {
+        "type": "Object"
+      }
+    }
+  },
+  "start60SecondCountdown": "Start 60-second countdown",
+  "holdFor60SecondsForAnEmergency": "Hold for 60 seconds for an emergency stop",
+  "holdForOneMinute": "Hold for 60 seconds",
+  "thisWillBeRecordedAsAnEmergency": "This will be recorded as an emergency stop.",
+  "backToChallenge": "Back to challenge",
+  "minutes": "Minutes",
+  "hours": "Hours",
+  "enterTheTimeOrSwipeTheDigits": "Enter the time or swipe the digits up or down",
+  "minuteDial": "Minute dial",
+  "label24HourDial": "24-hour dial",
+  "allAlarmSettings": "All alarm settings",
+  "appLanguage": "App language",
+  "systemLanguage": "System default",
+  "languageSaveError": "Couldn’t change the app language. Try again.",
+  "englishQuoteSource": "English quotes from Wikiquote",
+  "twelveHourDial": "12-hour dial",
+  "soundUnavailable": "This alarm sound is unavailable. Choose it again."
+}

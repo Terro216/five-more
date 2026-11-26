@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:five_more/services/local_database.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,8 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     await warmup.close();
   });
   setUp(() async {
+    TestWidgetsFlutterBinding.instance.platformDispatcher.localesTestValue =
+        const [Locale('ru')];
     SharedPreferences.setMockInitialValues({});
     LocalDatabase.instance = LocalDatabase(path: inMemoryDatabasePath);
     await LocalDatabase.instance.database;

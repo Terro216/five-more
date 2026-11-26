@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/theme.dart';
+import '../../l10n/strings.dart';
 import '../../services/sync_service.dart';
 
 class SyncScreen extends StatefulWidget {
@@ -34,7 +35,7 @@ class _SyncScreenState extends State<SyncScreen> {
 
   Future<void> _run(
     Future<void> Function() operation, {
-    String failureMessage = 'Не удалось завершить действие. Попробуй ещё раз.',
+    String? failureMessage,
   }) async {
     if (_working) return;
     setState(() {
@@ -45,7 +46,11 @@ class _SyncScreenState extends State<SyncScreen> {
       await operation();
     } catch (e) {
       if (mounted) {
-        setState(() => _error = e is SyncFailure ? e.message : failureMessage);
+        setState(
+          () => _error = e is SyncFailure
+              ? e.message
+              : failureMessage ?? appStrings.couldntCompleteTheActionTryAgain,
+        );
       }
     } finally {
       if (mounted) setState(() => _working = false);
@@ -61,27 +66,25 @@ class _SyncScreenState extends State<SyncScreen> {
         canPop: false,
         child: AlertDialog(
           scrollable: true,
-          title: const Text('Сохрани ключ восстановления'),
+          title: Text(context.strings.saveYourRecoveryKey),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Ключ поможет вернуть доступ, если потеряешь все ключи доступа (passkey). После восстановления этот ключ заменяется, прежние устройства и passkey отключаются. Сохрани его в менеджере паролей.',
-              ),
+              Text(context.strings.recoveryKeyExplanation),
               const SizedBox(height: 16),
               SelectableText(key),
               TextButton.icon(
                 onPressed: () => Clipboard.setData(ClipboardData(text: key)),
                 icon: const Icon(Icons.copy_rounded),
-                label: const Text('Скопировать ключ'),
+                label: Text(context.strings.copyKey),
               ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Я сохранил(а) ключ'),
+              child: Text(context.strings.iveSavedMyKey),
             ),
           ],
         ),
@@ -94,17 +97,20 @@ class _SyncScreenState extends State<SyncScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: sync,
     builder: (context, _) => Scaffold(
-      appBar: AppBar(title: const Text('Синхронизация')),
+      appBar: AppBar(title: Text(context.strings.syncLabel)),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           if (kIsWeb)
-            const Text('Синхронизация доступна в приложении для телефона.')
+            Text(context.strings.syncIsAvailableInTheMobileApp)
           else if (!sync.signedIn) ...[
-            const Text('История с тобой', style: AppTypography.heading),
+            Text(
+              context.strings.takeYourHistoryWithYou,
+              style: AppTypography.heading,
+            ),
             const SizedBox(height: 12),
             Text(
-              'История звонков и оценки сна сохранятся на сервере и будут доступны на другом телефоне. Сервер сможет читать эти данные. Будильники работают и без аккаунта.',
+              context.strings.historySyncPrivacy,
               style: TextStyle(color: context.palette.muted, height: 1.5),
             ),
             const SizedBox(height: 20),
@@ -113,8 +119,8 @@ class _SyncScreenState extends State<SyncScreen> {
                 controller: _endpoint,
                 enabled: !_working,
                 keyboardType: TextInputType.url,
-                decoration: const InputDecoration(
-                  labelText: 'Адрес сервера',
+                decoration: InputDecoration(
+                  labelText: context.strings.serverAddress,
                   hintText: 'https://…',
                 ),
               ),
@@ -129,27 +135,24 @@ class _SyncScreenState extends State<SyncScreen> {
                         await _showRecovery(await sync.register());
                         await sync.sync();
                       },
-                      failureMessage: 'Не удалось завершить регистрацию с ключом доступа. Попробуй ещё раз.',
+                      failureMessage: context.strings.passkeyRegistrationError,
                     ),
-              child: const Text('Включить с passkey'),
+              child: Text(context.strings.enableWithPasskey),
             ),
             const SizedBox(height: 8),
             OutlinedButton(
               onPressed: _working
                   ? null
-                  : () => _run(
-                      () async {
-                        sync.configureEndpoint(_endpoint.text);
-                        await sync.login();
-                        await sync.sync();
-                      },
-                      failureMessage: 'Не удалось войти с ключом доступа. Попробуй ещё раз.',
-                    ),
-              child: const Text('Войти с passkey'),
+                  : () => _run(() async {
+                      sync.configureEndpoint(_endpoint.text);
+                      await sync.login();
+                      await sync.sync();
+                    }, failureMessage: context.strings.passkeySignInError),
+              child: Text(context.strings.signInWithPasskey),
             ),
             const SizedBox(height: 16),
             ExpansionTile(
-              title: const Text('Восстановить доступ'),
+              title: Text(context.strings.recoverAccess),
               tilePadding: EdgeInsets.zero,
               children: [
                 TextField(
@@ -157,8 +160,8 @@ class _SyncScreenState extends State<SyncScreen> {
                   obscureText: true,
                   autocorrect: false,
                   enableSuggestions: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Ключ восстановления',
+                  decoration: InputDecoration(
+                    labelText: context.strings.recoveryKey,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -173,9 +176,9 @@ class _SyncScreenState extends State<SyncScreen> {
                             await _showRecovery(key);
                             await sync.sync();
                           },
-                          failureMessage: 'Не удалось восстановить доступ. Проверь ключ восстановления и попробуй ещё раз.',
+                          failureMessage: context.strings.accountRecoveryError,
                         ),
-                  child: const Text('Восстановить'),
+                  child: Text(context.strings.recover),
                 ),
               ],
             ),
@@ -185,14 +188,12 @@ class _SyncScreenState extends State<SyncScreen> {
                 onPressed: _working
                     ? null
                     : () => _run(() => _showRecovery(sync.pendingRecoveryKey)),
-                child: const Text('Сохранить ключ восстановления'),
+                child: Text(context.strings.saveRecoveryKey),
               ),
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
-              title: const Text('История и оценки сна'),
-              subtitle: const Text(
-                'Отправлять изменения при открытом приложении',
-              ),
+              title: Text(context.strings.historyAndSleepRatings),
+              subtitle: Text(context.strings.sendChangesWhileTheAppIsOpen),
               value: sync.enabled,
               onChanged: _working
                   ? null
@@ -201,9 +202,9 @@ class _SyncScreenState extends State<SyncScreen> {
             if (sync.audioAllowed)
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Загружать голосовые'),
-                subtitle: const Text(
-                  'Записи доступны серверу. Только для этого аккаунта.',
+                title: Text(context.strings.uploadVoiceRecordings),
+                subtitle: Text(
+                  context.strings.theServerCanReadTheseRecordingsAvailable,
                 ),
                 value: sync.audioEnabled,
                 onChanged: _working
@@ -213,10 +214,12 @@ class _SyncScreenState extends State<SyncScreen> {
             const SizedBox(height: 12),
             Text(
               sync.busy
-                  ? 'Синхронизируем…'
+                  ? context.strings.syncing
                   : sync.lastSynced == null
-                  ? 'Ещё не синхронизировано'
-                  : 'Последняя синхронизация: ${sync.lastSynced!.toLocal().toString().substring(0, 16)}',
+                  ? context.strings.notSyncedYet
+                  : context.strings.lastSynced(
+                      appDateTime(sync.lastSynced!.toLocal()),
+                    ),
               style: TextStyle(color: context.palette.muted),
             ),
             const SizedBox(height: 12),
@@ -225,13 +228,11 @@ class _SyncScreenState extends State<SyncScreen> {
                   ? null
                   : () => _run(sync.sync),
               icon: const Icon(Icons.sync_rounded),
-              label: const Text('Синхронизировать сейчас'),
+              label: Text(context.strings.syncNow),
             ),
             if (sync.conflicts.isNotEmpty) ...[
               const SizedBox(height: 16),
-              const Text(
-                'Оценка изменена на двух устройствах. Какие изменения сохранить?',
-              ),
+              Text(context.strings.ratingConflictPrompt),
               Wrap(
                 spacing: 8,
                 children: [
@@ -241,7 +242,7 @@ class _SyncScreenState extends State<SyncScreen> {
                         : () => _run(
                             () => sync.resolveConflicts(keepLocal: true),
                           ),
-                    child: const Text('С этого телефона'),
+                    child: Text(context.strings.thisPhonesVersion),
                   ),
                   TextButton(
                     onPressed: _working
@@ -249,14 +250,14 @@ class _SyncScreenState extends State<SyncScreen> {
                         : () => _run(
                             () => sync.resolveConflicts(keepLocal: false),
                           ),
-                    child: const Text('С сервера'),
+                    child: Text(context.strings.serverVersion),
                   ),
                 ],
               ),
             ],
             const SizedBox(height: 24),
-            const Text(
-              'Доступ',
+            Text(
+              context.strings.accountAccess,
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
             ),
             TextButton.icon(
@@ -267,10 +268,10 @@ class _SyncScreenState extends State<SyncScreen> {
                         await sync.register(addPasskey: true);
                       },
                       failureMessage:
-                          'Не удалось добавить ключ доступа. Попробуй ещё раз.',
+                          context.strings.couldntAddAPasskeyTryAgain,
                     ),
               icon: const Icon(Icons.key_rounded),
-              label: const Text('Добавить passkey'),
+              label: Text(context.strings.addPasskey),
             ),
             ...sync.sessions.map(
               (session) => ListTile(
@@ -278,13 +279,13 @@ class _SyncScreenState extends State<SyncScreen> {
                 title: Text(session['name'] as String),
                 subtitle: Text(
                   session['id'] == sync.sessionId
-                      ? 'Этот сеанс'
-                      : 'Другое устройство или сеанс',
+                      ? context.strings.thisSession
+                      : context.strings.anotherDeviceOrSession,
                 ),
                 trailing: session['id'] == sync.sessionId
                     ? null
                     : IconButton(
-                        tooltip: 'Отозвать доступ',
+                        tooltip: context.strings.revokeAccess,
                         icon: const Icon(Icons.logout_rounded),
                         onPressed: _working
                             ? null
@@ -298,7 +299,7 @@ class _SyncScreenState extends State<SyncScreen> {
             const SizedBox(height: 16),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              title: const Text('Идентификатор аккаунта'),
+              title: Text(context.strings.accountId),
               children: [
                 SelectableText(sync.accountId ?? ''),
                 TextButton.icon(
@@ -308,14 +309,14 @@ class _SyncScreenState extends State<SyncScreen> {
                     );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Идентификатор скопирован'),
+                        SnackBar(
+                          content: Text(context.strings.accountIdCopied),
                         ),
                       );
                     }
                   },
                   icon: const Icon(Icons.copy_outlined),
-                  label: const Text('Скопировать'),
+                  label: Text(context.strings.copy),
                 ),
               ],
             ),
@@ -330,18 +331,16 @@ class _SyncScreenState extends State<SyncScreen> {
                         context: context,
                         builder: (context) => AlertDialog(
                           scrollable: true,
-                          title: const Text('Выйти на этом телефоне?'),
-                          content: const Text(
-                            'Синхронизация остановится. Будильники и локальная история останутся на телефоне.',
-                          ),
+                          title: Text(context.strings.signOutOnThisPhone),
+                          content: Text(context.strings.signOutConfirmation),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Отмена'),
+                              child: Text(context.strings.cancel),
                             ),
                             FilledButton(
                               onPressed: () => Navigator.pop(context, true),
-                              child: const Text('Выйти'),
+                              child: Text(context.strings.signOut),
                             ),
                           ],
                         ),
@@ -350,7 +349,7 @@ class _SyncScreenState extends State<SyncScreen> {
                         await _run(sync.signOut);
                       }
                     },
-              child: const Text('Выйти на этом телефоне'),
+              child: Text(context.strings.signOutOnThisPhoneLabel),
             ),
             TextButton(
               onPressed: _working
@@ -359,18 +358,18 @@ class _SyncScreenState extends State<SyncScreen> {
                       final remove = await showDialog<bool>(
                         context: context,
                         builder: (context) => AlertDialog(
-                          title: const Text('Удалить аккаунт?'),
-                          content: const Text(
-                            'Удалим аккаунт, историю и аудио из активного хранилища сервера. Локальные записи и будильники останутся на телефоне.',
+                          title: Text(context.strings.deleteAccount),
+                          content: Text(
+                            context.strings.deleteAccountConfirmation,
                           ),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Отмена'),
+                              child: Text(context.strings.cancel),
                             ),
                             TextButton(
                               onPressed: () => Navigator.pop(context, true),
-                              child: const Text('Удалить'),
+                              child: Text(context.strings.delete),
                             ),
                           ],
                         ),
@@ -379,7 +378,7 @@ class _SyncScreenState extends State<SyncScreen> {
                         await _run(sync.deleteAccount);
                       }
                     },
-              child: const Text('Удалить аккаунт и серверную историю'),
+              child: Text(context.strings.deleteAccountAndServerHistory),
             ),
           ],
           if (_error != null || sync.error != null)

@@ -1,11 +1,11 @@
 {
-    "name": "Ещё пять — знакомство",
-    "short_name": "Ещё пять",
+    "name": "Five More – preview",
+    "short_name": "Five More",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#141916",
     "theme_color": "#141916",
-    "description": "Превью интерфейса и тренировка заданий. Системные будильники доступны в мобильном приложении.",
+    "description": "Preview the alarm clock and practice wake-up challenges. System alarms are available in the mobile app.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
@@ -31,5 +31,6 @@
             "type": "image/png",
             "purpose": "maskable"
         }
-    ]
+    ],
+    "lang": "en"
 }

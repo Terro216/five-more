@@ -9,6 +9,18 @@
 Настройки находятся во вкладке «Задания». Скачанные фразы доступны офлайн,
 а «Пацанские цитаты» включаются отдельно.
 
+## Язык приложения · App language
+
+Приложение использует язык телефона. Чтобы выбрать английский или русский,
+открой **О приложении → Язык приложения**. На Android 13 и новее выбор также
+доступен в системных настройках языка приложений. На iPhone кнопка открывает
+настройки Five More.
+
+Five More follows your device language and uses English when none of your
+preferred languages are supported. On Android and in the web preview, choose
+English, Russian, or the system default in **About → App language**. On iPhone,
+the same button opens the app’s system settings.
+
 ## Установка на Android
 
 Скачай APK из [последнего выпуска](https://github.com/Terro216/five-more/releases/latest)

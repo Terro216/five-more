@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import '../../l10n/strings.dart';
 import '../../models/quote_credit.dart';
 
 /// Wake-up tasks contain no network, storage, or alarm dependencies.
@@ -19,32 +20,31 @@ enum ChallengeKind {
 
 extension ChallengeKindLabel on ChallengeKind {
   String get label => switch (this) {
-    ChallengeKind.math => 'Счёт',
-    ChallengeKind.memory => 'Память',
-    ChallengeKind.stroop => 'Цвета',
-    ChallengeKind.sequence => 'Порядок',
-    ChallengeKind.mirror => 'Зеркальный текст',
-    ChallengeKind.captcha => 'Код с картинки',
-    ChallengeKind.qr => 'QR-код',
-    ChallengeKind.shake => 'Тряска',
-    ChallengeKind.maze => 'Лабиринт',
-    ChallengeKind.flags => 'Флаги',
-    ChallengeKind.mixed => 'Микс',
+    ChallengeKind.math => appStrings.mathChallenge,
+    ChallengeKind.memory => appStrings.memory,
+    ChallengeKind.stroop => appStrings.colors,
+    ChallengeKind.sequence => appStrings.numberOrder,
+    ChallengeKind.mirror => appStrings.mirrorText,
+    ChallengeKind.captcha => appStrings.pictureCode,
+    ChallengeKind.qr => appStrings.qrCode,
+    ChallengeKind.shake => appStrings.shake,
+    ChallengeKind.maze => appStrings.maze,
+    ChallengeKind.flags => appStrings.flags,
+    ChallengeKind.mixed => appStrings.mix,
   };
 
   String get description => switch (this) {
-    ChallengeKind.math => 'Несколько примеров, чтобы включить голову',
-    ChallengeKind.memory => 'Запомни и повтори рисунок из клеток',
-    ChallengeKind.stroop => 'Выбери цвет букв, а не написанное слово',
-    ChallengeKind.sequence => 'Найди числа и нажми их по порядку',
-    ChallengeKind.mirror =>
-      'Прочитай отражённую фразу и введи её обычным текстом',
-    ChallengeKind.captcha => 'Разбери и введи код из букв и цифр',
-    ChallengeKind.qr => 'Дойди до заранее выбранного QR-кода и отсканируй его',
-    ChallengeKind.shake => 'Разбуди телефон серией движений',
-    ChallengeKind.maze => 'Наклоняй телефон и проведи шарик мимо отверстий',
-    ChallengeKind.flags => 'Узнай страну по её флагу',
-    ChallengeKind.mixed => 'Случайная очередь или свой порядок заданий',
+    ChallengeKind.math => appStrings.solveAFewSumsToWakeUp,
+    ChallengeKind.memory => appStrings.rememberThePatternAndTapTheSame,
+    ChallengeKind.stroop => appStrings.chooseTheInkColorIgnoringTheWord,
+    ChallengeKind.sequence => appStrings.sequenceChallengeDescription,
+    ChallengeKind.mirror => appStrings.mirrorChallengeDescription,
+    ChallengeKind.captcha => appStrings.readAndEnterTheLettersAndNumbers,
+    ChallengeKind.qr => appStrings.qrChallengeDescription,
+    ChallengeKind.shake => appStrings.wakeUpYourPhoneWithASeries,
+    ChallengeKind.maze => appStrings.tiltYourPhoneToGuideTheBall,
+    ChallengeKind.flags => appStrings.identifyTheCountryByItsFlag,
+    ChallengeKind.mixed => appStrings.shuffleTheChallengesOrChooseYourOwn,
   };
 }
 
@@ -52,17 +52,17 @@ enum ChallengeDifficulty { easy, medium, hard, extreme }
 
 extension ChallengeDifficultyLabel on ChallengeDifficulty {
   String get label => switch (this) {
-    ChallengeDifficulty.easy => 'Чилл',
-    ChallengeDifficulty.medium => 'Средне',
-    ChallengeDifficulty.hard => 'Сложно',
-    ChallengeDifficulty.extreme => 'Нереально',
+    ChallengeDifficulty.easy => appStrings.relaxed,
+    ChallengeDifficulty.medium => appStrings.medium,
+    ChallengeDifficulty.hard => appStrings.hard,
+    ChallengeDifficulty.extreme => appStrings.extreme,
   };
 
   String get description => switch (this) {
-    ChallengeDifficulty.easy => 'Мягкий старт',
-    ChallengeDifficulty.medium => 'Придётся проснуться',
-    ChallengeDifficulty.hard => 'Счёт без подсказок и задания на концентрацию',
-    ChallengeDifficulty.extreme => 'Больше шагов, меньше подсказок',
+    ChallengeDifficulty.easy => appStrings.anEasyStart,
+    ChallengeDifficulty.medium => appStrings.timeToWakeUp,
+    ChallengeDifficulty.hard => appStrings.mentalMathAndFocusChallenges,
+    ChallengeDifficulty.extreme => appStrings.moreStepsFewerHints,
   };
 }
 
@@ -232,11 +232,11 @@ enum ChallengeInk { red, blue, yellow, green, purple }
 
 extension ChallengeInkLabel on ChallengeInk {
   String get label => switch (this) {
-    ChallengeInk.red => 'Красный',
-    ChallengeInk.blue => 'Синий',
-    ChallengeInk.yellow => 'Жёлтый',
-    ChallengeInk.green => 'Зелёный',
-    ChallengeInk.purple => 'Фиолетовый',
+    ChallengeInk.red => appStrings.red,
+    ChallengeInk.blue => appStrings.blue,
+    ChallengeInk.yellow => appStrings.yellow,
+    ChallengeInk.green => appStrings.green,
+    ChallengeInk.purple => appStrings.purple,
   };
 }
 
@@ -289,7 +289,7 @@ class MirrorTextQuestion {
       .replaceAll(RegExp(r'[^а-яa-z0-9]+'), ' ')
       .trim();
 
-  static String? clean(String? value) {
+  static String? clean(String? value, {bool english = false}) {
     if (value == null) return null;
     final phrase = value
         .replaceAll(RegExp(r'[\u0300-\u036f]'), '')
@@ -301,7 +301,11 @@ class MirrorTextQuestion {
           r'[<>\x00-\x1f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]|https?://|www\.',
           caseSensitive: false,
         ).hasMatch(phrase) ||
-        !RegExp(r'[а-яё]', caseSensitive: false).hasMatch(phrase) ||
+        !RegExp(
+          english ? r'[a-z]' : r'[а-яё]',
+          caseSensitive: false,
+        ).hasMatch(phrase) ||
+        (english && RegExp(r'[а-яё]', caseSensitive: false).hasMatch(phrase)) ||
         answerKey(phrase).split(' ').length < 2) {
       return null;
     }
@@ -315,28 +319,28 @@ MirrorTextQuestion generateMirrorTextQuestion(
   String? previous,
 }) {
   final phrases = switch (difficulty) {
-    ChallengeDifficulty.easy => const [
-      'пора вставать',
-      'утро настало',
-      'новый рассвет',
-      'сон позади',
+    ChallengeDifficulty.easy => [
+      appStrings.mirrorEasyRise,
+      appStrings.mirrorEasyMorning,
+      appStrings.mirrorEasyDawn,
+      appStrings.mirrorEasySleep,
     ],
-    ChallengeDifficulty.medium => const [
-      'я выбираю ранний подъём',
-      'сегодня утро начинается',
-      'первый шаг уже сделан',
-      'за окном начинается день',
+    ChallengeDifficulty.medium => [
+      appStrings.mirrorMediumEarly,
+      appStrings.mirrorMediumMorning,
+      appStrings.mirrorMediumStep,
+      appStrings.mirrorMediumDaybreak,
     ],
-    ChallengeDifficulty.extreme => const [
-      'завтрашнее утро начинается с решения вовремя лечь спать сегодня',
-      'я выбираю встать сейчас и подарить себе спокойное начало нового дня',
-      'маленький шаг навстречу утру помогает сделать большой шаг к своей цели',
+    ChallengeDifficulty.extreme => [
+      appStrings.mirrorExtremeBedtime,
+      appStrings.mirrorExtremeMorning,
+      appStrings.mirrorExtremeStep,
     ],
-    ChallengeDifficulty.hard => const [
-      'сегодня я встаю с первым звонком',
-      'новое утро начинается с маленького шага',
-      'я открываю глаза и начинаю новый день',
-      'время просыпаться и встречать новый день',
+    ChallengeDifficulty.hard => [
+      appStrings.mirrorHardAlarm,
+      appStrings.mirrorHardMorning,
+      appStrings.mirrorHardEyes,
+      appStrings.mirrorHardDay,
     ],
   };
   final choices = phrases.where((phrase) => phrase != previous).toList();

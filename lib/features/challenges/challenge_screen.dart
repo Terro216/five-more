@@ -1,20 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
-
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/theme.dart';
-import '../../models/quote_credit.dart';
-import 'challenge_models.dart';
-import 'physical_tasks.dart';
-import 'flag_task.dart';
+import '../../l10n/strings.dart';
 import '../../services/phrase_library.dart';
 import '../../widgets/emergency_stop.dart';
+import 'challenge_models.dart';
+import 'flag_task.dart';
+import 'physical_tasks.dart';
 
 /// An offline challenge flow. The host owns alarm playback and dismissal.
 class ChallengeScreen extends StatefulWidget {
@@ -107,7 +105,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       if (mounted) {
         setState(() {
           _restoringProgress = false;
-          _progressError = 'Не удалось восстановить прогресс задания. Можно пройти его заново.';
+          _progressError = appStrings.challengeProgressRestoreError;
         });
       }
     }
@@ -130,6 +128,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   bool _showPattern = false;
   bool _memoryMistake = false;
   bool _accessibleNavigation = false;
+  String? _language;
   bool _transitioning = false;
   bool _finished = false;
   bool _completionReady = false;
@@ -159,6 +158,17 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final language = context.strings.localeName;
+    if (_language != null && _language != language) {
+      _feedback = null;
+      if (_activeKind == ChallengeKind.mirror &&
+          !_transitioning &&
+          !_session.isComplete) {
+        _typedAnswer.clear();
+        _mirror = PhraseLibrary.instance.next(_random, widget.difficulty);
+      }
+    }
+    _language = language;
     final accessibleNavigation = MediaQuery.accessibleNavigationOf(context);
     if (_accessibleNavigation == accessibleNavigation) return;
     _accessibleNavigation = accessibleNavigation;
@@ -270,8 +280,8 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         _session.submitIncorrect();
         _prepareRound();
         _feedback = _session.completedSteps == 0
-            ? 'Ошибка. Начни с первого этапа.'
-            : 'Ошибка. Один этап назад.';
+            ? appStrings.incorrectStartAgainAtTheFirstStage
+            : appStrings.incorrectGoBackOneStage;
         _feedbackCorrect = false;
       });
       try {
@@ -279,7 +289,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       } catch (_) {
         if (mounted) {
           setState(
-            () => _progressError = 'Прогресс пока не сохранён. При перезапуске этап может повториться.',
+            () => _progressError = appStrings.challengeProgressSaveError,
           );
         }
       }
@@ -289,15 +299,15 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     setState(() {
       _transitioning = true;
       _feedbackCorrect = true;
-      _feedback = complete ? 'Готово. Доброе утро!' : 'Верно. Ещё немного.';
+      _feedback = complete
+          ? appStrings.challengeComplete
+          : appStrings.correctKeepGoing;
     });
     try {
       await _persistProgress();
     } catch (_) {
       if (mounted) {
-        setState(
-          () => _progressError = 'Прогресс пока не сохранён. При перезапуске этап может повториться.',
-        );
+        setState(() => _progressError = appStrings.challengeProgressSaveError);
       }
     }
     if (!mounted) return;
@@ -390,8 +400,8 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                             Expanded(
                               child: Text(
                                 widget.practice
-                                    ? 'Пробный подъём'
-                                    : 'Доброе утро',
+                                    ? context.strings.testAlarmLabel
+                                    : context.strings.goodMorning,
                                 style: TextStyle(color: _muted, fontSize: 15),
                               ),
                             ),
@@ -401,7 +411,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                             Flexible(child: widget.alarmAction!),
                           if (widget.practice)
                             IconButton(
-                              tooltip: 'Закрыть тренировку',
+                              tooltip: context.strings.leavePractice,
                               onPressed: () => Navigator.maybePop(context),
                               icon: Icon(Icons.close, color: _muted),
                             ),
@@ -487,8 +497,11 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                                       minHeight: 5,
                                       color: _accent,
                                       backgroundColor: _surface,
-                                      semanticsLabel:
-                                          'Пройдено заданий: ${_session.completedSteps} из ${_session.totalSteps}',
+                                      semanticsLabel: context.strings
+                                          .challengeProgress(
+                                            _session.completedSteps,
+                                            _session.totalSteps,
+                                          ),
                                     ),
                                   ),
                                   const SizedBox(height: 30),
@@ -511,7 +524,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                           minimumSize: const Size(48, 48),
                         ),
                         icon: const Icon(Icons.volume_off_outlined, size: 18),
-                        label: const Text('Проблема с заданием'),
+                        label: Text(context.strings.troubleWithTheChallenge),
                       ),
                     ),
                 ],
@@ -597,16 +610,16 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     children: [
       Text(
         mirrored
-            ? 'Прочитай отражённую фразу и введи её обычным текстом.'
-            : 'Введи буквы и цифры с картинки. Буквы — латинские.',
+            ? appStrings.readTheMirroredPhraseAndTypeItLabel
+            : appStrings.captchaInstructions,
         textAlign: TextAlign.center,
         style: TextStyle(color: _muted, fontSize: 15, height: 1.5),
       ),
       const SizedBox(height: 20),
       Semantics(
         label: mirrored
-            ? 'Зеркальная фраза для визуального чтения'
-            : 'Картинка с кодом для визуального чтения',
+            ? appStrings.mirroredPhraseForVisualReading
+            : appStrings.imageOfACodeForVisualReading,
         image: true,
         child: ExcludeSemantics(
           child: Container(
@@ -660,11 +673,13 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             ? null
             : [FilteringTextInputFormatter.allow(RegExp('[a-zA-Z0-9]'))],
         decoration: InputDecoration(
-          labelText: mirrored ? 'Ответ' : 'Код',
+          labelText: mirrored ? appStrings.answer : appStrings.code,
           floatingLabelBehavior: FloatingLabelBehavior.never,
-          helperText: mirrored ? 'Можно без знаков' : 'Регистр не важен',
+          helperText: mirrored
+              ? appStrings.punctuationIsOptional
+              : appStrings.caseDoesntMatter,
           errorText: _feedback != null && !_feedbackCorrect
-              ? 'Неверный ответ'
+              ? appStrings.incorrectAnswer
               : null,
           errorMaxLines: 3,
           counterText: '',
@@ -675,7 +690,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       FilledButton(
         key: const ValueKey('typed-challenge-submit'),
         onPressed: _transitioning || _finished ? null : _submitTextAnswer,
-        child: const Text('Проверить ответ'),
+        child: Text(appStrings.checkAnswer),
       ),
       if ((mirrored ? _mirror?.credit : null) case final credit?)
         ExpansionTile(
@@ -690,11 +705,9 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
           subtitle: Text(credit.source.label),
           children: [
             SelectableText(credit.link.toString()),
-            if (credit.source == QuoteSource.wikiquote) ...[
+            if (credit.source.isWikiquote) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Страница Викицитатника · CC BY-SA 4.0. Разметка и переносы строк убраны.',
-              ),
+              Text(appStrings.wikiquoteAttribution),
               const SelectableText(
                 'https://creativecommons.org/licenses/by-sa/4.0/',
               ),
@@ -704,8 +717,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       if (_accessibleNavigation) ...[
         const SizedBox(height: 16),
         Text(
-          'Это визуальное задание. В тренировке можно выбрать другое. '
-          'Во время звонка доступно аварийное отключение.',
+          appStrings.visualChallengeAccessibilityHint,
           style: TextStyle(color: _muted, height: 1.5),
         ),
       ],
@@ -753,7 +765,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Введи ответ',
+            appStrings.enterYourAnswer,
             textAlign: TextAlign.center,
             style: TextStyle(color: context.palette.muted),
           ),
@@ -775,14 +787,14 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               FilteringTextInputFormatter.allow(RegExp(r'[-0-9]')),
               LengthLimitingTextInputFormatter(8),
             ],
-            decoration: const InputDecoration(labelText: 'Ответ'),
+            decoration: InputDecoration(labelText: appStrings.answer),
             textInputAction: TextInputAction.done,
             onSubmitted: (_) =>
                 _answer(int.tryParse(_typedAnswer.text) == question.answer),
           ),
           const SizedBox(height: 12),
           _answerButton(
-            label: 'Проверить',
+            label: appStrings.check,
             accent: true,
             onPressed: () =>
                 _answer(int.tryParse(_typedAnswer.text) == question.answer),
@@ -794,7 +806,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Выбери правильный ответ',
+          appStrings.chooseTheCorrectAnswer,
           textAlign: TextAlign.center,
           style: TextStyle(color: _muted, fontSize: 15, height: 1.5),
         ),
@@ -862,13 +874,13 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
       child: Column(
         children: [
-          const Text(
-            'Запомни рисунок',
+          Text(
+            appStrings.rememberThePattern,
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           ),
           Text(
-            '${pattern.cells.length} отмеченных клеток',
+            appStrings.markedSquares(pattern.cells.length),
             style: TextStyle(color: context.palette.muted),
           ),
           const SizedBox(height: 12),
@@ -890,8 +902,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                         mainAxisSpacing: 4,
                       ),
                       itemBuilder: (context, index) => Semantics(
-                        label:
-                            'Ряд ${index ~/ pattern.side + 1}, столбец ${index % pattern.side + 1}',
+                        label: context.strings.rowColumn(
+                          index ~/ pattern.side + 1,
+                          index % pattern.side + 1,
+                        ),
                         selected: pattern.cells.contains(index),
                         child: DecoratedBox(
                           decoration: BoxDecoration(
@@ -921,7 +935,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               _previewTimer?.cancel();
               setState(() => _showPattern = false);
             },
-            child: const Text('Запомнил, начнём', textAlign: TextAlign.center),
+            child: Text(appStrings.imReady, textAlign: TextAlign.center),
           ),
         ],
       ),
@@ -935,15 +949,15 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       children: [
         _instruction(
           _memoryMistake
-              ? 'Разберём рисунок'
+              ? appStrings.reviewThePattern
               : _showPattern
-              ? 'Запомни рисунок'
-              : 'Повтори рисунок',
+              ? appStrings.rememberThePattern
+              : appStrings.repeatThePattern,
           _memoryMistake
-              ? 'Галочка — верно, крестик — лишняя клетка, кружок — пропущенная.'
+              ? appStrings.memoryFeedbackLegend
               : _showPattern
-              ? 'Здесь ${pattern.cells.length} отмеченных клеток'
-              : 'Выбрано ${_selected.length} из ${pattern.cells.length}',
+              ? appStrings.thereAreMarkedSquares(pattern.cells.length)
+              : appStrings.ofSelected(_selected.length, pattern.cells.length),
         ),
         const SizedBox(height: 24),
         LayoutBuilder(
@@ -978,13 +992,15 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                   return Semantics(
                     button: !_showPattern && !_memoryMistake,
                     selected: marked,
-                    label:
-                        'Ряд ${index ~/ pattern.side + 1}, '
-                        'столбец ${index % pattern.side + 1}${missed
-                            ? ', пропущено'
-                            : wrong
-                            ? ', лишняя клетка'
-                            : ''}',
+                    label: context.strings.memoryCellFeedback(
+                      index ~/ pattern.side + 1,
+                      index % pattern.side + 1,
+                      missed
+                          ? context.strings.missed
+                          : wrong
+                          ? context.strings.extraSquare
+                          : '',
+                    ),
                     child: Material(
                       color: wrong
                           ? Theme.of(context).colorScheme.error
@@ -1027,10 +1043,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         const SizedBox(height: 20),
         _answerButton(
           label: _memoryMistake
-              ? 'Попробовать ещё раз'
+              ? appStrings.tryAgain
               : _showPattern
-              ? 'Запомнил, начнём'
-              : 'Проверить',
+              ? appStrings.imReady
+              : appStrings.check,
           accent: true,
           onPressed: _memoryMistake
               ? () => setState(_prepareRound)
@@ -1045,7 +1061,8 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                     setState(() {
                       _session.submitIncorrect();
                       _memoryMistake = true;
-                      _feedback = 'Есть ошибки. Сравни свой ответ с рисунком.';
+                      _feedback =
+                          appStrings.someSquaresDontMatchCompareYourAnswer;
                       _feedbackCorrect = false;
                     });
                   } else {
@@ -1061,7 +1078,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               foregroundColor: _muted,
               minimumSize: const Size(48, 48),
             ),
-            child: const Text('Посмотреть ещё раз'),
+            child: Text(appStrings.showAgain),
           ),
       ],
     );
@@ -1072,7 +1089,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _instruction('Какого цвета буквы?', 'Не спеши читать само слово'),
+        _instruction(
+          appStrings.whatColorIsTheText,
+          appStrings.focusOnTheInkColor,
+        ),
         const SizedBox(height: 24),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 38),
@@ -1081,9 +1101,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             borderRadius: BorderRadius.circular(28),
           ),
           child: Semantics(
-            label:
-                'Написано ${question.word.label}. '
-                'Цвет букв ${question.ink.label}. Выбери цвет букв.',
+            label: appStrings.theWordIsTheInkIsChoose(
+              question.word.label,
+              question.ink.label,
+            ),
             excludeSemantics: true,
             child: FittedBox(
               fit: BoxFit.scaleDown,
@@ -1120,16 +1141,16 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _instruction(
-          'Нажимай по порядку',
-          'От 1 до ${board.cellCount}. Найди следующее число.',
+          appStrings.tapInOrder,
+          appStrings.from1ToFindTheNextNumber(board.cellCount),
         ),
         const SizedBox(height: 16),
         Semantics(
           liveRegion: true,
           child: Text(
             _sequenceCompleted == board.cellCount
-                ? 'Все числа найдены'
-                : 'Следующее: ${_sequenceCompleted + 1}',
+                ? appStrings.allNumbersFound
+                : appStrings.next(_sequenceCompleted + 1),
             key: const ValueKey('sequence-next'),
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -1162,8 +1183,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                   button: true,
                   selected: completed,
                   enabled: enabled,
-                  label: 'Число $number',
-                  value: completed ? 'Выбрано' : 'Не выбрано',
+                  label: context.strings.number(number),
+                  value: completed
+                      ? context.strings.selected
+                      : context.strings.notSelected,
                   excludeSemantics: true,
                   onTap: enabled ? tap : null,
                   child: Material(

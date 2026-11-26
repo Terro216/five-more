@@ -36,13 +36,13 @@ final class FiveMoreAlarmBridge: NSObject {
           "platform": "ios", "supported": false, "exactAlarms": false,
           "notifications": false, "fullScreenIntent": false,
           "challengeEnforced": false, "scheduledCount": 0, "alarms": [],
-          "error": "Для будильника нужен iOS 26 или новее и сборка с AlarmKit.",
+          "error": NSLocalizedString("Alarms require iOS 26 or later and a build with AlarmKit.", comment: ""),
         ])
       case "getRingingAlarm": result(nil)
       case "drainEvents": result([])
       case "ackEvents": result(["ok": true])
       default:
-        result(["ok": false, "error": "На этом устройстве доступна только тренировка."])
+        result(["ok": false, "error": NSLocalizedString("Only practice is available on this device.", comment: "")])
       }
     }
   }
@@ -283,9 +283,9 @@ private enum FiveMoreAlarmStore {
 
 @available(iOS 26.0, *)
 struct FiveMoreOpenChallengeIntent: LiveActivityIntent {
-  static var title: LocalizedStringResource = "Открыть задание"
+  static var title: LocalizedStringResource = "Open challenge"
   static var openAppWhenRun: Bool = true
-  @Parameter(title: "Будильник") var systemID: String
+  @Parameter(title: "Alarm") var systemID: String
 
   init() { systemID = "" }
   init(systemID: String) { self.systemID = systemID }
@@ -299,9 +299,9 @@ struct FiveMoreOpenChallengeIntent: LiveActivityIntent {
 
 @available(iOS 26.0, *)
 struct FiveMoreSystemStopIntent: LiveActivityIntent {
-  static var title: LocalizedStringResource = "Остановить будильник"
+  static var title: LocalizedStringResource = "Stop alarm"
   static var openAppWhenRun: Bool = false
-  @Parameter(title: "Будильник") var systemID: String
+  @Parameter(title: "Alarm") var systemID: String
 
   init() { systemID = "" }
   init(systemID: String) { self.systemID = systemID }
@@ -355,7 +355,7 @@ private final class FiveMoreAlarmEngine {
         result(["ok": true])
       case "schedule", "cancel", "snooze", "dismiss", "testAlarm", "cancelTestAlarm":
         guard !mutationInProgress else {
-          result(["ok": false, "error": "Подожди завершения предыдущего действия."])
+          result(["ok": false, "error": NSLocalizedString("Wait for the previous action to finish.", comment: "")])
           return
         }
         mutationInProgress = true
@@ -380,7 +380,7 @@ private final class FiveMoreAlarmEngine {
       var response = try status()
       response["ok"] = false
       response["error"] = "settings_unavailable"
-      response["message"] = "Эта настройка недоступна через приложение на iOS."
+      response["message"] = NSLocalizedString("This setting is unavailable within the iOS app.", comment: "")
       return response
     }
     if manager.authorizationState == .denied {
@@ -490,13 +490,13 @@ private final class FiveMoreAlarmEngine {
       let days = args["weekdays"] as? [Int], days.allSatisfy({ (1...7).contains($0) }),
       let snooze = args["snoozeMinutes"] as? Int, (1...30).contains(snooze),
       let maximum = args["maxSnoozes"] as? Int, (0...10).contains(maximum)
-    else { throw failure("Проверь время, дни недели и настройки переноса.") }
+    else { throw failure(NSLocalizedString("Check the time, repeat days and snooze settings.", comment: "")) }
     let mode = args["dismissalMode"] as? String ?? "challenge"
-    guard ["normal", "challenge"].contains(mode) else { throw failure("Проверь тип отключения.") }
+    guard ["normal", "challenge"].contains(mode) else { throw failure(NSLocalizedString("Check how the alarm is dismissed.", comment: "")) }
     for key in ["vibration", "deleteAfterDismiss"] {
       if let value = args[key] {
         guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID()
-        else { throw failure("Проверь настройки будильника.") }
+        else { throw failure(NSLocalizedString("Check your alarm settings.", comment: "")) }
       }
     }
     let kind = args["challengeKind"] ?? "math"
@@ -505,27 +505,27 @@ private final class FiveMoreAlarmEngine {
       ["math", "memory", "stroop", "sequence", "mirror", "captcha", "qr", "shake", "maze", "flags", "mixed"].contains(kind),
       let difficulty = difficulty as? String,
       ["easy", "medium", "hard", "extreme"].contains(difficulty)
-    else { throw failure("Проверь вид и сложность задания.") }
+    else { throw failure(NSLocalizedString("Check the challenge and difficulty.", comment: "")) }
     var escalateOnSnooze = false
     if let value = args["escalateOnSnooze"] {
       // NSNumber can bridge 0/1 to Bool; only CFBoolean is a valid opt-in.
       guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID()
-      else { throw failure("Проверь настройку усложнения после переноса.") }
+      else { throw failure(NSLocalizedString("Check the snooze difficulty setting.", comment: "")) }
       escalateOnSnooze = number.boolValue
     }
     var moveSnoozeButton = false
     if let value = args["moveSnoozeButton"] {
       guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID()
-      else { throw failure("Проверь настройку перемещения кнопки переноса.") }
+      else { throw failure(NSLocalizedString("Check the moving snooze button setting.", comment: "")) }
       moveSnoozeButton = number.boolValue
     }
     let order = args["mixOrder"] as? [String] ?? []
     let kinds = ["math", "memory", "stroop", "sequence", "mirror", "captcha", "qr", "shake", "maze", "flags"]
-    guard order.count <= 12, order.allSatisfy({ kinds.contains($0) }) else { throw failure("Проверь порядок заданий.") }
+    guard order.count <= 12, order.allSatisfy({ kinds.contains($0) }) else { throw failure(NSLocalizedString("Check the challenge order.", comment: "")) }
     let qr = String((args["qrValue"] as? String ?? "").prefix(2048))
-    if mode == "challenge" && (kind == "qr" || (kind == "mixed" && order.contains("qr"))) && qr.isEmpty { throw failure("Сначала зарегистрируй QR-код.") }
+    if mode == "challenge" && (kind == "qr" || (kind == "mixed" && order.contains("qr"))) && qr.isEmpty { throw failure(NSLocalizedString("Register a QR code first.", comment: "")) }
     let oneShot = (args["oneShotAt"] as? NSNumber)?.int64Value ?? 0
-    if args["enabled"] as? Bool != false && oneShot > 0 && (oneShot <= FiveMoreAlarmStore.now() || !days.isEmpty) { throw failure("Время короткого сна уже прошло. Выбери длительность снова.") }
+    if args["enabled"] as? Bool != false && oneShot > 0 && (oneShot <= FiveMoreAlarmStore.now() || !days.isEmpty) { throw failure(NSLocalizedString("Your nap time has passed. Choose a duration again.", comment: "")) }
     let sound = args["sound"] as? String ?? "system"
     if sound != "system" { _ = try FiveMoreExtrasBridge.soundURL(sound) }
     return [
@@ -536,7 +536,7 @@ private final class FiveMoreAlarmEngine {
       "snoozeBudgetMinutes": min(300, max(0, args["snoozeBudgetMinutes"] as? Int ?? (args["maxSnoozes"] as? Int ?? 3) * (args["snoozeMinutes"] as? Int ?? 5))),
       "armedAt": args["armedAt"] as? Int64 ?? 0,
       "volumeRampSeconds": args["volumeRampSeconds"] as? Int ?? 10,
-      "sound": sound, "soundLabel": args["soundLabel"] as? String ?? "Системный будильник",
+      "sound": sound, "soundLabel": args["soundLabel"] as? String ?? NSLocalizedString("System alarm sound", comment: ""),
       "id": id, "title": String((args["title"] as? String ?? "").prefix(100)),
       "hour": hour, "minute": minute, "weekdays": Array(Set(days)).sorted(),
       "enabled": args["enabled"] as? Bool ?? true, "snoozeMinutes": snooze,
@@ -552,10 +552,20 @@ private final class FiveMoreAlarmEngine {
     _ config: [String: Any], systemID: UUID, schedule: Alarm.Schedule
   ) -> AlarmManager.AlarmConfiguration<FiveMoreAlarmMetadata> {
     let title = (config["title"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+    var components = DateComponents()
+    components.hour = config["hour"] as? Int ?? 0
+    components.minute = config["minute"] as? Int ?? 0
+    let time = DateFormatter.localizedString(from: Calendar.current.date(from: components) ?? Date(), dateStyle: .none, timeStyle: .short)
+    let alarmTitle: LocalizedStringResource
+    if (config["id"] as? String)?.hasPrefix("preview:") == true {
+      alarmTitle = "Test alarm"
+    } else {
+      alarmTitle = title.isEmpty ? "Alarm for \(time)" : "\(title)"
+    }
     let alert = AlarmPresentation.Alert(
-      title: LocalizedStringResource(stringLiteral: title.isEmpty ? String(format: "Будильник на %02d:%02d", config["hour"] as? Int ?? 0, config["minute"] as? Int ?? 0) : title),
-      stopButton: AlarmButton(text: "Остановить", textColor: .white, systemImageName: "stop.circle"),
-      secondaryButton: AlarmButton(text: config["dismissalMode"] as? String == "normal" ? "Открыть" : "Задание", textColor: .black, systemImageName: "alarm"),
+      title: alarmTitle,
+      stopButton: AlarmButton(text: "Stop", textColor: .white, systemImageName: "stop.circle"),
+      secondaryButton: AlarmButton(text: config["dismissalMode"] as? String == "normal" ? "Open" : "Challenge", textColor: .black, systemImageName: "alarm"),
       secondaryButtonBehavior: .custom
     )
     let attributes = AlarmAttributes(
@@ -583,7 +593,7 @@ private final class FiveMoreAlarmEngine {
       return ["ok": true, "alarm": config]
     }
     guard manager.authorizationState == .authorized else {
-      throw failure("Разреши будильники в настройках iOS.")
+      throw failure(NSLocalizedString("Allow alarms in iOS Settings.", comment: ""))
     }
     let days = config["weekdays"] as! [Int]
     let weekdays: [Locale.Weekday] = [.monday, .tuesday, .wednesday, .thursday, .friday, .saturday, .sunday]
@@ -592,7 +602,7 @@ private final class FiveMoreAlarmEngine {
       repeats: days.isEmpty ? .never : .weekly(days.map { weekdays[$0 - 1] })
     )
     guard let next = FiveMoreAlarmStore.nextDate(config) else {
-      throw failure("Не удалось определить следующее время будильника.")
+      throw failure(NSLocalizedString("Couldn’t determine the next alarm time.", comment: ""))
     }
     let nextAt = Int64(next.timeIntervalSince1970 * 1000)
     config["nextAt"] = nextAt
@@ -623,7 +633,7 @@ private final class FiveMoreAlarmEngine {
   }
 
   private func cancel(_ args: [String: Any]) throws -> [String: Any] {
-    guard let id = args["id"] as? String else { throw failure("Не указан будильник.") }
+    guard let id = args["id"] as? String else { throw failure(NSLocalizedString("No alarm specified.", comment: "")) }
     try requireIdle(id)
     let existing = try manager.alarms
     var instances = FiveMoreAlarmStore.instances
@@ -663,19 +673,19 @@ private final class FiveMoreAlarmEngine {
         }
       }
     }
-    throw failure("Этот подъём уже завершён.")
+    throw failure(NSLocalizedString("This alarm has already ended.", comment: ""))
   }
 
   private func snooze(_ args: [String: Any]) async throws -> [String: Any] {
-    guard let id = args["id"] as? String else { throw failure("Не указан будильник.") }
+    guard let id = args["id"] as? String else { throw failure(NSLocalizedString("No alarm specified.", comment: "")) }
     let (currentID, record, config) = try active(id)
     let used = record["snoozesUsed"] as? Int ?? 0
     let baseMinutes = config["snoozeMinutes"] as? Int ?? 5
     let budget = config["snoozeBudgetMinutes"] as? Int ?? (config["maxSnoozes"] as? Int ?? 3) * baseMinutes
     let spent = record["snoozedMinutes"] as? Int ?? used * baseMinutes
     let minutes = args["minutes"] as? Int ?? min(baseMinutes, budget - spent)
-    guard minutes <= budget - spent else { throw failure("Запас минут закончился.") }
-    guard (1...30).contains(minutes) else { throw failure("Выбери перенос от 1 до 30 минут.") }
+    guard minutes <= budget - spent else { throw failure(NSLocalizedString("No snooze time left.", comment: "")) }
+    guard (1...30).contains(minutes) else { throw failure(NSLocalizedString("Choose a snooze between 1 and 30 minutes.", comment: "")) }
     let next = Date().addingTimeInterval(TimeInterval(minutes * 60))
     let nextAt = Int64(next.timeIntervalSince1970 * 1000)
     let uuid = UUID()
@@ -712,11 +722,11 @@ private final class FiveMoreAlarmEngine {
   }
 
   private func dismiss(_ args: [String: Any]) throws -> [String: Any] {
-    guard let id = args["id"] as? String else { throw failure("Не указан будильник.") }
+    guard let id = args["id"] as? String else { throw failure(NSLocalizedString("No alarm specified.", comment: "")) }
     let (uuid, record, config) = try active(id, includeSnoozed: true)
     if let occurrence = args["occurrenceId"] as? String {
       guard record["occurrenceId"] as? String == occurrence,
-        record["snoozesUsed"] as? Int == args["generation"] as? Int else { throw failure("Этот подъём уже изменился. Открой его заново.") }
+        record["snoozesUsed"] as? Int == args["generation"] as? Int else { throw failure(NSLocalizedString("This alarm has changed. Open it again.", comment: "")) }
     }
     FiveMoreAlarmStore.suppressSystemStop(uuid.uuidString, until: FiveMoreAlarmStore.now() + 15_000)
     do {
@@ -744,11 +754,11 @@ private final class FiveMoreAlarmEngine {
     guard let id = args["id"] as? String,
       !id.hasPrefix("preview:"),
       var config = FiveMoreAlarmStore.configurations[id] else {
-      throw failure("Сначала сохрани будильник.")
+      throw failure(NSLocalizedString("Save the alarm first.", comment: ""))
     }
     try requireIdle(id)
     guard manager.authorizationState == .authorized else {
-      throw failure("Разреши будильники в настройках iOS.")
+      throw failure(NSLocalizedString("Allow alarms in iOS Settings.", comment: ""))
     }
     let registered = try manager.alarms
     if registered.contains(where: {
@@ -760,7 +770,7 @@ private final class FiveMoreAlarmEngine {
     config["id"] = previewID
     config["weekdays"] = [Int]()
     config["enabled"] = true
-    config["title"] = "Пробный подъём"
+    config["title"] = NSLocalizedString("Test alarm", comment: "")
     let startedAt = FiveMoreAlarmStore.now()
     let next = Date(timeIntervalSince1970: Double(startedAt) / 1000).addingTimeInterval(TimeInterval(delay))
     let nextAt = Int64(next.timeIntervalSince1970 * 1000)
@@ -850,7 +860,7 @@ private final class FiveMoreAlarmEngine {
       guard let record = FiveMoreAlarmStore.instances[alarm.id.uuidString],
         record["id"] as? String == id else { continue }
       if alarm.state == .alerting || record["kind"] as? String == "snooze" {
-        throw failure("Сначала заверши текущий подъём или перенос.")
+        throw failure(NSLocalizedString("Finish the current alarm or snooze first.", comment: ""))
       }
     }
   }
@@ -897,7 +907,7 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
   }
   private static func importBackground(_ source: URL) throws -> String {
     let size = try source.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-    guard size > 0, size <= 20 * 1024 * 1024 else { throw NSError(domain: "background", code: 1, userInfo: [NSLocalizedDescriptionKey: "Выбери изображение до 20 МБ."]) }
+    guard size > 0, size <= 20 * 1024 * 1024 else { throw NSError(domain: "background", code: 1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("Choose an image of 20 MB or less.", comment: "")]) }
     let options = [kCGImageSourceShouldCache: false] as CFDictionary
     guard let image = CGImageSourceCreateWithURL(source as CFURL, options),
       let thumbnail = CGImageSourceCreateThumbnailAtIndex(image, 0, [
@@ -906,7 +916,7 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
         kCGImageSourceThumbnailMaxPixelSize: 1600,
       ] as CFDictionary),
       let data = UIImage(cgImage: thumbnail).jpegData(compressionQuality: 0.85), data.count <= 4 * 1024 * 1024 else {
-      throw NSError(domain: "background", code: 2, userInfo: [NSLocalizedDescriptionKey: "Не удалось прочитать фото. Попробуй JPEG или PNG."])
+      throw NSError(domain: "background", code: 2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("Couldn’t read the photo. Try a JPEG or PNG.", comment: "")])
     }
     try FileManager.default.createDirectory(at: backgroundDirectory, withIntermediateDirectories: true)
     var directory = backgroundDirectory
@@ -945,12 +955,18 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
   private func fail(_ text: String) -> NSError { NSError(domain: "FiveMoreExtras", code: 1, userInfo: [NSLocalizedDescriptionKey: text]) }
   private func idleAudio() throws {
     #if canImport(AlarmKit) && !targetEnvironment(macCatalyst)
-    if #available(iOS 26.0, *), FiveMoreAlarmStore.instances.values.contains(where: { $0["state"] as? String == "ringing" }) { throw fail("Сначала заверши подъём, затем запиши или послушай послание.") }
+    if #available(iOS 26.0, *), FiveMoreAlarmStore.instances.values.contains(where: { $0["state"] as? String == "ringing" }) { throw fail(NSLocalizedString("Dismiss the alarm before recording or playing a message.", comment: "")) }
     #endif
   }
   private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) async throws {
     let args = call.arguments as? [String: Any] ?? [:]
     switch call.method {
+    case "languageSettings":
+      guard let url = URL(string: UIApplication.openSettingsURLString),
+            await UIApplication.shared.open(url) else {
+        throw fail(NSLocalizedString("Couldn’t open Settings.", comment: ""))
+      }
+      result(nil)
     case "version":
       result("\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"))")
     case "listNotes":
@@ -967,19 +983,19 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
       let settings = await center.notificationSettings()
       let scheduled = requests.contains { $0.identifier == "five-more-bedtime" }
       let allowed = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
-      let error: Any = scheduled && !allowed ? "Разреши вечерние уведомления в настройках iOS." : NSNull()
+      let error: Any = scheduled && !allowed ? NSLocalizedString("Allow bedtime notifications in iOS Settings.", comment: "") : NSNull()
       result(["enabled": scheduled && allowed, "error": error])
     case "takeBedtimeOpen": result(bedtimeOpen); bedtimeOpen = false
     case "bedtime":
       let enabled = args["enabled"] as? Bool == true
       let hour = args["hour"] as? Int ?? 23, minute = args["minute"] as? Int ?? 0
-      guard (0...23).contains(hour), (0...59).contains(minute) else { throw fail("Проверь время напоминания.") }
+      guard (0...23).contains(hour), (0...59).contains(minute) else { throw fail(NSLocalizedString("Check the reminder time.", comment: "")) }
       let center = UNUserNotificationCenter.current()
       if enabled {
-        guard try await center.requestAuthorization(options: [.alert, .sound]) else { throw fail("Разреши уведомления приложения в настройках iOS.") }
+        guard try await center.requestAuthorization(options: [.alert, .sound]) else { throw fail(NSLocalizedString("Allow app notifications in iOS Settings.", comment: "")) }
         let content = UNMutableNotificationContent()
-        content.title = "Пора готовиться ко сну"
-        content.body = "Послушай своё утреннее послание — завтра будет легче вставать."
+        content.title = NSString.localizedUserNotificationString(forKey: "Time to wind down", arguments: nil)
+        content.body = NSString.localizedUserNotificationString(forKey: "Listen to your morning message before bed.", arguments: nil)
         content.sound = .default
         content.userInfo = ["bedtime": true]
         try await center.add(UNNotificationRequest(identifier: "five-more-bedtime", content: content, trigger: UNCalendarNotificationTrigger(dateMatching: DateComponents(hour: hour, minute: minute), repeats: true)))
@@ -987,9 +1003,9 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
       result(nil)
     case "startRecording":
       try idleAudio()
-      guard recorder == nil else { throw fail("Запись уже начата.") }
+      guard recorder == nil else { throw fail(NSLocalizedString("Recording already started.", comment: "")) }
       let allowed = await withCheckedContinuation { continuation in AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) } }
-      guard allowed else { throw fail("Разреши микрофон в настройках приложения.") }
+      guard allowed else { throw fail(NSLocalizedString("Allow microphone access in app settings.", comment: "")) }
       try idleAudio()
       player?.stop(); player = nil
       try FileManager.default.createDirectory(at: Self.noteDirectory, withIntermediateDirectories: true)
@@ -1002,10 +1018,10 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
       try session.setActive(true)
       let next = try AVAudioRecorder(url: url, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 22050, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 64000])
       recordingLimit = 300
-      guard next.record() else { throw fail("Не удалось начать запись.") }
+      guard next.record() else { throw fail(NSLocalizedString("Couldn’t start recording.", comment: "")) }
       recorder = next; recordURL = url; scheduleRecordingStop(); result(nil)
     case "extendRecording":
-      guard let current = recorder, current.isRecording else { throw fail("Запись уже завершена.") }
+      guard let current = recorder, current.isRecording else { throw fail(NSLocalizedString("Recording already finished.", comment: "")) }
       recordingLimit += 300
       scheduleRecordingStop()
       result(nil)
@@ -1013,13 +1029,13 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
     case "readNote":
       let url = try localNote(args["file"])
       let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-      guard size <= 20_000_000 else { throw fail("Запись слишком большая.") }
+      guard size <= 20_000_000 else { throw fail(NSLocalizedString("This recording is too large.", comment: "")) }
       let data = try Data(contentsOf: url)
-      guard data.count <= 20_000_000 else { throw fail("Запись слишком большая.") }
+      guard data.count <= 20_000_000 else { throw fail(NSLocalizedString("This recording is too large.", comment: "")) }
       result(FlutterStandardTypedData(bytes: data))
     case "writeNote":
       let url = try localNote(args["file"])
-      guard let data = args["bytes"] as? FlutterStandardTypedData, data.data.count <= 20_000_000 else { throw fail("Неверная запись.") }
+      guard let data = args["bytes"] as? FlutterStandardTypedData, data.data.count <= 20_000_000 else { throw fail(NSLocalizedString("Invalid recording.", comment: "")) }
       try FileManager.default.createDirectory(at: Self.noteDirectory, withIntermediateDirectories: true)
       if !FileManager.default.fileExists(atPath: url.path) { try data.data.write(to: url, options: .atomic) }
       result(nil)
@@ -1058,11 +1074,11 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
         let bytes = try? Data(contentsOf: file) else { result(nil); return }
       result(FlutterStandardTypedData(bytes: bytes))
     case "pickSound", "pickBackground":
-      guard pickerResult == nil else { throw fail("Выбор файла уже открыт.") }
+      guard pickerResult == nil else { throw fail(NSLocalizedString("The file picker is already open.", comment: "")) }
       pickingBackground = call.method == "pickBackground"
       let picker = UIDocumentPickerViewController(forOpeningContentTypes: pickingBackground ? [.image] : [.audio], asCopy: true)
       picker.delegate = self
-      guard let root = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.keyWindow?.rootViewController }).first else { throw fail("Не удалось открыть выбор файла.") }
+      guard let root = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.keyWindow?.rootViewController }).first else { throw fail(NSLocalizedString("Couldn’t open the file picker.", comment: "")) }
       var presenter = root
       while let next = presenter.presentedViewController { presenter = next }
       pickerResult = result; presenter.present(picker, animated: true)
@@ -1070,7 +1086,7 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
     }
   }
   private func localNote(_ value: Any?) throws -> URL {
-    guard let name = value as? String, name.hasSuffix(".m4a"), UUID(uuidString: String(name.dropLast(4))) != nil else { throw fail("Запись не найдена.") }
+    guard let name = value as? String, name.hasSuffix(".m4a"), UUID(uuidString: String(name.dropLast(4))) != nil else { throw fail(NSLocalizedString("Recording not found.", comment: "")) }
     return Self.noteDirectory.appendingPathComponent(name)
   }
   private func play(_ url: URL) throws {
@@ -1079,7 +1095,7 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
     let session = AVAudioSession.sharedInstance()
     try session.setCategory(.playback, options: [.mixWithOthers]); try session.setActive(true)
     player = try AVAudioPlayer(contentsOf: url)
-    guard player?.play() == true else { throw fail("Не удалось воспроизвести запись.") }
+    guard player?.play() == true else { throw fail(NSLocalizedString("Couldn’t play the recording.", comment: "")) }
   }
   static func soundName(_ sound: String) -> String {
     sound.hasPrefix("file:") ? String(sound.dropFirst(5)) : "\(sound == "classic" ? "alarm_tone" : sound).wav"
@@ -1093,7 +1109,7 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
     try soundFolder.setResourceValues(protection)
     let destination = soundDirectory.appendingPathComponent(name)
     if FileManager.default.fileExists(atPath: destination.path) { return destination }
-    guard ["classic", "sunrise", "arcade", "pulse"].contains(sound), let source = Bundle.main.url(forResource: name, withExtension: nil, subdirectory: "Sounds") else { throw NSError(domain: "sound", code: 2, userInfo: [NSLocalizedDescriptionKey: "Мелодия недоступна. Выбери её снова."]) }
+    guard ["classic", "sunrise", "arcade", "pulse"].contains(sound), let source = Bundle.main.url(forResource: name, withExtension: nil, subdirectory: "Sounds") else { throw NSError(domain: "sound", code: 2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("This alarm sound is unavailable. Choose it again.", comment: "")]) }
     try FileManager.default.copyItem(at: source, to: destination)
     try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: destination.path)
     return destination
@@ -1114,11 +1130,11 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
     var destination: URL?
     do {
       let size = try source.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-      guard size > 0, size <= 40 * 1024 * 1024 else { throw fail("Выбери аудиофайл до 40 МБ.") }
+      guard size > 0, size <= 40 * 1024 * 1024 else { throw fail(NSLocalizedString("Choose an audio file of 40 MB or less.", comment: "")) }
       let input = try AVAudioFile(forReading: source)
-      guard (1...2).contains(input.processingFormat.channelCount), input.processingFormat.sampleRate > 0, input.processingFormat.sampleRate <= 192000 else { throw fail("Выбери обычную моно- или стереозапись.") }
+      guard (1...2).contains(input.processingFormat.channelCount), input.processingFormat.sampleRate > 0, input.processingFormat.sampleRate <= 192000 else { throw fail(NSLocalizedString("Choose a mono or stereo recording.", comment: "")) }
       let frames = min(input.length, AVAudioFramePosition(input.processingFormat.sampleRate * 29))
-      guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: AVAudioFrameCount(frames)) else { throw fail("Файл не содержит звука.") }
+      guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: AVAudioFrameCount(frames)) else { throw fail(NSLocalizedString("This file has no audio.", comment: "")) }
       try input.read(into: buffer)
       try FileManager.default.createDirectory(at: Self.soundDirectory, withIntermediateDirectories: true)
       var soundFolder = Self.soundDirectory
@@ -1129,7 +1145,7 @@ final class FiveMoreExtrasBridge: NSObject, UIDocumentPickerDelegate, UNUserNoti
       let output = try AVAudioFile(forWriting: target, settings: [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: input.processingFormat.sampleRate, AVNumberOfChannelsKey: input.processingFormat.channelCount, AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false], commonFormat: input.processingFormat.commonFormat, interleaved: input.processingFormat.isInterleaved)
       try output.write(from: buffer)
       result(["sound": "file:\(target.lastPathComponent)", "label": String(source.lastPathComponent.prefix(80))])
-    } catch { if let destination { try? FileManager.default.removeItem(at: destination) }; result(FlutterError(code: "audio_file", message: "Этот аудиофайл не удалось прочитать. Попробуй MP3, M4A или WAV.", details: nil)) }
+    } catch { if let destination { try? FileManager.default.removeItem(at: destination) }; result(FlutterError(code: "audio_file", message: NSLocalizedString("Couldn’t read this audio file. Try MP3, M4A or WAV.", comment: ""), details: nil)) }
   }
   nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
     Task { @MainActor in

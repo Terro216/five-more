@@ -3,10 +3,11 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/strings.dart';
 import '../models/sleep_entry.dart';
 import '../models/sleep_goals.dart';
-import 'native_extras.dart';
 import 'local_database.dart';
+import 'native_extras.dart';
 
 class SleepJournal extends ChangeNotifier {
   static const _key = 'five_more.sleep.v1';
@@ -126,25 +127,25 @@ class SleepJournal extends ChangeNotifier {
           if (state != null) {
             error = state['error'] as String?;
             if (reminder && state['enabled'] != true && error == null) {
-              error = 'Вечернее напоминание не назначено. Включи его ещё раз.';
+              error = appStrings.bedtimeNotScheduled;
             }
             reminder = state['enabled'] == true && error == null;
           }
         } catch (_) {
           if (reminder) {
             reminder = false;
-            error = 'Не удалось проверить вечернее напоминание. Включи его ещё раз.';
+            error = appStrings.bedtimeVerificationError;
           }
         }
       }
     } catch (_) {
-      error = 'Не удалось прочитать дневник. Перезапусти приложение.';
+      error = appStrings.sleepDiaryReadError;
     }
     _notify();
   }
 
   Future<void> _persist() async {
-    if (!ready) throw StateError('Дневник недоступен');
+    if (!ready) throw StateError(appStrings.sleepDiaryUnavailable);
     if (usesSqlite) {
       final db = LocalDatabase.instance;
       await db.setSetting('journal', {
@@ -177,12 +178,12 @@ class SleepJournal extends ChangeNotifier {
         'sleepTimezones': sleepTimezones,
       }),
     );
-    if (!ok) throw StateError('Не удалось сохранить дневник');
+    if (!ok) throw StateError(appStrings.couldntSaveTheSleepDiary);
     _notify();
   }
 
   Future<void> saveEntry(SleepEntry entry, {String? comment}) async {
-    if (!ready) throw StateError('Дневник недоступен');
+    if (!ready) throw StateError(appStrings.sleepDiaryUnavailable);
     final previousComments = Map<String, dynamic>.from(comments);
     if (comment != null) {
       if (comment.trim().isEmpty) {
@@ -261,7 +262,7 @@ class SleepJournal extends ChangeNotifier {
   }
 
   Future<void> addNote(VoiceNote note) async {
-    if (!ready) throw StateError('Дневник недоступен');
+    if (!ready) throw StateError(appStrings.sleepDiaryUnavailable);
     if (usesSqlite) {
       await LocalDatabase.instance.put(
         'note',

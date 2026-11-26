@@ -52,6 +52,10 @@ class QuoteDownloader {
     final day = now.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay;
     final List<Future<List<MirrorTextQuestion>> Function()> requests =
         switch (source) {
+          QuoteSource.englishWikiquote => [
+            for (final author in ['Emily Dickinson', 'Benjamin Franklin'])
+              () => _wikiquote((author, author), source: source),
+          ],
           QuoteSource.wikiquote => [
             for (final pages in _wikiPages)
               () => _wikiquote(pages[day % pages.length]),
@@ -93,8 +97,10 @@ class QuoteDownloader {
     );
   }
 
-  Future<List<MirrorTextQuestion>> _wikiquote((String, String) page) async {
-    const source = QuoteSource.wikiquote;
+  Future<List<MirrorTextQuestion>> _wikiquote(
+    (String, String) page, {
+    QuoteSource source = QuoteSource.wikiquote,
+  }) async {
     final body = await _get(
       Uri.https(source.host, '/w/api.php', {
         'action': 'parse',
@@ -130,24 +136,45 @@ class QuoteDownloader {
     );
     final doc = html.parseFragment(parsed['text'] as String);
     final results = <MirrorTextQuestion>[];
-    for (final node in doc.querySelectorAll('h2, tr.q-text > td:last-child')) {
+    final english = source == QuoteSource.englishWikiquote;
+    var inQuotes = !english;
+    final nodes = doc.querySelectorAll(
+      english ? 'h2, ul > li' : 'h2, tr.q-text > td:last-child',
+    );
+    for (final node in nodes) {
       if (node.localName == 'h2') {
         final heading = node.text.trim();
+        if (english) {
+          inQuotes = heading.replaceAll('[edit]', '').trim() == 'Quotes';
+          continue;
+        }
         if (RegExp(r'^(О |Цитаты о |Примечания|См\. также|Ссылки)')
             .hasMatch(heading)) {
           break;
         }
         continue;
       }
+      if (!inQuotes) continue;
+      final content = english ? node.clone(true) : node;
+      if (english) {
+        // Nested list items contain citations, translations and editorial notes.
+        if (node.parent?.parent?.localName == 'li') continue;
+        for (final citation in content.querySelectorAll(
+          'ul, ol, sup.reference',
+        )) {
+          citation.remove();
+        }
+      }
       // Dialogue with speaker labels and multiple turns makes poor typing tasks.
-      if (node.querySelector('b, strong')?.text.trim().endsWith(':') ?? false) {
+      if (content.querySelector('b, strong')?.text.trim().endsWith(':') ??
+          false) {
         continue;
       }
-      final annotations = node.querySelectorAll('.q-comment, sup.reference');
+      final annotations = content.querySelectorAll('.q-comment, sup.reference');
       for (final annotation in annotations) {
         annotation.remove();
       }
-      var text = _plainText(node);
+      var text = _plainText(content);
       if (annotations.isNotEmpty) {
         text = text.replaceFirst(RegExp(r'\s+[—–-]\s*$'), '');
       }
@@ -228,7 +255,10 @@ class QuoteDownloader {
   }
 
   MirrorTextQuestion? _question(String value, QuoteCredit credit) {
-    final text = MirrorTextQuestion.clean(value);
+    final text = MirrorTextQuestion.clean(
+      value,
+      english: credit.source == QuoteSource.englishWikiquote,
+    );
     return text == null ? null : MirrorTextQuestion(text, credit: credit);
   }
 
@@ -246,8 +276,9 @@ class QuoteDownloader {
       url,
       abortTrigger: abort.future,
     )..followRedirects = false;
-    const agent = 'FiveMore/0.8.5 (https://github.com/Terro216/five-more)';
-    if (url.host == QuoteSource.wikiquote.host) {
+    const agent = 'FiveMore/0.9.0 (https://github.com/Terro216/five-more)';
+    if (url.host == QuoteSource.wikiquote.host ||
+        url.host == QuoteSource.englishWikiquote.host) {
       request.headers[browser ? 'Api-User-Agent' : 'User-Agent'] = agent;
     }
     Future<String> read() async {

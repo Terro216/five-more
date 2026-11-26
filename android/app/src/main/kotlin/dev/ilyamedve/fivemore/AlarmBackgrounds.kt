@@ -23,7 +23,7 @@ object BackgroundRules {
     const val MAX_STORED_BYTES = 4 * 1024 * 1024
     fun validName(name: String) = Regex("[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}\\.jpg").matches(name)
     fun sampleSize(width: Int, height: Int): Int {
-        require(width > 0 && height > 0) { "Не удалось прочитать изображение." }
+        require(width > 0 && height > 0)
         var sample = 1
         while (maxOf(width, height).toLong() > 1600L * sample) sample *= 2
         return sample
@@ -34,7 +34,7 @@ object BackgroundRules {
 object AlarmBackgrounds {
     private fun directory(context: Context) = File(context.filesDir, "alarm_backgrounds").apply { mkdirs() }
     fun read(context: Context, name: String): ByteArray? {
-        require(BackgroundRules.validName(name)) { "Неверное имя фона." }
+        require(BackgroundRules.validName(name)) { context.appText(R.string.invalid_background_filename) }
         val file = File(directory(context), name)
         if (!file.exists() || file.length() !in 1..BackgroundRules.MAX_STORED_BYTES.toLong()) return null
         return file.readBytes()
@@ -47,16 +47,17 @@ object AlarmBackgrounds {
             while (true) {
                 val count = input.read(buffer)
                 if (count < 0) break
-                require(output.size() + count <= BackgroundRules.MAX_INPUT_BYTES) { "Выбери изображение до 20 МБ." }
+                require(output.size() + count <= BackgroundRules.MAX_INPUT_BYTES) { context.appText(R.string.choose_an_image_of_20_mb_or_less) }
                 output.write(buffer, 0, count)
             }
             output.toByteArray()
-        } ?: error("Не удалось открыть изображение.")
+        } ?: error(context.appText(R.string.couldnt_open_this_image))
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        require(options.outWidth > 0 && options.outHeight > 0) { context.appText(R.string.couldnt_read_this_image) }
         options.inSampleSize = BackgroundRules.sampleSize(options.outWidth, options.outHeight)
         options.inJustDecodeBounds = false
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: error("Формат изображения не поддерживается.")
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: error(context.appText(R.string.this_image_format_isnt_supported))
         var oriented = bitmap
         val file = File(directory(context), "${UUID.randomUUID()}.jpg")
         try {
@@ -75,7 +76,7 @@ object AlarmBackgrounds {
             oriented = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
             // Re-encode pixels only: no EXIF, location or source path is retained.
             file.outputStream().use { check(oriented.compress(Bitmap.CompressFormat.JPEG, 85, it)) }
-            check(file.length() in 1..BackgroundRules.MAX_STORED_BYTES.toLong()) { "Не удалось сохранить изображение." }
+            check(file.length() in 1..BackgroundRules.MAX_STORED_BYTES.toLong()) { context.appText(R.string.couldnt_save_the_image) }
             return file.name
         } catch (error: Exception) { file.delete(); throw error }
         finally { if (oriented !== bitmap) oriented.recycle(); bitmap.recycle() }

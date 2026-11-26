@@ -34,6 +34,28 @@ class AlarmManifestTest {
         return (0 until list.length).map { list.item(it) as Element }
     }
 
+    @Test fun appLanguagesIncludeCompleteNativeAlarmResources() {
+        val app = elements(root("AndroidManifest.xml"), "application").single()
+        assertEquals("@string/app_name", app.getAttributeNS(androidNamespace, "label"))
+        assertEquals("@xml/locales_config", app.getAttributeNS(androidNamespace, "localeConfig"))
+        val locales = elements(root("res/xml/locales_config.xml"), "locale")
+            .map { it.getAttributeNS(androidNamespace, "name") }.toSet()
+        assertEquals(setOf("en", "ru"), locales)
+        fun messages(directory: String) = elements(root("res/$directory/strings.xml"), "string")
+            .associate { it.getAttribute("name") to it.textContent }
+        val english = messages("values")
+        val russian = messages("values-ru")
+        assertEquals(english.keys, russian.keys)
+        assertEquals("Five More", english["app_name"])
+        assertEquals("Ещё пять", russian["app_name"])
+        val format = Regex("%[0-9]+\\$[ds]")
+        for ((key, translated) in russian) {
+            assertTrue(key, translated.isNotBlank())
+            assertEquals(key, format.findAll(english.getValue(key)).map { it.value }.sorted().toList(),
+                format.findAll(translated).map { it.value }.sorted().toList())
+        }
+    }
+
     @Test fun deviceAdminReceiverIsSystemProtectedAndRequestsNoDeviceControlPolicies() {
         val receiver = elements(root("AndroidManifest.xml"), "receiver")
             .single { it.getAttributeNS(androidNamespace, "name") == ".AlarmDeviceAdminReceiver" }

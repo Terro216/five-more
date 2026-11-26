@@ -91,8 +91,8 @@ class AlarmRingingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        val channel = NotificationChannel(CHANNEL_ID, "Будильник", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "Срабатывание будильника и кнопки пробуждения"
+        val channel = NotificationChannel(CHANNEL_ID, appText(R.string.alarm), NotificationManager.IMPORTANCE_HIGH).apply {
+            description = appText(R.string.ringing_alarms_and_wake_up_controls)
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             // Sound is controlled by the service; channel defaults must not play it twice.
             setSound(null, null)
@@ -101,6 +101,18 @@ class AlarmRingingService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "five_more:ringing").apply {
             setReferenceCounted(false)
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Refresh visible controls without touching the occurrence or audio player.
+        runCatching {
+            currentId?.let { id ->
+                AlarmStore(this).get(id)?.takeIf { it.optString("state") == "ringing" }?.let {
+                    getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(it))
+                }
+            }
         }
     }
 
@@ -142,8 +154,8 @@ class AlarmRingingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_alarm_notification)
-            .setContentTitle(alarm.optString("title").ifBlank { "Будильник на %02d:%02d".format(alarm.optInt("hour"), alarm.optInt("minute")) })
-            .setContentText(if (alarm.optString("dismissalMode", "challenge") == "normal") "Будильник звонит" else "Открой задание, чтобы отключить")
+            .setContentTitle(if (AlarmRules.isPreviewId(id)) appText(R.string.test_alarm) else alarm.optString("title").ifBlank { appText(R.string.alarm_for_time, alarmClockLabel(alarm.optInt("hour"), alarm.optInt("minute"))) })
+            .setContentText(if (alarm.optString("dismissalMode", "challenge") == "normal") appText(R.string.alarm_ringing) else appText(R.string.open_the_challenge_to_dismiss_the_alarm))
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(true)
@@ -156,8 +168,8 @@ class AlarmRingingService : Service() {
                     .setData(Uri.parse("fivemore://dismiss/${Uri.encode(id)}"))
                     .putExtra("alarmId", id).putExtra("occurrenceId", alarm.optString("occurrenceId")),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            builder.addAction(Notification.Action.Builder(null, "Выключить", stop).build())
-        } else builder.addAction(Notification.Action.Builder(null, "Проснуться", open).build())
+            builder.addAction(Notification.Action.Builder(null, appText(R.string.dismiss), stop).build())
+        } else builder.addAction(Notification.Action.Builder(null, appText(R.string.wake_up), open).build())
         if (!alarm.optBoolean("moveSnoozeButton") && alarm.optInt("snoozedMinutes", alarm.optInt("snoozesUsed") * alarm.optInt("snoozeMinutes", 5)) < alarm.optInt("snoozeBudgetMinutes", alarm.optInt("maxSnoozes", 3) * alarm.optInt("snoozeMinutes", 5))) {
             val snooze = PendingIntent.getBroadcast(this, 0,
                 Intent(this, AlarmReceiver::class.java).setAction(AlarmEngine.ACTION_SNOOZE)
@@ -166,7 +178,7 @@ class AlarmRingingService : Service() {
                     .putExtra("occurrenceId", alarm.optString("occurrenceId")),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val remaining = alarm.optInt("snoozeBudgetMinutes", alarm.optInt("maxSnoozes", 3) * alarm.optInt("snoozeMinutes", 5)) - alarm.optInt("snoozedMinutes", alarm.optInt("snoozesUsed") * alarm.optInt("snoozeMinutes", 5))
-            builder.addAction(Notification.Action.Builder(null, "Ещё ${minOf(alarm.optInt("snoozeMinutes", 5), remaining)} мин", snooze).build())
+            builder.addAction(Notification.Action.Builder(null, appText(R.string.snooze_minutes, minOf(alarm.optInt("snoozeMinutes", 5), remaining)), snooze).build())
         }
         return builder.build()
     }

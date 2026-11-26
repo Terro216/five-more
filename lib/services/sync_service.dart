@@ -1,6 +1,6 @@
-import 'dart:typed_data';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:passkeys/authenticator.dart';
 import 'package:passkeys/types.dart';
 
+import '../l10n/strings.dart';
 import 'local_database.dart';
 import 'native_extras.dart';
 
@@ -42,7 +43,7 @@ class SyncService extends ChangeNotifier {
 
   Future<Map<String, dynamic>> _archive(String path) async {
     if (!enabled || !signedIn) {
-      throw const SyncFailure('Включи синхронизацию истории.');
+      throw SyncFailure(appStrings.turnOnHistorySync);
     }
     final db = LocalDatabase.instance;
     final revision = db.historyRevision;
@@ -133,8 +134,7 @@ class SyncService extends ChangeNotifier {
           ? DateTime.fromMillisecondsSinceEpoch(settings['lastSynced'] as int)
           : null;
     } catch (_) {
-      error =
-          'Не удалось открыть синхронизацию. Локальные будильники доступны.';
+      error = appStrings.syncUnavailableLocalAlarmsAvailable;
     }
     ready = true;
     if (startPolling) {
@@ -179,12 +179,12 @@ class SyncService extends ChangeNotifier {
       await _foregroundSignal?.future.timeout(const Duration(seconds: 30));
     }
     if (_ringing) {
-      throw const SyncFailure('Закончи звонок, затем повтори вход.');
+      throw SyncFailure(appStrings.dismissBeforeSignIn);
     }
   }
 
   void configureEndpoint(String value) {
-    if (signedIn) throw const SyncFailure('Сначала выйди из аккаунта.');
+    if (signedIn) throw SyncFailure(appStrings.signOutOfYourAccountFirst);
     final uri = Uri.tryParse(value.trim());
     if (uri == null ||
         uri.scheme != 'https' ||
@@ -193,7 +193,7 @@ class SyncService extends ChangeNotifier {
         uri.hasQuery ||
         uri.hasFragment ||
         (uri.path.isNotEmpty && uri.path != '/')) {
-      throw const SyncFailure('Укажи HTTPS-адрес сервера без пути.');
+      throw SyncFailure(appStrings.invalidServerAddress);
     }
     endpoint = uri.origin;
   }
@@ -206,10 +206,10 @@ class SyncService extends ChangeNotifier {
     bool authenticated = true,
   }) async {
     if (_ringing || !_foreground) {
-      throw const SyncFailure('Синхронизация продолжится после звонка.');
+      throw SyncFailure(appStrings.syncWillResumeAfterTheAlarm);
     }
     if (!endpoint.startsWith('https://')) {
-      throw const SyncFailure('Сначала укажи HTTPS-адрес сервера.');
+      throw SyncFailure(appStrings.enterTheHttpsServerAddressFirst);
     }
     final client = _clientFactory();
     _activeClients.add(client);
@@ -218,7 +218,7 @@ class SyncService extends ChangeNotifier {
       final request = http.Request(method, Uri.parse('$endpoint$path'))
         ..followRedirects = false;
       if (authenticated) {
-        if (_token == null) throw const SyncFailure('Войди в аккаунт.');
+        if (_token == null) throw SyncFailure(appStrings.signInToYourAccount);
         request.headers['Authorization'] = 'Bearer $_token';
       }
       if (bytes != null) {
@@ -236,10 +236,10 @@ class SyncService extends ChangeNotifier {
         final limit = path.startsWith('/v1/audio/') ? 20000000 : 24000000;
         await for (final chunk in stream.stream) {
           if (builder.length + chunk.length > limit) {
-            throw const SyncFailure('Ответ сервера слишком большой.');
+            throw SyncFailure(appStrings.theServerResponseIsTooLarge);
           }
           if (generation != _generation) {
-            throw const SyncFailure('Синхронизация приостановлена.');
+            throw SyncFailure(appStrings.syncPaused);
           }
           builder.add(chunk);
         }
@@ -252,34 +252,26 @@ class SyncService extends ChangeNotifier {
         headers: stream.headers,
       );
       if (generation != _generation || _ringing) {
-        throw const SyncFailure('Синхронизация приостановлена.');
+        throw SyncFailure(appStrings.syncPaused);
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         if (response.statusCode == 401) {
-          throw const SyncFailure('Сессия закончилась. Войди снова.');
+          throw SyncFailure(appStrings.yourSessionHasEndedSignInAgain);
         }
         if (response.statusCode == 403 &&
             response.body.contains('fresh_sign_in_required')) {
-          throw const SyncFailure(
-            'Для удаления аккаунта выйди и войди с passkey заново, затем повтори удаление в течение 5 минут.',
-          );
+          throw SyncFailure(appStrings.recentPasskeyRequired);
         }
         if (response.statusCode == 403) {
-          throw const SyncFailure('Сервер не разрешил это действие.');
+          throw SyncFailure(appStrings.theServerDidntAllowThisAction);
         }
         if (response.statusCode == 413) {
-          throw const SyncFailure(
-            'Лимит хранилища или размера записи достигнут.',
-          );
+          throw SyncFailure(appStrings.storageOrRecordingSizeLimitReached);
         }
         if (response.statusCode == 429) {
-          throw const SyncFailure(
-            'Слишком много запросов. Попробуй через минуту.',
-          );
+          throw SyncFailure(appStrings.syncRateLimit);
         }
-        throw const SyncFailure(
-          'Сервер не принял данные. Локальная копия сохранена.',
-        );
+        throw SyncFailure(appStrings.serverRejectedChanges);
       }
       return response;
     } finally {
@@ -307,9 +299,7 @@ class SyncService extends ChangeNotifier {
     if (bound != null &&
         (bound['accountId'] != value['accountId'] ||
             bound['endpoint'] != endpoint)) {
-      throw const SyncFailure(
-        'Локальная история связана с другим аккаунтом. Войди в прежний аккаунт.',
-      );
+      throw SyncFailure(appStrings.localHistoryAccountMismatch);
     }
     await _secure.write(
       key: 'five_more_sync_session',
@@ -339,9 +329,7 @@ class SyncService extends ChangeNotifier {
   Future<String?> register({bool addPasskey = false}) async {
     if (!addPasskey &&
         await LocalDatabase.instance.setting('sync_binding') != null) {
-      throw const SyncFailure(
-        'История уже связана с аккаунтом. Войди с passkey или восстанови доступ.',
-      );
+      throw SyncFailure(appStrings.historyAlreadyLinked);
     }
     final options = await _json(
       'POST',
@@ -371,9 +359,7 @@ class SyncService extends ChangeNotifier {
   Future<String?> _boundAccount() async {
     final binding = await LocalDatabase.instance.setting('sync_binding');
     if (binding != null && binding['endpoint'] != endpoint) {
-      throw const SyncFailure(
-        'История связана с другим сервером. Верни прежний адрес.',
-      );
+      throw SyncFailure(appStrings.historyServerMismatch);
     }
     return binding?['accountId'] as String?;
   }
@@ -524,7 +510,7 @@ class SyncService extends ChangeNotifier {
 
   Future<void> setAudioEnabled(bool value) async {
     if (value && !audioAllowed) {
-      throw const SyncFailure('Загрузка аудио недоступна для этого аккаунта.');
+      throw SyncFailure(appStrings.audioUploadsAreUnavailableForThisAccount);
     }
     audioEnabled = value;
     if (!value) {
@@ -606,8 +592,7 @@ class SyncService extends ChangeNotifier {
           ),
         );
         if (conflicts.isNotEmpty) {
-          error =
-              'Есть изменения с другого устройства. Выбери, какие сохранить.';
+          error = appStrings.syncConflictHint;
           break;
         }
       }
@@ -650,7 +635,9 @@ class SyncService extends ChangeNotifier {
         await _saveSettings();
       }
     } catch (e) {
-      if (active()) error = e is SyncFailure ? e.message : 'Сервер недоступен. Данные сохранены на телефоне; повторим позже.';
+      if (active()) {
+        error = e is SyncFailure ? e.message : appStrings.syncOfflineRetry;
+      }
     } finally {
       busy = false;
       notifyListeners();
@@ -697,7 +684,7 @@ class SyncService extends ChangeNotifier {
   );
   Future<void> downloadNote(String id) async {
     if (!enabled || !audioEnabled || !audioAllowed) {
-      throw const SyncFailure('Включи синхронизацию аудио.');
+      throw SyncFailure(appStrings.turnOnAudioSync);
     }
     final response = await _request('GET', '/v1/audio/$id');
     await NativeExtras.call<void>('writeNote', {

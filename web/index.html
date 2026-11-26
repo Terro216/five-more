@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -18,19 +18,37 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="Ещё пять — превью будильника и тренировка заданий.">
+  <meta name="description" content="Preview the Five More alarm clock and practice wake-up challenges.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Ещё пять">
+  <meta name="apple-mobile-web-app-title" content="Five More">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>Ещё пять · знакомство</title>
+  <title>Five More · preview</title>
   <link rel="manifest" href="manifest.json">
+  <script>
+    function setFiveMoreLanguage(language) {
+      const russian = language === 'ru';
+      document.documentElement.lang = russian ? 'ru' : 'en';
+      document.title = russian ? 'Ещё пять · знакомство' : 'Five More · preview';
+      document.querySelector('meta[name="apple-mobile-web-app-title"]').content =
+        russian ? 'Ещё пять' : 'Five More';
+      document.querySelector('meta[name="description"]').content = russian
+        ? 'Ещё пять — превью будильника и тренировка заданий.'
+        : 'Preview the Five More alarm clock and practice wake-up challenges.';
+      document.querySelector('link[rel="manifest"]').href =
+        russian ? 'manifest.ru.json' : 'manifest.json';
+    }
+    let preferred;
+    try { preferred = JSON.parse(localStorage.getItem('flutter.five_more.language')); } catch (_) {}
+    setFiveMoreLanguage(['en', 'ru'].includes(preferred) ? preferred :
+      navigator.languages.map(tag => tag.split('-')[0]).find(code => ['en', 'ru'].includes(code)));
+  </script>
 </head>
 <body>
   <!--

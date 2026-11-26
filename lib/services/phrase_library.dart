@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/challenges/challenge_models.dart';
+import '../l10n/strings.dart';
 import '../models/quote_credit.dart';
 import 'quote_downloader.dart';
 
@@ -32,7 +33,8 @@ class PhraseLibrary extends ChangeNotifier {
   static final instance = PhraseLibrary();
   static const _cacheKey = 'phrases.quotes.v2';
   final bool browser;
-  bool get supportsBanter => !browser;
+  bool get english => appStrings.localeName == 'en';
+  bool get supportsBanter => !browser && !english;
 
   SharedPreferences? _prefs;
   Future<void>? _loading;
@@ -52,8 +54,8 @@ class PhraseLibrary extends ChangeNotifier {
   bool get changingSetting => _changingSetting;
 
   Iterable<QuoteSource> get _selectedSources => [
-    QuoteSource.wikiquote,
-    if (!browser) QuoteSource.citaty,
+    if (english) QuoteSource.englishWikiquote else QuoteSource.wikiquote,
+    if (!english && !browser) QuoteSource.citaty,
     if (supportsBanter && _banterEnabled) QuoteSource.banter,
   ];
 
@@ -61,7 +63,7 @@ class PhraseLibrary extends ChangeNotifier {
     for (final source in _selectedSources) {
       yield* _cache[source]?.quotes ?? const [];
     }
-    yield* _legacy;
+    if (!english) yield* _legacy;
   }
 
   int get availableCount => _downloaded
@@ -114,7 +116,10 @@ class PhraseLibrary extends ChangeNotifier {
             final value = entry['text'];
             final credit = QuoteCredit.fromJson(entry['credit']);
             final text = value is String
-                ? MirrorTextQuestion.clean(value)
+                ? MirrorTextQuestion.clean(
+                    value,
+                    english: source == QuoteSource.englishWikiquote,
+                  )
                 : null;
             if (credit?.source == source && text != null) {
               quotes.add(MirrorTextQuestion(text, credit: credit));
@@ -158,7 +163,7 @@ class PhraseLibrary extends ChangeNotifier {
     notifyListeners();
     try {
       if (!await _prefs!.setBool(key, value)) {
-        throw StateError('Не удалось сохранить выбор');
+        throw StateError(appStrings.couldntSaveYourChoice);
       }
       apply(value);
     } finally {
@@ -181,9 +186,14 @@ class PhraseLibrary extends ChangeNotifier {
     if (sources.isEmpty) return const PhraseRefresh(PhraseRefreshState.recent);
 
     final generation = _generation;
+    final downloadInEnglish = english;
     final transport = client ?? http.Client();
     _active = transport;
-    bool allowed() => enabled && !_ringing && generation == _generation;
+    bool allowed() =>
+        enabled &&
+        !_ringing &&
+        generation == _generation &&
+        english == downloadInEnglish;
     notifyListeners();
     try {
       final before = _downloaded
@@ -236,7 +246,7 @@ class PhraseLibrary extends ChangeNotifier {
               },
           }),
         );
-        if (!written) throw StateError('Не удалось сохранить цитаты');
+        if (!written) throw StateError(appStrings.couldntSaveQuotes);
         _cache = next;
       }
       if (!allowed()) return interrupted;

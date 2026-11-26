@@ -1,7 +1,3 @@
-import '../challenges/phrase_settings.dart';
-import '../sync/sync_screen.dart';
-import '../../services/sync_service.dart';
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -9,21 +5,25 @@ import 'package:flutter/semantics.dart';
 
 import '../../app/alarm_controller.dart';
 import '../../app/theme.dart';
+import '../../l10n/strings.dart';
 import '../../models/alarm.dart';
 import '../../models/sleep_session.dart';
+import '../../services/appearance_settings.dart';
+import '../../services/native_extras.dart';
+import '../../services/sleep_journal.dart';
+import '../../services/sync_service.dart';
+import '../../widgets/time_composer.dart';
 import '../challenges/challenge_models.dart';
 import '../challenges/challenge_screen.dart';
-import 'alarm_editor.dart';
-import 'ringing_screen.dart';
-import 'device_check_screen.dart';
+import '../challenges/phrase_settings.dart';
 import '../history/history_view.dart';
 import '../sleep/bedtime_screen.dart';
 import '../sleep/sleep_review.dart';
 import '../sleep/sleep_reviews.dart';
-import '../../services/sleep_journal.dart';
-import '../../services/native_extras.dart';
-import '../../widgets/time_composer.dart';
-import '../../services/appearance_settings.dart';
+import '../sync/sync_screen.dart';
+import 'alarm_editor.dart';
+import 'device_check_screen.dart';
+import 'ringing_screen.dart';
 
 class AlarmHome extends StatefulWidget {
   const AlarmHome({super.key, required this.controller});
@@ -97,7 +97,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
       ),
     );
     if (mounted) {
-      if (!result.ok) _message(result.error ?? 'Не удалось изменить время');
+      if (!result.ok) _message(result.error ?? appStrings.couldntChangeTheTime);
     }
   }
 
@@ -109,7 +109,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
       ),
     ),
     icon: const Icon(Icons.history_rounded),
-    label: const Text('Дневник сна'),
+    label: Text(appStrings.sleepDiary),
   );
 
   Widget _morningReview() {
@@ -133,13 +133,18 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Как спалось?',
+          Text(
+            appStrings.howDidYouSleep,
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           ),
           Text(
-            '${sleepDateLabel(event.at)} · подъём в ${clockLabel(TimeOfDay.fromDateTime(event.at))}'
-            '${session.occurrences.length > 1 ? ' · звонков: ${session.occurrences.length}' : ''}',
+            appStrings.sleepReviewSummary(
+              sleepDateLabel(event.at),
+              clockLabel(TimeOfDay.fromDateTime(event.at)),
+              session.occurrences.length > 1
+                  ? appStrings.alarmCountSuffix(session.occurrences.length)
+                  : '',
+            ),
             style: TextStyle(color: context.palette.muted),
           ),
           Wrap(
@@ -157,12 +162,12 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
-                child: const Text('Оценить утро'),
+                child: Text(appStrings.rateYourMorning),
               ),
               TextButton.icon(
                 onPressed: () => setState(() => _tab = 2),
                 icon: const Icon(Icons.mic_outlined),
-                label: const Text('Записать голос'),
+                label: Text(appStrings.recordAMessage),
               ),
               TextButton(
                 onPressed: () async {
@@ -170,11 +175,11 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                     await _journal.skipAll(session.occurrences);
                   } catch (_) {
                     if (mounted) {
-                      _message('Не удалось сохранить. Попробуй ещё раз.');
+                      _message(appStrings.couldntSaveTryAgain);
                     }
                   }
                 },
-                child: const Text('Пропустить'),
+                child: Text(appStrings.skip),
               ),
               _reviewArchive(),
             ],
@@ -213,7 +218,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
     }
     final result = await controller.setEnabled(alarm, value);
     if (!result.ok && mounted) {
-      _message(result.error ?? 'Не удалось изменить будильник');
+      _message(result.error ?? appStrings.couldntUpdateTheAlarmLabel);
     }
   }
 
@@ -233,16 +238,16 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Удалить будильник?'),
+        title: Text(context.strings.deleteThisAlarm),
         content: Text('${alarm.timeLabel} · ${alarm.repeatLabel}'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
+            child: Text(context.strings.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Удалить'),
+            child: Text(context.strings.delete),
           ),
         ],
       ),
@@ -252,8 +257,8 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
     if (mounted) {
       _message(
         result.ok
-            ? 'Будильник удалён'
-            : result.error ?? 'Не удалось удалить будильник',
+            ? appStrings.alarmDeleted
+            : result.error ?? appStrings.couldntDeleteTheAlarm,
       );
     }
   }
@@ -293,12 +298,15 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                 42 + MediaQuery.textScalerOf(context).scale(110);
             return Row(
               children: [
-                const Tooltip(message: 'Ещё пять', child: _SunMark(size: 30)),
+                Tooltip(
+                  message: context.strings.appName,
+                  child: _SunMark(size: 30),
+                ),
                 if (showName) ...[
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'ещё пять',
+                      context.strings.appWordmark,
                       maxLines: 1,
                       style: TextStyle(
                         fontSize: 23,
@@ -316,8 +324,8 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
           IconButton(
             key: const ValueKey('toggle-theme'),
             tooltip: Theme.of(context).brightness == Brightness.dark
-                ? 'Светлая тема'
-                : 'Тёмная тема',
+                ? context.strings.lightTheme
+                : context.strings.darkTheme,
             icon: Icon(
               Theme.of(context).brightness == Brightness.dark
                   ? Icons.light_mode_outlined
@@ -328,18 +336,18 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                 await AppearanceSettings.instance.toggle();
               } catch (_) {
                 if (mounted) {
-                  _message('Не удалось сохранить тему. Попробуй ещё раз.');
+                  _message(appStrings.themeSaveError);
                 }
               }
             },
           ),
           IconButton(
-            tooltip: 'Проверка телефона',
+            tooltip: context.strings.phoneCheck,
             onPressed: () => _checkDevice(),
             icon: const Icon(Icons.phonelink_ring_outlined),
           ),
           IconButton(
-            tooltip: 'Синхронизация',
+            tooltip: context.strings.syncLabel,
             icon: const Icon(Icons.cloud_outlined),
             onPressed: () async {
               await Navigator.push(
@@ -352,7 +360,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
             },
           ),
           IconButton(
-            tooltip: 'О приложении',
+            tooltip: context.strings.about,
             onPressed: _about,
             icon: const Icon(Icons.info_outline_rounded),
           ),
@@ -362,7 +370,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
       floatingActionButton: _tab == 0 && !controller.loading
           ? FloatingActionButton(
               key: const ValueKey('add-alarm'),
-              tooltip: 'Добавить будильник',
+              tooltip: context.strings.addAlarm,
               onPressed: controller.storageHealthy ? () => _edit() : null,
               child: const Icon(Icons.add_rounded),
             )
@@ -373,25 +381,25 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
           NavigationBar(
             selectedIndex: _tab,
             onDestinationSelected: (index) => setState(() => _tab = index),
-            destinations: const [
+            destinations: [
               NavigationDestination(
                 icon: Icon(Icons.alarm_outlined),
                 selectedIcon: Icon(Icons.alarm_rounded),
-                label: 'Подъём',
+                label: context.strings.alarmsTab,
               ),
               NavigationDestination(
                 icon: Icon(Icons.extension_outlined),
                 selectedIcon: Icon(Icons.extension_rounded),
-                label: 'Задания',
+                label: context.strings.challenges,
               ),
               NavigationDestination(
                 icon: Icon(Icons.bedtime_outlined),
                 selectedIcon: Icon(Icons.bedtime_rounded),
-                label: 'Вечер',
+                label: context.strings.bedtimeTab,
               ),
               NavigationDestination(
                 icon: Icon(Icons.history_rounded),
-                label: 'История',
+                label: context.strings.history,
               ),
             ],
           ),
@@ -459,9 +467,11 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.snooze_rounded),
                 title: Text(
-                  'Подъём отложен до ${clockLabel(TimeOfDay.fromDateTime(active.snoozedUntil!))}',
+                  appStrings.alarmSnoozedUntil(
+                    clockLabel(TimeOfDay.fromDateTime(active.snoozedUntil!)),
+                  ),
                 ),
-                subtitle: const Text('Открыть и завершить подъём'),
+                subtitle: Text(appStrings.openAndDismissAlarm),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => _openWake(active),
               ),
@@ -482,7 +492,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
               padding: const EdgeInsets.only(top: 12),
               child: _InfoCard(
                 icon: Icons.error_outline_rounded,
-                title: 'Нужно проверить',
+                title: appStrings.needsAttention,
                 text: controller.error!,
                 color: context.palette.red,
               ),
@@ -492,16 +502,16 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
               padding: const EdgeInsets.only(top: 12),
               child: _InfoCard(
                 icon: Icons.snooze_rounded,
-                title: 'Переносы сегодня: $todaySnoozes',
+                title: appStrings.snoozesToday(todaySnoozes),
               ),
             ),
           if (controller.alarms.isNotEmpty) ...[
             const SizedBox(height: 24),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Мои будильники',
+                    appStrings.myAlarms,
                     style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -515,14 +525,12 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
             ...(_sortedAlarms()).map(_alarmCard),
           ],
           if (!controller.device.challengeEnforced)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 14),
               child: _InfoCard(
                 icon: Icons.phone_iphone_rounded,
-                title: 'Особенность iPhone',
-                text:
-                    'Системный будильник можно остановить без задания. '
-                    'Чтобы пройти задание, откройте приложение.',
+                title: appStrings.alarmsOnIphone,
+                text: appStrings.iosSystemStopExplanation,
               ),
             ),
         ],
@@ -537,10 +545,10 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
     final hours = totalMinutes ~/ 60;
     final minutes = totalMinutes % 60;
     final left = hours > 0
-        ? '$hours ч ${minutes.toString().padLeft(2, '0')} мин'
-        : '$minutes мин';
+        ? appStrings.hoursMinutes(hours, minutes.toString().padLeft(2, '0'))
+        : appStrings.minutesShort(minutes);
     final time = Text(
-      '${nextAt.hour.toString().padLeft(2, '0')}:${nextAt.minute.toString().padLeft(2, '0')}',
+      appClock(nextAt.hour, nextAt.minute),
       style: TextStyle(
         fontSize: 56,
         fontWeight: FontWeight.w400,
@@ -558,7 +566,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
         ),
         const SizedBox(height: 4),
         Text(
-          'До будильника $left',
+          appStrings.nextAlarmIn(left),
           style: TextStyle(color: context.palette.muted, fontSize: 13),
         ),
       ],
@@ -613,8 +621,8 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
       children: [
         Text(
           controller.alarms.isEmpty
-              ? 'Утро начинается с одного будильника.'
-              : 'Ближайший подъём пока не назначен.',
+              ? appStrings.setYourFirstAlarm
+              : appStrings.noUpcomingAlarm,
           style: const TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.w600,
@@ -625,7 +633,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
         if (controller.alarms.isEmpty) ...[
           const SizedBox(height: 12),
           Text(
-            'Выбери время, переносы и задание для пробуждения.',
+            appStrings.firstAlarmHint,
             style: TextStyle(
               color: context.palette.muted,
               height: 1.5,
@@ -654,39 +662,39 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
       return const SizedBox.shrink();
     }
     final title = !device.supported
-        ? 'Режим знакомства'
+        ? appStrings.previewMode
         : missingPermission
-        ? 'Проверь разрешения телефона'
+        ? appStrings.checkPhonePermissions
         : device.alarmVolume == 0
-        ? 'Звук будильника выключен'
+        ? appStrings.alarmVolumeIsOff
         : device.recoveryError != null
-        ? 'Расписание требует восстановления'
+        ? appStrings.restoreYourAlarmSchedule
         : device.error != null
-        ? 'Не удалось проверить телефон'
+        ? appStrings.couldntCheckThisPhone
         : check?.pending == true
-        ? 'Проверка срабатывания начата'
+        ? appStrings.alarmTestStarted
         : check?.heard == true
-        ? 'Ты подтвердил звук при проверке'
+        ? appStrings.youConfirmedYouHeardTheAlarm
         : check?.heard == false
-        ? 'При проверке звук не прозвучал'
-        : 'Телефон ещё не проверен';
+        ? appStrings.youReportedTheAlarmWasSilent
+        : appStrings.thisPhoneHasntBeenTested;
     final text = !device.supported
-        ? 'Здесь можно настроить черновик и попробовать задания.'
+        ? appStrings.previewCapabilities
         : missingPermission
-        ? 'Часть разрешений выключена. Проверь их перед следующим утром.'
+        ? appStrings.permissionsBeforeNextAlarm
         : device.alarmVolume == 0
-        ? 'Подними громкость будильника и повтори проверку.'
+        ? appStrings.turnUpTheAlarmVolumeAndRun
         : device.recoveryError != null
-        ? 'Открой проверку телефона и повтори восстановление расписания.'
+        ? appStrings.retryRecoveryHint
         : device.error != null
         ? device.error!
         : check?.pending == true
-        ? 'Вернись к проверке и отметь, прозвучал ли будильник.'
+        ? appStrings.reportTestResultHint
         : check?.heard == true
-        ? 'После изменения настроек повтори проверку.'
+        ? appStrings.retestAfterSettingsChange
         : check?.heard == false
-        ? 'Посмотри настройки звука и разрешения, затем попробуй ещё раз.'
-        : 'Проверь звук с заблокированным экраном.';
+        ? appStrings.silentAlarmAdvice
+        : appStrings.testTheAlarmWithYourScreenLocked;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -695,7 +703,9 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
         borderRadius: BorderRadius.circular(12),
         child: Semantics(
           button: true,
-          label: device.supported ? 'Проверка телефона' : 'Что доступно здесь',
+          label: device.supported
+              ? appStrings.phoneCheck
+              : appStrings.whatsAvailableHere,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Row(
@@ -768,7 +778,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
       },
       child: Semantics(
         customSemanticsActions: {
-          CustomSemanticsAction(label: 'Удалить будильник'): () =>
+          CustomSemanticsAction(label: appStrings.deleteAlarm): () =>
               _delete(alarm),
         },
         child: Material(
@@ -819,8 +829,12 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                         ),
                       ),
                       Semantics(
-                        label:
-                            '${alarm.timeLabel}, ${alarm.enabled ? 'выключить' : 'включить'} будильник',
+                        label: appStrings.toggleAlarmAt(
+                          alarm.timeLabel,
+                          alarm.enabled
+                              ? appStrings.turnOff
+                              : appStrings.turnOn,
+                        ),
                         child: Switch(
                           key: ValueKey('alarm-toggle-${alarm.id}'),
                           value: alarm.enabled,
@@ -848,7 +862,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                       Text(
                         alarm.requiresChallenge
                             ? '${alarm.challengeKind.label} · ${alarm.difficulty.label.toLowerCase()}'
-                            : 'Обычный звонок',
+                            : appStrings.standardAlarm,
                         style: TextStyle(
                           color: context.palette.muted,
                           fontSize: 12,
@@ -856,8 +870,8 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                       ),
                       Text(
                         alarm.snoozeBudget == 0
-                            ? 'Без переносов'
-                            : '${alarm.snoozeBudget} мин на переносы',
+                            ? appStrings.noSnoozes
+                            : appStrings.minOfSnoozeTime(alarm.snoozeBudget),
                         style: TextStyle(
                           color: context.palette.morning,
                           fontSize: 12,
@@ -867,7 +881,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                           alarm.escalateOnSnooze &&
                           alarm.snoozeBudget > 0)
                         Text(
-                          'Сложнее после переноса',
+                          appStrings.harderAfterEachSnooze,
                           style: TextStyle(
                             color: context.palette.morning,
                             fontSize: 12,
@@ -875,7 +889,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
                         ),
                       if (!controller.device.supported)
                         Text(
-                          'Черновик',
+                          appStrings.draft,
                           style: TextStyle(
                             color: context.palette.muted,
                             fontSize: 12,
@@ -895,10 +909,10 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
   Widget _challenges() => ListView(
     padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
     children: [
-      const Text('Разбуди голову.', style: AppTypography.heading),
+      Text(appStrings.wakeUpYourMind, style: AppTypography.heading),
       const SizedBox(height: 8),
       Text(
-        'Попробуй задания заранее. В тренировке будильник не звучит.',
+        appStrings.practiceDescription,
         style: TextStyle(
           color: context.palette.muted,
           height: 1.4,
@@ -949,8 +963,7 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
       Padding(
         padding: EdgeInsets.only(top: 16),
         child: Text(
-          'Сложность можно менять отдельно для каждого будильника. '
-          'Аварийное отключение всегда доступно.',
+          appStrings.difficultyAndEmergencyHint,
           style: TextStyle(
             color: context.palette.muted,
             fontSize: 12,
@@ -962,23 +975,29 @@ class _AlarmHomeState extends State<AlarmHome> with WidgetsBindingObserver {
   );
 
   Future<void> _about() async {
-    final version = await NativeExtras.version();
-    if (!mounted) return;
+    final version = NativeExtras.version();
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Ещё пять'),
-        content: Text(
-          'Версия · $version\n\n'
-          'Простой будильник, ограниченные переносы и задания для пробуждения.\n\n'
-          'Работает без аккаунта и рекламы. Историю и оценки сна можно синхронизировать по желанию. Загрузка голоса доступна только разрешённому сервером аккаунту.\n\n'
-          'Перед первым утром проверь срабатывание на своём телефоне. '
-          'После принудительной остановки приложения открой его снова.',
+        title: Text(context.strings.appName),
+        scrollable: true,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            FutureBuilder<String>(
+              future: version,
+              builder: (context, snapshot) =>
+                  Text(context.strings.aboutDescription(snapshot.data ?? '…')),
+            ),
+            const SizedBox(height: 16),
+            _LanguageSetting(),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Понятно'),
+            child: Text(context.strings.gotIt),
           ),
         ],
       ),
@@ -990,48 +1009,23 @@ bool _sameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
 
 String _relativeDay(DateTime date, DateTime now) {
-  if (_sameDay(date, now)) return 'Сегодня';
+  if (_sameDay(date, now)) return appStrings.today;
   if (_sameDay(date, DateTime(now.year, now.month, now.day + 1))) {
-    return 'Завтра';
+    return appStrings.tomorrow;
   }
-  const weekdays = [
-    'В понедельник',
-    'Во вторник',
-    'В среду',
-    'В четверг',
-    'В пятницу',
-    'В субботу',
-    'В воскресенье',
+  final weekdays = [
+    appStrings.monday,
+    appStrings.tuesday,
+    appStrings.wednesday,
+    appStrings.thursday,
+    appStrings.friday,
+    appStrings.saturday,
+    appStrings.sunday,
   ];
   return weekdays[date.weekday - 1];
 }
 
-String _dayTitle(DateTime date) {
-  const months = [
-    'января',
-    'февраля',
-    'марта',
-    'апреля',
-    'мая',
-    'июня',
-    'июля',
-    'августа',
-    'сентября',
-    'октября',
-    'ноября',
-    'декабря',
-  ];
-  const weekdays = [
-    'Понедельник',
-    'Вторник',
-    'Среда',
-    'Четверг',
-    'Пятница',
-    'Суббота',
-    'Воскресенье',
-  ];
-  return '${weekdays[date.weekday - 1]}, ${date.day} ${months[date.month - 1]}';
-}
+String _dayTitle(DateTime date) => appFullDate(date);
 
 class _SunMark extends StatelessWidget {
   const _SunMark({required this.size});
@@ -1137,4 +1131,52 @@ class _HomeClockState extends State<_HomeClock> {
 
   @override
   Widget build(BuildContext context) => widget.builder();
+}
+
+class _LanguageSetting extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final language = AppLanguage.instance;
+    Future<void> change(Future<void> Function() action) async {
+      try {
+        await action();
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.strings.languageSaveError)),
+          );
+        }
+      }
+    }
+
+    if (language.usesIosSettings) {
+      return TextButton.icon(
+        icon: const Icon(Icons.language),
+        label: Text(context.strings.appLanguage),
+        onPressed: () => change(language.openIosSettings),
+      );
+    }
+    return ValueListenableBuilder(
+      valueListenable: language,
+      builder: (context, selected, _) => DropdownButtonFormField<String>(
+        key: ValueKey(selected),
+        initialValue: selected?.languageCode ?? '',
+        decoration: InputDecoration(labelText: context.strings.appLanguage),
+        isExpanded: true,
+        items: [
+          DropdownMenuItem(
+            value: '',
+            child: Text(context.strings.systemLanguage),
+          ),
+          const DropdownMenuItem(value: 'en', child: Text('English')),
+          const DropdownMenuItem(value: 'ru', child: Text('Русский')),
+        ],
+        onChanged: (code) => change(
+          () => language.select(
+            code == null || code.isEmpty ? null : Locale(code),
+          ),
+        ),
+      ),
+    );
+  }
 }

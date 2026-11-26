@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../../app/alarm_controller.dart';
 import '../../app/theme.dart';
+import '../../l10n/strings.dart';
 import '../../models/device_alarm_check.dart';
-import '../../widgets/exact_slider.dart';
 import '../../services/alarm_gateway.dart';
+import '../../widgets/exact_slider.dart';
 import '../challenges/challenge_models.dart';
 import '../challenges/challenge_screen.dart';
 import 'alarm_editor.dart';
@@ -75,7 +76,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
       _acting = false;
       _error = result.ok
           ? null
-          : result.error ?? 'Не удалось завершить проверку.';
+          : result.error ?? appStrings.couldntFinishTheTest;
     });
     if (result.ok && successMessage != null) {
       ScaffoldMessenger.of(context)
@@ -122,27 +123,28 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
       builder: (context) => AlertDialog(
         scrollable: true,
         title: Text(
-          enabled ? 'Защитить от удаления?' : 'Снять защиту от удаления?',
+          enabled
+              ? context.strings.turnOnUninstallProtection
+              : context.strings.turnOffUninstallProtection,
         ),
         content: Text(
           enabled
-              ? 'Android предложит сделать «Ещё пять» администратором устройства. '
-                    'Перед удалением приложения потребуется снять этот статус. '
-                    'Это дополнительный шаг против удаления в полусне. '
-                    'Защиту можно отключить здесь или в системных настройках. '
-                    'Приложение не получает права стирать данные или менять пароль телефона.'
-              : 'Приложение можно будет удалить обычным способом. '
-                    'Будильники и их настройки сохранятся.',
+              ? context.strings.uninstallProtectionConsent
+              : context.strings.uninstallProtectionRemovalNotice,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
+            child: Text(context.strings.cancel),
           ),
           FilledButton(
             key: const ValueKey('device-admin-confirm'),
             onPressed: () => Navigator.pop(context, true),
-            child: Text(enabled ? 'Открыть запрос Android' : 'Снять защиту'),
+            child: Text(
+              enabled
+                  ? context.strings.openAndroidPrompt
+                  : context.strings.turnOffProtection,
+            ),
           ),
         ],
       ),
@@ -168,25 +170,17 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
       context: context,
       builder: (context) => AlertDialog(
         scrollable: true,
-        title: const Text('Закрывать меню питания?'),
-        content: const Text(
-          'Включи службу «Ещё пять — меню питания» в специальных возможностях Android. '
-          'Она закрывает распознанное меню питания только во время настоящего звонка.\n\n'
-          'Служба получает сведения о системных окнах. Содержимое приложений '
-          'не читается, не сохраняется и не передаётся. Защиту можно отключить здесь '
-          'или в настройках Android.\n\n'
-          'Работает не на всех телефонах. Принудительную перезагрузку кнопками '
-          'не блокирует; аварийный выход из будильника остаётся доступен.',
-        ),
+        title: Text(context.strings.closeThePowerMenu),
+        content: Text(context.strings.powerMenuConsent),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
+            child: Text(context.strings.cancel),
           ),
           FilledButton(
             key: const ValueKey('power-menu-confirm'),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Открыть настройки Android'),
+            child: Text(context.strings.openAndroidSettings),
           ),
         ],
       ),
@@ -212,11 +206,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
         setState(() => _adminRemoving = false);
         if (controller.device.deviceAdminActive == true) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Android пока сообщает, что защита включена. Обнови статус или сними её в системных настройках.',
-              ),
-            ),
+            SnackBar(content: Text(appStrings.uninstallProtectionStillActive)),
           );
         }
       }
@@ -257,10 +247,10 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
           : actionError;
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Проверка телефона'),
+          title: Text(context.strings.phoneCheck),
           actions: [
             IconButton(
-              tooltip: 'Обновить статус',
+              tooltip: context.strings.refreshStatus,
               onPressed: blocked ? null : controller.refreshStatus,
               icon: const Icon(Icons.refresh_rounded),
             ),
@@ -285,7 +275,9 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                   Semantics(
                     liveRegion: true,
                     child: Text(
-                      'Расписание восстановлено не полностью. ${device.recoveryError}',
+                      context.strings.scheduleRecoveryDetails(
+                        device.recoveryError ?? '',
+                      ),
                       key: const ValueKey('alarm-recovery-error'),
                       style: TextStyle(color: context.palette.red, height: 1.5),
                     ),
@@ -298,20 +290,24 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                           ? null
                           : () => _run(
                               controller.restoreAlarms,
-                              successMessage: 'Расписание восстановлено. Проверь звонок на телефоне.',
+                              successMessage:
+                                  context.strings.restoredTestPrompt,
                             ),
                       icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Повторить восстановление'),
+                      label: Text(context.strings.tryRestoringAgain),
                     ),
                   const SizedBox(height: 20),
                 ],
                 if (!device.supported)
                   ..._preview()
                 else ...[
-                  const Text('Проверим звонок', style: AppTypography.heading),
+                  Text(
+                    context.strings.testYourAlarm,
+                    style: AppTypography.heading,
+                  ),
                   const SizedBox(height: 12),
                   Text(
-                    'Запусти тест и заблокируй экран.',
+                    context.strings.startTheTestThenLockYourScreen,
                     style: TextStyle(color: context.palette.muted, height: 1.5),
                   ),
                   if (check?.pending == true) ...[
@@ -319,33 +315,33 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     ..._pendingCheck(check!, blocked),
                   ],
                   const SizedBox(height: 28),
-                  _heading('Разрешения'),
+                  _heading(context.strings.permissions),
                   if (device.platform == 'ios')
                     _permissionRow(
-                      title: 'Будильники на iPhone',
-                      description: 'Разрешение на системный звонок.',
+                      title: context.strings.alarmsOnIphoneLabel,
+                      description: context.strings.allowSystemAlarmsToRing,
                       enabled: device.exactAlarms && device.notifications,
                       target: 'exactAlarms',
                       blocked: blocked,
                     )
                   else ...[
                     _permissionRow(
-                      title: 'Уведомления',
-                      description: 'Показывать будильник и управление им.',
+                      title: context.strings.notifications,
+                      description: context.strings.notificationPermissionHint,
                       enabled: device.notifications,
                       target: 'notifications',
                       blocked: blocked,
                     ),
                     _permissionRow(
-                      title: 'Точное срабатывание',
-                      description: 'Назначать звонок на выбранное время.',
+                      title: context.strings.exactAlarms,
+                      description: context.strings.exactAlarmPermissionHint,
                       enabled: device.exactAlarms,
                       target: 'exactAlarms',
                       blocked: blocked,
                     ),
                     _permissionRow(
-                      title: 'Экран поверх блокировки',
-                      description: 'Открывать экран подъёма при звонке.',
+                      title: context.strings.lockScreenAccess,
+                      description: context.strings.lockScreenPermissionHint,
                       enabled: device.fullScreenIntent,
                       target: 'fullScreenIntent',
                       blocked: blocked,
@@ -357,8 +353,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     Padding(
                       padding: EdgeInsets.only(top: 12),
                       child: Text(
-                        'Часть разрешений сейчас выключена. Прошлая проверка '
-                        'не подтверждает работу с новыми настройками.',
+                        context.strings.previousTestPermissionsChanged,
                         style: TextStyle(
                           color: context.palette.morning,
                           height: 1.5,
@@ -369,12 +364,14 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                       device.alarmMaxVolume != null)
                     _advice(
                       icon: Icons.volume_up_outlined,
-                      title:
-                          'Громкость будильника: ${device.alarmVolume} из ${device.alarmMaxVolume}',
+                      title: context.strings.alarmVolumeOf(
+                        device.alarmVolume!,
+                        device.alarmMaxVolume!,
+                      ),
                       text: device.alarmVolume == 0
-                          ? 'Сейчас звук выключен. Подними громкость перед проверкой.'
-                          : 'Выбери громкость, которую слышно с кровати.',
-                      action: 'Настроить громкость',
+                          ? context.strings.mutedAlarmTestHint
+                          : context.strings.audibleVolumeHint,
+                      action: context.strings.adjustVolume,
                       onPressed: blocked
                           ? null
                           : () => _permission('alarmVolume'),
@@ -383,15 +380,14 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     _reliabilitySettings(device, blocked),
                   if (check?.pending != true) ...[
                     const SizedBox(height: 28),
-                    _heading('Проверочный звонок'),
+                    _heading(context.strings.testAlarm),
                     if (check != null) ...[
                       _checkResult(check),
                       const SizedBox(height: 20),
                     ],
                     if (selected == null) ...[
                       Text(
-                        'Сначала сохрани будильник. Для проверки возьмём его '
-                        'звук и настройки переносов.',
+                        context.strings.saveAlarmForTestHint,
                         style: TextStyle(
                           color: context.palette.muted,
                           height: 1.5,
@@ -403,14 +399,14 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                             ? null
                             : _createAlarm,
                         icon: const Icon(Icons.add_rounded),
-                        label: const Text('Создать будильник'),
+                        label: Text(context.strings.createAlarm),
                       ),
                     ] else ...[
                       DropdownButtonFormField<String>(
                         initialValue: selected.id,
                         isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Настройки для проверки',
+                        decoration: InputDecoration(
+                          labelText: context.strings.alarmToTest,
                         ),
                         items: alarms
                             .map(
@@ -434,8 +430,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Основное расписание сохранится. После запуска заблокируй '
-                        'телефон и оставь его рядом. Проверочный звонок нужно будет отключить.',
+                        context.strings.lockPhoneForTestHint,
                         style: TextStyle(
                           color: context.palette.muted,
                           height: 1.5,
@@ -443,8 +438,8 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                       ),
                       const SizedBox(height: 18),
                       ExactSlider(
-                        label: 'Проверочный звонок через',
-                        unit: 'с',
+                        label: context.strings.ringAfter,
+                        unit: context.strings.s,
                         value: _delaySeconds,
                         min: 1,
                         max: 60,
@@ -469,7 +464,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                               ),
                         icon: const Icon(Icons.phonelink_ring_rounded),
                         label: Text(
-                          'Проверить через $_delaySeconds секунд',
+                          context.strings.testInSeconds(_delaySeconds),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -477,7 +472,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                         Padding(
                           padding: EdgeInsets.only(top: 10),
                           child: Text(
-                            'Сначала включи разрешения на уведомления и будильники.',
+                            context.strings.allowNotificationsAndAlarmsFirst,
                             style: TextStyle(
                               color: context.palette.morning,
                               height: 1.5,
@@ -491,8 +486,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     Padding(
                       padding: EdgeInsets.only(top: 12),
                       child: Text(
-                        'На iPhone системная кнопка остановки отключает звонок без задания. '
-                        'Для задания открой приложение.',
+                        context.strings.iosTestStopHint,
                         style: TextStyle(
                           color: context.palette.muted,
                           fontSize: 12,
@@ -509,169 +503,151 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
     },
   );
 
-  Widget _reliabilitySettings(
-    AlarmDeviceStatus device,
-    bool blocked,
-  ) => ExpansionTile(
-    key: const ValueKey('device-reliability'),
-    tilePadding: EdgeInsets.zero,
-    childrenPadding: const EdgeInsets.only(bottom: 16),
-    shape: const Border(),
-    collapsedShape: const Border(),
-    title: const Text('Надёжность и защита'),
-    subtitle: const Text('Перезагрузка и системные настройки'),
-    children: [
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _reliabilitySettings(AlarmDeviceStatus device, bool blocked) =>
+      ExpansionTile(
+        key: const ValueKey('device-reliability'),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 16),
+        shape: const Border(),
+        collapsedShape: const Border(),
+        title: Text(appStrings.reliabilityAndProtection),
+        subtitle: Text(appStrings.restartAndSystemSettings),
         children: [
-          const Text(
-            'После перезагрузки',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            device.bootRecoverySupported == true
-                ? 'Начавшийся подъём продолжается после загрузки Android без ограничения '
-                      'по времени. Расписание и потраченные минуты переноса сохраняются. '
-                      'Проверь восстановление звонка на своём телефоне.'
-                : 'Поддержку восстановления на этом устройстве не удалось подтвердить. '
-                      'Обнови статус и проверь звонок после перезагрузки.',
-            style: TextStyle(color: context.palette.muted, height: 1.5),
-          ),
-          if (device.powerMenuGuardActive != null) ...[
-            const SizedBox(height: 20),
-            const Text(
-              'Меню питания',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              device.powerMenuGuardActive == true
-                  ? 'Защита включена. Во время звонка приложение закрывает распознанное меню питания. Проверь на своём телефоне.'
-                  : 'Закрывать меню выключения во время звонка. Требуется отдельное разрешение Android; работает не на всех телефонах.',
-              key: const ValueKey('power-menu-status'),
-              style: TextStyle(color: context.palette.muted, height: 1.5),
-            ),
-            TextButton(
-              key: const ValueKey('power-menu-change'),
-              onPressed: blocked ? null : _changePowerMenuGuard,
-              child: Text(
-                device.powerMenuGuardActive == true
-                    ? 'Выключить защиту меню'
-                    : 'Включить защиту меню',
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                appStrings.afterARestart,
+                style: TextStyle(fontWeight: FontWeight.w700),
               ),
-            ),
-          ],
-          _advice(
-            icon: Icons.battery_saver_outlined,
-            title: switch (device.batteryOptimized) {
-              true => 'Приложение ограничено оптимизацией батареи',
-              false => 'Исключение из оптимизации батареи включено',
-              null => 'Проверь ограничения батареи',
-            },
-            text:
-                'Исключение помогает будильнику работать в фоне. На некоторых '
-                'телефонах нужно дополнительно разрешить автозапуск в настройках приложения.',
-            action: device.batteryOptimized == true
-                ? 'Разрешить работу без оптимизации'
-                : 'Открыть настройки батареи',
-            onPressed: blocked ? null : () => _permission('battery'),
-          ),
-          TextButton(
-            key: const ValueKey('device-app-settings'),
-            onPressed: blocked ? null : () => _permission('appSettings'),
-            child: const Text('Настройки приложения и автозапуск'),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Защита от удаления',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            switch (device.deviceAdminActive) {
-              true =>
-                'Статус администратора включён. Для удаления приложения '
-                    'сначала потребуется снять защиту. Её можно отключить здесь '
-                    'или в системных настройках.',
-              false =>
-                'Дополнительный шаг против удаления приложения в полусне. '
-                    'Включается отдельно через системный запрос Android.',
-              null =>
-                'Администратор устройства здесь недоступен. '
-                    'Эта защита не требуется для обычного звонка.',
-            },
-            key: const ValueKey('device-admin-status'),
-            style: TextStyle(color: context.palette.muted, height: 1.5),
-          ),
-          if (device.deviceAdminActive != null)
-            TextButton(
-              key: const ValueKey('device-admin-change'),
-              onPressed: blocked || _adminRemoving
-                  ? null
-                  : () => _changeAdmin(device.deviceAdminActive != true),
-              child: Text(
-                device.deviceAdminActive == true
-                    ? 'Снять защиту от удаления'
-                    : 'Включить защиту от удаления',
+              const SizedBox(height: 8),
+              Text(
+                device.bootRecoverySupported == true
+                    ? appStrings.androidRestartRecoveryDescription
+                    : appStrings.recoverySupportUnknown,
+                style: TextStyle(color: context.palette.muted, height: 1.5),
               ),
-            ),
-          if (_adminRemoving)
-            Semantics(
-              liveRegion: true,
-              child: const Text(
-                'Android снимает защиту…',
-                key: ValueKey('device-admin-removing'),
+              if (device.powerMenuGuardActive != null) ...[
+                const SizedBox(height: 20),
+                Text(
+                  appStrings.powerMenu,
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  device.powerMenuGuardActive == true
+                      ? appStrings.powerMenuProtectionActive
+                      : appStrings.powerMenuPermissionHint,
+                  key: const ValueKey('power-menu-status'),
+                  style: TextStyle(color: context.palette.muted, height: 1.5),
+                ),
+                TextButton(
+                  key: const ValueKey('power-menu-change'),
+                  onPressed: blocked ? null : _changePowerMenuGuard,
+                  child: Text(
+                    device.powerMenuGuardActive == true
+                        ? appStrings.turnOffPowerMenuProtection
+                        : appStrings.turnOnPowerMenuProtection,
+                  ),
+                ),
+              ],
+              _advice(
+                icon: Icons.battery_saver_outlined,
+                title: switch (device.batteryOptimized) {
+                  true => appStrings.batteryOptimizationIsRestrictingTheApp,
+                  false => appStrings.batteryOptimizationExemptionIsOn,
+                  null => appStrings.checkBatteryRestrictions,
+                },
+                text: appStrings.batteryExemptionHint,
+                action: device.batteryOptimized == true
+                    ? appStrings.allowUnrestrictedBatteryUse
+                    : appStrings.openBatterySettings,
+                onPressed: blocked ? null : () => _permission('battery'),
               ),
-            ),
-          const SizedBox(height: 12),
-          Text(
-            'Принудительная перезагрузка кнопками и остановка через настройки Android остаются доступны. '
-            'После принудительной остановки открой приложение и восстанови расписание. '
-            'В режиме «Не беспокоить» разреши будильники в настройках звука телефона.',
-            style: TextStyle(color: context.palette.muted, height: 1.5),
+              TextButton(
+                key: const ValueKey('device-app-settings'),
+                onPressed: blocked ? null : () => _permission('appSettings'),
+                child: Text(appStrings.appSettingsAndAutoStart),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                appStrings.uninstallProtection,
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                switch (device.deviceAdminActive) {
+                  true => appStrings.deviceAdminEnabledHint,
+                  false => appStrings.uninstallProtectionHint,
+                  null => appStrings.deviceAdminUnavailableHint,
+                },
+                key: const ValueKey('device-admin-status'),
+                style: TextStyle(color: context.palette.muted, height: 1.5),
+              ),
+              if (device.deviceAdminActive != null)
+                TextButton(
+                  key: const ValueKey('device-admin-change'),
+                  onPressed: blocked || _adminRemoving
+                      ? null
+                      : () => _changeAdmin(device.deviceAdminActive != true),
+                  child: Text(
+                    device.deviceAdminActive == true
+                        ? appStrings.turnOffUninstallProtectionLabel
+                        : appStrings.turnOnUninstallProtectionLabel,
+                  ),
+                ),
+              if (_adminRemoving)
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    appStrings.androidIsTurningOffProtection,
+                    key: ValueKey('device-admin-removing'),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              Text(
+                appStrings.androidRecoveryLimitations,
+                style: TextStyle(color: context.palette.muted, height: 1.5),
+              ),
+              if (device.bootRecoverySupported == true &&
+                  device.recoveryError == null)
+                TextButton.icon(
+                  key: const ValueKey('alarm-recovery-manual'),
+                  onPressed: blocked
+                      ? null
+                      : () => _run(
+                          controller.restoreAlarms,
+                          successMessage: appStrings.restoredTestPrompt,
+                        ),
+                  icon: const Icon(Icons.restore_rounded),
+                  label: Text(appStrings.restoreSchedule),
+                ),
+            ],
           ),
-          if (device.bootRecoverySupported == true &&
-              device.recoveryError == null)
-            TextButton.icon(
-              key: const ValueKey('alarm-recovery-manual'),
-              onPressed: blocked
-                  ? null
-                  : () => _run(
-                      controller.restoreAlarms,
-                      successMessage: 'Расписание восстановлено. Проверь звонок на телефоне.',
-                    ),
-              icon: const Icon(Icons.restore_rounded),
-              label: const Text('Восстановить расписание'),
-            ),
         ],
-      ),
-    ],
-  );
+      );
 
   List<Widget> _preview() => [
     Icon(Icons.visibility_outlined, color: context.palette.morning, size: 48),
     const SizedBox(height: 24),
-    const Text('Знакомство с «Ещё пять»', style: AppTypography.heading),
+    Text(appStrings.exploreFiveMore, style: AppTypography.heading),
     const SizedBox(height: 12),
     Text(
-      controller.device.error ??
-          'На этой платформе настоящий будильник недоступен. '
-              'Можно сохранить настройки черновика и попробовать задания без звука.',
+      controller.device.error ?? appStrings.previewPlatformDescription,
       style: TextStyle(color: context.palette.muted, height: 1.5),
     ),
     const SizedBox(height: 24),
     FilledButton.icon(
       onPressed: _practice,
       icon: const Icon(Icons.extension_outlined),
-      label: const Text('Попробовать задание'),
+      label: Text(appStrings.tryChallenge),
     ),
     const SizedBox(height: 12),
     OutlinedButton(
       onPressed: controller.busy || !controller.storageHealthy
           ? null
           : _createAlarm,
-      child: const Text('Настроить черновик'),
+      child: Text(appStrings.createADraft),
     ),
   ];
 
@@ -681,13 +657,13 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
     final due = seconds <= 0;
     return [
       Text(
-        due ? 'Прозвучал ли будильник?' : 'Заблокируй телефон сейчас',
+        due ? appStrings.didYouHearTheAlarm : appStrings.lockYourPhoneNow,
         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
       ),
       const SizedBox(height: 10),
       if (!due) ...[
         Text(
-          'До звонка: $seconds сек',
+          appStrings.ringsInS(seconds),
           key: const ValueKey('device-check-countdown'),
           style: TextStyle(
             color: context.palette.morning,
@@ -699,10 +675,8 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
       ],
       Text(
         due
-            ? 'Если звук был слышен с заблокированным экраном, отметь это. '
-                  'Мы не можем проверить звук за тебя. Ответ остановит проверочный звонок, если он ещё звучит.'
-            : 'Оставь телефон рядом и дождись звука. Затем открой приложение '
-                  'и отметь результат. Проверка сохранится, даже если закрыть этот экран.',
+            ? appStrings.reportAudibilityHint
+            : appStrings.waitingForTestAlarmHint,
         style: TextStyle(color: context.palette.muted, height: 1.5),
       ),
       const SizedBox(height: 18),
@@ -717,7 +691,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     previewAlarmId: check.previewAlarmId,
                   ),
                 ),
-          child: const Text('Да, зазвонил'),
+          child: Text(appStrings.yesIHeardIt),
         ),
         const SizedBox(height: 10),
         OutlinedButton(
@@ -730,7 +704,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                     previewAlarmId: check.previewAlarmId,
                   ),
                 ),
-          child: const Text('Не зазвонил'),
+          child: Text(appStrings.iDidntHearIt),
         ),
         const SizedBox(height: 10),
       ],
@@ -743,32 +717,28 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                   previewAlarmId: check.previewAlarmId,
                 ),
               ),
-        child: const Text('Отменить проверку'),
+        child: Text(appStrings.cancelTest),
       ),
     ];
   }
 
   Widget _checkResult(DeviceAlarmCheck check) {
     final date = check.confirmedAt;
-    final when = date == null
-        ? ''
-        : ' · ${date.day}.${date.month.toString().padLeft(2, '0')} '
-              '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    final when = date == null ? '' : ' · ${appDateTime(date)}';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           check.heard == true
-              ? 'Ты подтвердил: звук был$when'
-              : 'Ты отметил: звука не было$when',
+              ? appStrings.reportedHeardOn(when)
+              : appStrings.reportedSilentOn(when),
           style: const TextStyle(fontWeight: FontWeight.w700, height: 1.5),
         ),
         const SizedBox(height: 6),
         Text(
           check.heard == true
-              ? 'Повтори проверку, если поменяешь настройки телефона.'
-              : 'Проверь громкость будильника, разрешения и ограничения батареи. '
-                    'Затем повтори проверку с заблокированным экраном.',
+              ? appStrings.runTheTestAgainIfYouChange
+              : appStrings.failedSoundTestAdvice,
           style: TextStyle(color: context.palette.muted, height: 1.5),
         ),
       ],
@@ -802,7 +772,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                 : Icons.error_outline_rounded,
             color: enabled ? context.palette.muted : context.palette.morning,
             size: 22,
-            semanticLabel: enabled ? 'Разрешено' : 'Выключено',
+            semanticLabel: enabled ? appStrings.allowed : appStrings.off,
           ),
         ),
         const SizedBox(width: 12),
@@ -824,7 +794,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                 TextButton(
                   onPressed: blocked ? null : () => _permission(target),
                   child: Text(
-                    'Разрешить: ${title.toLowerCase()}',
+                    appStrings.allow(title.toLowerCase()),
                     textAlign: TextAlign.start,
                   ),
                 ),

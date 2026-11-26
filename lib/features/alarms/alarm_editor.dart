@@ -1,24 +1,24 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/alarm_controller.dart';
 import '../../app/theme.dart';
+import '../../l10n/strings.dart';
 import '../../models/alarm.dart';
 import '../../models/background_frame.dart';
-import 'background_editor.dart';
-import '../../widgets/exact_slider.dart';
-import '../challenges/challenge_models.dart';
-import '../challenges/phrase_settings.dart';
-import '../challenges/challenge_screen.dart';
-import '../challenges/physical_tasks.dart';
 import '../../services/native_extras.dart';
-import '../../widgets/time_composer.dart';
 import '../../widgets/alarm_background.dart';
+import '../../widgets/exact_slider.dart';
+import '../../widgets/time_composer.dart';
+import '../challenges/challenge_models.dart';
+import '../challenges/challenge_screen.dart';
+import '../challenges/phrase_settings.dart';
+import '../challenges/physical_tasks.dart';
+import 'background_editor.dart';
 
 class AlarmEditor extends StatefulWidget {
   const AlarmEditor({
@@ -152,12 +152,12 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
 
   Future<void> _save({bool enable = true}) async {
     if (_invalidNumbers.isNotEmpty) {
-      setState(() => _error = 'Исправь числовые значения в настройках.');
+      setState(() => _error = appStrings.checkTheNumbersInYourSettings);
       return;
     }
     if (_saving) return;
     if (!_nap && !_timeValid) {
-      setState(() => _error = 'Закончи ввод времени.');
+      setState(() => _error = appStrings.finishEnteringTheTime);
       return;
     }
     if (_draft.requiresChallenge &&
@@ -165,7 +165,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
             (_draft.challengeKind == ChallengeKind.mixed &&
                 _draft.mixOrder.contains(ChallengeKind.qr))) &&
         _draft.qrValue.isEmpty) {
-      setState(() => _error = 'Сначала зарегистрируй QR-код.');
+      setState(() => _error = appStrings.registerAQrCodeFirst);
       return;
     }
     if (_nap) {
@@ -254,7 +254,9 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
       appBar: AppBar(
         leading: BackButton(onPressed: _leave),
         title: Text(
-          widget.alarm == null ? 'Новый будильник' : 'Настроить подъём',
+          widget.alarm == null
+              ? context.strings.newAlarm
+              : context.strings.editAlarm,
         ),
       ),
       bottomNavigationBar: SafeArea(
@@ -287,8 +289,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                       )
                     : Text(
                         widget.controller.device.supported
-                            ? 'Готово'
-                            : 'Сохранить черновик',
+                            ? context.strings.done
+                            : context.strings.saveDraft,
                         textAlign: TextAlign.center,
                       ),
               ),
@@ -303,15 +305,18 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
             padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
             children: [
               if (!widget.controller.device.supported)
-                const _Note(
+                _Note(
                   icon: Icons.info_outline_rounded,
-                  text: 'Режим знакомства: настройки сохранятся, но будильник не зазвонит.',
+                  text: context.strings.draftPreviewNotice,
                 ),
               SegmentedButton<bool>(
                 showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(value: false, label: Text('Будильник')),
-                  ButtonSegment(value: true, label: Text('Вздремнуть')),
+                segments: [
+                  ButtonSegment(
+                    value: false,
+                    label: Text(context.strings.alarm),
+                  ),
+                  ButtonSegment(value: true, label: Text(context.strings.nap)),
                 ],
                 selected: {_nap},
                 onSelectionChanged: _saving
@@ -329,8 +334,21 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
                   _nap
-                      ? 'Звонок в ${clockLabel(TimeOfDay.fromDateTime(widget.controller.now.add(Duration(minutes: _napMinutes))))}'
-                      : 'До звонка ${remainingLabel(_draft.nextOccurrence(widget.controller.now), widget.controller.now)}',
+                      ? context.strings.ringsAt(
+                          clockLabel(
+                            TimeOfDay.fromDateTime(
+                              widget.controller.now.add(
+                                Duration(minutes: _napMinutes),
+                              ),
+                            ),
+                          ),
+                        )
+                      : context.strings.ringsIn(
+                          remainingLabel(
+                            _draft.nextOccurrence(widget.controller.now),
+                            widget.controller.now,
+                          ),
+                        ),
                   key: const ValueKey('alarm-time-remaining'),
                   style: TextStyle(
                     color: context.palette.morning,
@@ -342,8 +360,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
               if (_nap) ...[
                 ExactSlider(
                   key: const ValueKey('nap-minutes'),
-                  label: 'Вздремнуть',
-                  unit: 'мин',
+                  label: context.strings.nap,
+                  unit: context.strings.min,
                   value: _napMinutes,
                   min: 1,
                   max: 1440,
@@ -367,14 +385,22 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                   ),
                 ),
               if (!_nap) ...[
-                const _Heading('Когда повторять'),
+                _Heading(context.strings.repeat),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _preset('Один раз', const []),
-                    _preset('Будни', const [1, 2, 3, 4, 5]),
-                    _preset('Каждый день', const [1, 2, 3, 4, 5, 6, 7]),
+                    _preset(context.strings.once, const []),
+                    _preset(context.strings.weekdays, const [1, 2, 3, 4, 5]),
+                    _preset(context.strings.everyDay, const [
+                      1,
+                      2,
+                      3,
+                      4,
+                      5,
+                      6,
+                      7,
+                    ]),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -385,7 +411,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                     return Wrap(
                       spacing: gap,
                       runSpacing: 6,
-                      children: List.generate(7, (index) {
+                      children: List.generate(7, (position) {
+                        final index = (firstWeekdayIndex + position) % 7;
                         final selected = _draft.weekdays.contains(index + 1);
                         return SizedBox(
                           width:
@@ -393,7 +420,9 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                                       columns)
                                   .clamp(48.0, 80.0),
                           child: Semantics(
-                            label: '${shortWeekdays[index]}, повторять',
+                            label: context.strings.repeatOnWeekday(
+                              shortWeekdays[index],
+                            ),
                             button: true,
                             enabled: !_saving,
                             selected: selected,
@@ -444,9 +473,15 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
               SegmentedButton<String>(
                 key: const ValueKey('dismissal-mode'),
                 showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(value: 'normal', label: Text('Обычный звонок')),
-                  ButtonSegment(value: 'challenge', label: Text('С заданием')),
+                segments: [
+                  ButtonSegment(
+                    value: 'normal',
+                    label: Text(context.strings.standardAlarm),
+                  ),
+                  ButtonSegment(
+                    value: 'challenge',
+                    label: Text(context.strings.withChallenge),
+                  ),
                 ],
                 selected: {_draft.dismissalMode},
                 onSelectionChanged: _saving
@@ -460,7 +495,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                   key: const ValueKey('alarm-challenge'),
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const _Heading('Задание для пробуждения'),
+                    _Heading(context.strings.wakeUpChallenge),
                     if (_draft.challengeKind == ChallengeKind.mirror ||
                         _draft.challengeKind == ChallengeKind.mixed)
                       const PhraseSettings(),
@@ -540,11 +575,13 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                     SwitchListTile.adaptive(
                       key: const ValueKey('escalate-on-snooze'),
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Сложнее после переноса'),
+                      title: Text(context.strings.harderAfterEachSnooze),
                       subtitle: Text(
                         _draft.snoozeBudget == 0
-                            ? 'Сейчас переносы выключены.'
-                            : 'Каждый перенос повышает сложность на один уровень',
+                            ? context.strings.snoozingIsTurnedOff
+                            : context
+                                  .strings
+                                  .eachSnoozeRaisesTheDifficultyByOne,
                         style: TextStyle(
                           color: context.palette.muted,
                           fontSize: 12,
@@ -567,8 +604,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                           key: ValueKey('practice-stage-$_practiceSnoozes'),
                           initialValue: _practiceSnoozes,
                           isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Какой звонок попробовать',
+                          decoration: InputDecoration(
+                            labelText: context.strings.chooseARingToTry,
                           ),
                           items: _practiceStages
                               .map(
@@ -596,7 +633,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                         key: const ValueKey('practice-alarm'),
                         onPressed: _saving ? null : _practice,
                         icon: const Icon(Icons.play_arrow_rounded),
-                        label: const Text('Попробовать задание'),
+                        label: Text(context.strings.tryChallenge),
                       ),
                     ),
                   ],
@@ -605,10 +642,10 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                 key: const ValueKey('alarm-snoozes'),
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const _Heading('Переносы'),
+                  _Heading(context.strings.snooze),
                   ExactSlider(
-                    label: 'Общий запас переносов',
-                    unit: 'мин',
+                    label: context.strings.totalSnoozeTime,
+                    unit: context.strings.min,
                     key: const ValueKey('snooze-budget'),
                     value: _draft.snoozeBudget,
                     min: 0,
@@ -629,8 +666,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                   ),
                   if (_draft.snoozeBudget > 0)
                     ExactSlider(
-                      label: 'Обычный перенос',
-                      unit: 'мин',
+                      label: context.strings.snoozeDuration,
+                      unit: context.strings.min,
                       key: const ValueKey('snooze-minutes'),
                       value: _draft.snoozeMinutes,
                       min: 1,
@@ -652,10 +689,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                   SwitchListTile.adaptive(
                     key: const ValueKey('move-snooze-button'),
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Прятать кнопку переноса'),
-                    subtitle: const Text(
-                      'Во время звонка кнопка будет среди одинаковых плиток и сменит место после переноса',
-                    ),
+                    title: Text(context.strings.hideTheSnoozeButton),
+                    subtitle: Text(context.strings.movingSnoozeExplanation),
                     value: _draft.moveSnoozeButton,
                     onChanged: _saving || _draft.snoozeBudget == 0
                         ? null
@@ -665,9 +700,9 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                   ),
                 ],
               ),
-              const _Heading('Звук и вибрация'),
+              _Heading(context.strings.soundAndVibration),
               _soundSettings(),
-              const _Heading('Фон экрана звонка'),
+              _Heading(context.strings.alarmBackground),
               if (_draft.background.isNotEmpty)
                 SizedBox(
                   height: 180,
@@ -716,8 +751,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                     icon: const Icon(Icons.add_photo_alternate_outlined),
                     label: Text(
                       _draft.background.isEmpty
-                          ? 'Выбрать фото'
-                          : 'Заменить фото',
+                          ? context.strings.choosePhoto
+                          : context.strings.replacePhoto,
                     ),
                   ),
                   if (_draft.background.isNotEmpty)
@@ -727,7 +762,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                           ? null
                           : () => _soundAction(() => _frameBackground()),
                       icon: const Icon(Icons.crop),
-                      label: const Text('Настроить кадр'),
+                      label: Text(context.strings.adjustPhoto),
                     ),
                   if (_draft.background.isNotEmpty)
                     TextButton(
@@ -739,25 +774,25 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                                 backgroundFrame: const BackgroundFrame(),
                               ),
                             ),
-                      child: const Text('Убрать фон'),
+                      child: Text(context.strings.removeBackground),
                     ),
                 ],
               ),
               Text(
                 widget.controller.device.platform == 'ios'
-                    ? 'Фото хранится на телефоне. На iPhone фон виден после открытия приложения.'
-                    : 'Фото хранится только на телефоне.',
+                    ? context.strings.iphonePhotoPrivacy
+                    : context.strings.yourPhotoStaysOnThisPhone,
                 style: TextStyle(fontSize: 12, color: context.palette.muted),
               ),
-              const _Heading('Название · необязательно'),
+              _Heading(context.strings.nameOptional),
               TextField(
                 key: const ValueKey('alarm-title'),
                 controller: _title,
                 maxLength: 50,
                 enabled: !_saving,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  hintText: 'Например, утренняя прогулка',
+                decoration: InputDecoration(
+                  hintText: context.strings.eGMorningWalk,
                   counterText: '',
                 ),
               ),
@@ -765,8 +800,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                 SwitchListTile.adaptive(
                   key: const ValueKey('delete-after-dismiss'),
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Удалить'),
-                  subtitle: const Text('После завершения звонка'),
+                  title: Text(context.strings.delete),
+                  subtitle: Text(context.strings.afterDismissal),
                   value: _draft.deleteAfterDismiss,
                   onChanged: _saving
                       ? null
@@ -779,11 +814,9 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                 ),
               if (_draft.requiresChallenge &&
                   !widget.controller.device.challengeEnforced)
-                const _Note(
+                _Note(
                   icon: Icons.phone_iphone_rounded,
-                  text:
-                      'На iPhone системный будильник можно остановить без задания. '
-                      'Задания доступны после открытия приложения.',
+                  text: context.strings.iosChallengeNotice,
                 ),
             ],
           ),
@@ -797,7 +830,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
     children: [
       SwitchListTile.adaptive(
         contentPadding: EdgeInsets.zero,
-        title: const Text('Свой порядок заданий'),
+        title: Text(appStrings.customChallengeOrder),
         value: _draft.mixOrder.isNotEmpty,
         onChanged: _saving
             ? null
@@ -819,7 +852,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
       ),
       if (_draft.mixOrder.isNotEmpty) ...[
         Text(
-          'Перетаскивай за ручку. Можно повторить один вид несколько раз.',
+          appStrings.reorderStagesHint,
           style: TextStyle(color: context.palette.muted, fontSize: 12),
         ),
         ReorderableListView.builder(
@@ -845,7 +878,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
             ),
             title: Text('${index + 1}. ${_draft.mixOrder[index].label}'),
             trailing: IconButton(
-              tooltip: 'Убрать этап',
+              tooltip: context.strings.removeStage,
               onPressed: _saving || _draft.mixOrder.length == 1
                   ? null
                   : () {
@@ -869,7 +902,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
           child: Padding(
             padding: EdgeInsets.all(16),
             child: Text(
-              'Добавить этап',
+              appStrings.addStage,
               style: TextStyle(color: context.palette.morning),
             ),
           ),
@@ -882,10 +915,10 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
     leading: const Icon(Icons.qr_code_scanner_rounded),
     title: Text(
       _draft.qrValue.isEmpty
-          ? 'Зарегистрировать QR-код'
-          : 'QR-код зарегистрирован',
+          ? appStrings.registerQrCode
+          : appStrings.qrCodeRegistered,
     ),
-    subtitle: const Text('Например, код в ванной или на кухне'),
+    subtitle: Text(appStrings.qrLocationHint),
     trailing: const Icon(Icons.chevron_right),
     onTap: _saving
         ? null
@@ -902,8 +935,8 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
       if (widget.controller.device.platform != 'ios') ...[
         ExactSlider(
           key: const ValueKey('volume-ramp'),
-          label: 'Нарастание громкости',
-          unit: 'с',
+          label: appStrings.fadeInDuration,
+          unit: appStrings.s,
           value: _draft.volumeRampSeconds,
           min: 0,
           max: 60,
@@ -913,7 +946,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
               setState(() => _draft = _draft.copyWith(volumeRampSeconds: v)),
         ),
         SwitchListTile.adaptive(
-          title: const Text('Вибрация'),
+          title: Text(appStrings.vibration),
           value: _draft.vibration,
           onChanged: _saving
               ? null
@@ -927,12 +960,12 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
         isExpanded: true,
         items:
             {
-                  ...const {
-                    'system': 'Системный будильник',
-                    'classic': 'Классический звонок',
-                    'sunrise': 'Мягкий рассвет',
-                    'arcade': 'Аркадное утро',
-                    'pulse': 'Пульс',
+                  ...{
+                    'system': appStrings.systemAlarmSound,
+                    'classic': appStrings.classicRing,
+                    'sunrise': appStrings.gentleSunrise,
+                    'arcade': appStrings.arcadeMorning,
+                    'pulse': appStrings.pulse,
                   },
                   if (_draft.sound.startsWith('file:'))
                     _draft.sound: _draft.soundLabel,
@@ -952,26 +985,26 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
                     () => _draft = _draft.copyWith(
                       sound: v,
                       soundLabel:
-                          const {
-                            'system': 'Системный будильник',
-                            'classic': 'Классический звонок',
-                            'sunrise': 'Мягкий рассвет',
-                            'arcade': 'Аркадное утро',
-                            'pulse': 'Пульс',
+                          {
+                            'system': appStrings.systemAlarmSound,
+                            'classic': appStrings.classicRing,
+                            'sunrise': appStrings.gentleSunrise,
+                            'arcade': appStrings.arcadeMorning,
+                            'pulse': appStrings.pulse,
                           }[v] ??
                           _draft.soundLabel,
                     ),
                   );
                 }
               },
-        decoration: const InputDecoration(labelText: 'Звук этого будильника'),
+        decoration: InputDecoration(labelText: appStrings.alarmSound),
       ),
       Wrap(
         spacing: 8,
         children: [
           TextButton.icon(
             icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Послушать'),
+            label: Text(appStrings.listen),
             onPressed: _soundBusy
                 ? null
                 : () => _soundAction(() async {
@@ -982,7 +1015,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
           ),
           TextButton.icon(
             icon: const Icon(Icons.audio_file_outlined),
-            label: const Text('Выбрать аудиофайл'),
+            label: Text(appStrings.chooseAudioFile),
             onPressed: _soundBusy
                 ? null
                 : () => _soundAction(() async {
@@ -1001,7 +1034,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
       ),
       if (widget.controller.device.platform == 'ios')
         Text(
-          'Для iPhone берём первые 29 секунд файла.',
+          appStrings.iosAudioLengthHint,
           style: TextStyle(color: context.palette.muted, fontSize: 12),
         ),
     ],
@@ -1015,7 +1048,7 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
         setState(
           () => _error = e is PlatformException
               ? e.message
-              : 'Не удалось открыть файл. Попробуй ещё раз.',
+              : appStrings.couldntOpenTheFileTryAgain,
         );
       }
     }
@@ -1040,10 +1073,10 @@ class _AlarmEditorState extends State<AlarmEditor> with WidgetsBindingObserver {
   }
 
   String _stageLabel(int used) => used == 0
-      ? 'Первый звонок'
+      ? appStrings.firstRing
       : used == 1
-      ? 'После 1 переноса'
-      : 'После $used переносов';
+      ? appStrings.after1Snooze
+      : appStrings.afterSnoozes(used);
 
   Widget _preset(String label, List<int> days) => ChoiceChip(
     label: Text(label),

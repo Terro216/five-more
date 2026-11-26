@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../l10n/strings.dart';
 import '../models/alarm.dart';
 import '../models/device_alarm_check.dart';
 import '../services/alarm_gateway.dart';
@@ -49,9 +50,9 @@ class AlarmController extends ChangeNotifier {
     Future<AlarmResult> Function() action,
   ) async {
     if (!_pendingAlarmIds.add(id)) {
-      return const AlarmResult(
+      return AlarmResult(
         ok: false,
-        error: 'Дождись завершения изменения этого будильника.',
+        error: appStrings.waitForThisAlarmToFinishUpdating,
       );
     }
     _notify();
@@ -79,9 +80,7 @@ class AlarmController extends ChangeNotifier {
       await _refreshSleepEvents();
     } catch (_) {
       storageHealthy = false;
-      error =
-          'Не удалось прочитать сохранённые настройки. '
-          'Перезапустите приложение: существующие данные не перезаписаны.';
+      error = appStrings.savedSettingsReadError;
     }
     try {
       device = await gateway.status();
@@ -91,7 +90,7 @@ class AlarmController extends ChangeNotifier {
         if (storageHealthy) await _mergeNativeConfigs();
       }
     } catch (_) {
-      error ??= 'Не удалось проверить системный будильник. Попробуйте обновить статус.';
+      error ??= appStrings.systemAlarmCheckError;
     }
     loading = false;
     _notify();
@@ -140,16 +139,17 @@ class AlarmController extends ChangeNotifier {
     bool requiresStorage = true,
   }) => _enqueue(() async {
     if (!storageHealthy && requiresStorage) {
-      return AlarmResult(ok: false, error: error ?? 'Хранилище недоступно.');
+      return AlarmResult(
+        ok: false,
+        error: error ?? appStrings.storageIsUnavailable,
+      );
     }
     try {
       final result = await action();
-      if (!result.ok) error = result.error ?? 'Не удалось изменить будильник.';
+      if (!result.ok) error = result.error ?? appStrings.couldntUpdateTheAlarm;
       return result;
     } catch (_) {
-      error =
-          'Не удалось завершить действие. Проверьте статус будильника '
-          'перед тем, как полагаться на него.';
+      error = appStrings.alarmActionFailed;
       return AlarmResult(ok: false, error: error);
     }
   }, mutation: true);
@@ -171,7 +171,7 @@ class AlarmController extends ChangeNotifier {
     try {
       await _persist();
     } catch (_) {
-      error = 'Проверка телефона восстановлена, но запись не сохранена. Её можно отменить на экране проверки.';
+      error = appStrings.restoredTestNotSaved;
     }
   }
 
@@ -189,7 +189,10 @@ class AlarmController extends ChangeNotifier {
     if (enabledOverride != null) {
       final current = alarmById(alarm.id);
       if (current == null) {
-        return const AlarmResult(ok: false, error: 'Будильник уже удалён.');
+        return AlarmResult(
+          ok: false,
+          error: appStrings.thisAlarmHasAlreadyBeenDeleted,
+        );
       }
       alarm = current.copyWith(enabled: enabledOverride);
     }
@@ -198,9 +201,9 @@ class AlarmController extends ChangeNotifier {
     Alarm saved;
     if (!device.supported) {
       if (!allowPreviewDraft) {
-        return const AlarmResult(
+        return AlarmResult(
           ok: false,
-          error: 'Это режим знакомства. Системные будильники здесь недоступны.',
+          error: appStrings.youreInPreviewModeSystemAlarmsAre,
         );
       }
       saved = alarm.copyWith(enabled: false, clearNextAt: true);
@@ -258,7 +261,10 @@ class AlarmController extends ChangeNotifier {
     if (current == null ||
         current.occurrenceId != source.occurrenceId ||
         current.snoozesUsed != source.snoozesUsed) {
-      return const AlarmResult(ok: false, error: 'Этот звонок уже завершён.');
+      return AlarmResult(
+        ok: false,
+        error: appStrings.thisAlarmHasAlreadyStoppedRinging,
+      );
     }
     final result = await gateway.quiet(
       source.alarm.id,
@@ -283,19 +289,16 @@ class AlarmController extends ChangeNotifier {
       if (active == null ||
           active.alarm.id != expectedAlarmId ||
           active.occurrenceId != expectedOccurrenceId) {
-        return const AlarmResult(
-          ok: false,
-          error: 'Этот подъём уже завершён. Проверьте текущий будильник.',
-        );
+        return AlarmResult(ok: false, error: appStrings.alarmEndedCheckCurrent);
       }
       if (active.minutesRemaining <= 0) {
-        return const AlarmResult(ok: false, error: 'Запас минут закончился.');
+        return AlarmResult(ok: false, error: appStrings.noSnoozeTimeLeft);
       }
       if (minutes != null &&
           (minutes < 1 || minutes > active.minutesRemaining || minutes > 30)) {
-        return const AlarmResult(
+        return AlarmResult(
           ok: false,
-          error: 'Выбери перенос в пределах оставшегося запаса минут.',
+          error: appStrings.chooseASnoozeWithinYourRemainingTime,
         );
       }
       final result = await gateway.snooze(
@@ -327,10 +330,7 @@ class AlarmController extends ChangeNotifier {
           active.alarm.id != expectedAlarmId ||
           active.occurrenceId != expectedOccurrenceId ||
           (generation != null && active.snoozesUsed != generation)) {
-        return const AlarmResult(
-          ok: false,
-          error: 'Этот подъём уже завершён. Проверьте текущий будильник.',
-        );
+        return AlarmResult(ok: false, error: appStrings.alarmEndedCheckCurrent);
       }
       final result = await gateway.dismiss(
         active.alarm.id,
@@ -354,13 +354,14 @@ class AlarmController extends ChangeNotifier {
           device = await gateway.status();
           if (storageHealthy) await _mergeNativeConfigs();
         } catch (_) {
-          error = 'Подъём завершён. Не удалось обновить данные; они будут загружены повторно.';
+          error = appStrings.dismissedRefreshPending;
         }
         if (disabled != null && !disabled.ok) {
           return AlarmResult(
             ok: false,
-            error:
-                'Подъём завершён, но выключить будущие звонки не удалось. ${disabled.error ?? "Проверь расписание."}',
+            error: appStrings.alarmDismissedScheduleError(
+              disabled.error ?? appStrings.checkTheSchedule,
+            ),
           );
         }
       }
@@ -375,47 +376,47 @@ class AlarmController extends ChangeNotifier {
     int delaySeconds = 20,
   }) => _mutate(() async {
     if (delaySeconds < 1 || delaySeconds > 60) {
-      return const AlarmResult(ok: false, error: 'Укажи от 1 до 60 секунд.');
+      return AlarmResult(
+        ok: false,
+        error: appStrings.chooseBetween1And60Seconds,
+      );
     }
     if (deviceCheck?.pending == true) {
-      return const AlarmResult(
+      return AlarmResult(
         ok: false,
-        error: 'Сначала заверши или отмени текущую проверку звонка.',
+        error: appStrings.finishOrCancelTheCurrentAlarmTest,
       );
     }
     device = await gateway.status();
     await _recoverNativeCheck();
     if (deviceCheck?.pending == true) {
-      return const AlarmResult(
-        ok: false,
-        error: 'На телефоне уже ожидается проверочный звонок. Заверши или отмени его.',
-      );
+      return AlarmResult(ok: false, error: appStrings.testAlarmAlreadyPending);
     }
     if (!device.supported) {
-      return const AlarmResult(
+      return AlarmResult(
         ok: false,
-        error: 'В режиме знакомства доступна тренировка. Проверять звонок нужно на телефоне.',
+        error: appStrings.phoneRequiredForAlarmTest,
       );
     }
     if (!device.canSchedule) {
-      return const AlarmResult(
+      return AlarmResult(
         ok: false,
-        error: 'Сначала разреши уведомления и точное срабатывание.',
+        error: appStrings.allowNotificationsAndExactAlarmsFirst,
       );
     }
     if (sourceAlarmId.startsWith('preview:') ||
         !_alarms.any((alarm) => alarm.id == sourceAlarmId)) {
-      return const AlarmResult(
+      return AlarmResult(
         ok: false,
-        error: 'Сначала сохрани будильник для проверки.',
+        error: appStrings.saveAnAlarmBeforeTestingIt,
       );
     }
     ringing = await gateway.getRingingAlarm();
     nativeStateKnown = true;
     if (ringing != null) {
-      return const AlarmResult(
+      return AlarmResult(
         ok: false,
-        error: 'Сначала заверши текущий подъём.',
+        error: appStrings.dismissTheCurrentAlarmFirst,
       );
     }
     final startedAt = now;
@@ -433,10 +434,9 @@ class AlarmController extends ChangeNotifier {
       if (previewId?.startsWith('preview:') == true) {
         await gateway.cancelTestAlarm(previewId!);
       }
-      return const AlarmResult(
+      return AlarmResult(
         ok: false,
-        error:
-            'Телефон не подтвердил время проверки. Проверь статус будильника.',
+        error: appStrings.yourPhoneDidntConfirmTheTestTime,
       );
     }
     final previous = deviceCheck;
@@ -459,8 +459,8 @@ class AlarmController extends ChangeNotifier {
       return AlarmResult(
         ok: false,
         error: cancelled
-            ? 'Проверка отменена: не удалось сохранить её состояние. Освободи место и попробуй снова.'
-            : 'Состояние проверки не сохранено, а отмена не подтверждена. Проверочный звонок может сработать; отмени его на этом экране.',
+            ? appStrings.testCanceledStorageError
+            : appStrings.testCancellationUnconfirmed,
       );
     }
     return result;
@@ -476,15 +476,15 @@ class AlarmController extends ChangeNotifier {
       if (check == null ||
           !check.pending ||
           check.previewAlarmId != expectedId) {
-        return const AlarmResult(
+        return AlarmResult(
           ok: false,
-          error: 'Эта проверка уже завершена или заменена новой.',
+          error: appStrings.thisTestHasAlreadyEndedOrBeen,
         );
       }
       if (!check.canConfirm(now)) {
-        return const AlarmResult(
+        return AlarmResult(
           ok: false,
-          error: 'Дождись времени проверочного звонка.',
+          error: appStrings.waitForTheTestAlarmToRing,
         );
       }
       // Also cancels a late or snoozed preview. Never resolve the real schedule.
@@ -508,9 +508,9 @@ class AlarmController extends ChangeNotifier {
       if (check == null ||
           !check.pending ||
           check.previewAlarmId != expectedId) {
-        return const AlarmResult(
+        return AlarmResult(
           ok: false,
-          error: 'Эта проверка уже завершена или заменена новой.',
+          error: appStrings.thisTestHasAlreadyEndedOrBeen,
         );
       }
       final result = await gateway.cancelTestAlarm(check.previewAlarmId);
@@ -520,17 +520,17 @@ class AlarmController extends ChangeNotifier {
       ringing = await gateway.getRingingAlarm();
       nativeStateKnown = true;
       if (!storageHealthy) {
-        return const AlarmResult(
+        return AlarmResult(
           ok: false,
-          error: 'Проверочный звонок отменён. Хранилище недоступно; прежние данные не перезаписаны.',
+          error: appStrings.testCanceledStorageUnavailable,
         );
       }
       try {
         await _persist();
       } catch (_) {
-        return const AlarmResult(
+        return AlarmResult(
           ok: false,
-          error: 'Проверочный звонок отменён, но запись об отмене не сохранена. Проверь свободное место.',
+          error: appStrings.testCancellationSaveError,
         );
       }
       return result;
@@ -545,18 +545,16 @@ class AlarmController extends ChangeNotifier {
       if (storageHealthy) await _mergeNativeConfigs();
       error = null;
     } catch (_) {
-      error =
-          'Не удалось открыть системные разрешения. '
-          'Проверьте их в настройках приложения.';
+      error = appStrings.openPermissionsError;
     }
     _notify();
   });
 
   Future<AlarmResult> restoreAlarms() => _mutate(() async {
     if (!device.supported || device.bootRecoverySupported != true) {
-      return const AlarmResult(
+      return AlarmResult(
         ok: false,
-        error: 'Восстановление расписания здесь недоступно.',
+        error: appStrings.scheduleRecoveryIsUnavailableHere,
       );
     }
     final result = await gateway.restoreAlarms();
@@ -571,7 +569,7 @@ class AlarmController extends ChangeNotifier {
         error:
             device.recoveryError ??
             device.error ??
-            'Не удалось подтвердить восстановление расписания. Обнови статус.',
+            appStrings.scheduleRestoreUnconfirmed,
       );
     }
     return result;
@@ -586,7 +584,7 @@ class AlarmController extends ChangeNotifier {
         if (storageHealthy) await _mergeNativeConfigs();
       }
     } catch (_) {
-      error = 'Не удалось обновить статус системного будильника.';
+      error = appStrings.systemAlarmStatusError;
     }
     _notify();
   });
@@ -601,7 +599,7 @@ class AlarmController extends ChangeNotifier {
         if (before != _visibleState()) _notify();
       });
     } catch (_) {
-      error = 'Связь с системным будильником временно недоступна.';
+      error = appStrings.systemAlarmUnavailable;
       _notify();
     } finally {
       _pollPending = false;
@@ -716,9 +714,7 @@ class AlarmController extends ChangeNotifier {
         await _mergeNativeConfigs();
         await _refreshSleepEvents();
       } catch (_) {
-        error =
-            'История пока не сохранена. Будильник продолжает работать; '
-            'события будут загружены повторно.';
+        error = appStrings.historySavePending;
       }
     }
   }

@@ -1,14 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../features/alarms/alarm_home.dart';
 import '../features/alarms/ringing_screen.dart';
+import '../l10n/strings.dart';
+import '../l10n/web_language_stub.dart'
+    if (dart.library.js_interop) '../l10n/web_language.dart';
+import '../services/appearance_settings.dart';
+import '../services/sync_service.dart';
 import 'alarm_controller.dart';
 import 'theme.dart';
-import '../services/sync_service.dart';
-import '../services/appearance_settings.dart';
 
 class FiveMoreApp extends StatefulWidget {
   const FiveMoreApp({super.key, required this.controller});
@@ -27,9 +29,19 @@ class _FiveMoreAppState extends State<FiveMoreApp> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeLocales(List<Locale>? locales) {
+    _refreshLanguage();
+  }
+
+  void _refreshLanguage() {
+    unawaited(AppLanguage.instance.load().catchError((Object _) {}));
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     SyncService.instance.setForeground(false);
     if (state == AppLifecycleState.resumed) {
+      _refreshLanguage();
       unawaited(
         widget.controller.refreshStatus().then(
           (_) => SyncService.instance.setForeground(true),
@@ -53,16 +65,24 @@ class _FiveMoreAppState extends State<FiveMoreApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: AppearanceSettings.instance,
+    animation: Listenable.merge([
+      AppearanceSettings.instance,
+      AppLanguage.instance,
+    ]),
     builder: (context, _) => MaterialApp(
-      title: 'Ещё пять',
+      onGenerateTitle: (context) {
+        updateWebLanguage(context.strings.localeName);
+        return context.strings.appName;
+      },
       debugShowCheckedModeBanner: false,
       theme: fiveMoreTheme(brightness: Brightness.light),
       darkTheme: fiveMoreTheme(),
       themeMode: AppearanceSettings.instance.mode,
-      locale: const Locale('ru'),
-      supportedLocales: const [Locale('ru'), Locale('en')],
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      locale: AppLanguage.instance.value,
+      localeListResolutionCallback: (locales, _) =>
+          AppLanguage.instance.resolve(locales),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: AlarmHome(controller: widget.controller),
       builder: (context, child) => AnimatedBuilder(
         animation: widget.controller,

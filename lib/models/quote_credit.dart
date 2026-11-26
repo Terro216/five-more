@@ -1,10 +1,16 @@
-enum QuoteSource {
-  wikiquote('Викицитатник', 'ru.wikiquote.org'),
-  citaty('Citaty.info', 'citaty.info'),
-  banter('quotes.to.digital', 'quotes.to.digital');
+import '../l10n/strings.dart';
 
-  const QuoteSource(this.label, this.host);
-  final String label;
+enum QuoteSource {
+  wikiquote('ru.wikiquote.org'),
+  englishWikiquote('en.wikiquote.org'),
+  citaty('citaty.info'),
+  banter('quotes.to.digital');
+
+  const QuoteSource(this.host);
+  bool get isWikiquote => this == wikiquote || this == englishWikiquote;
+  String get label => isWikiquote
+      ? appStrings.wikiquote
+      : (this == citaty ? 'Citaty.info' : host);
   final String host;
 }
 

@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme.dart';
 import '../../app/alarm_controller.dart';
+import '../../app/theme.dart';
+import '../../l10n/strings.dart';
 import '../../models/alarm.dart';
 import '../../models/sleep_entry.dart';
 import '../../models/sleep_session.dart';
 import '../../services/sleep_journal.dart';
 import '../../widgets/time_composer.dart';
 
-String sleepDateLabel(DateTime at) =>
-    '${at.day.toString().padLeft(2, '0')}.${at.month.toString().padLeft(2, '0')}.${at.year}';
+String sleepDateLabel(DateTime at) => appDate(at);
 
 class SleepReview extends StatefulWidget {
   const SleepReview({
@@ -165,38 +165,38 @@ class _SleepReviewState extends State<SleepReview> {
   );
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Как спалось?')),
+    appBar: AppBar(title: Text(context.strings.howDidYouSleep)),
     body: ListView(
       padding: const EdgeInsets.all(24),
       children: [
         Text(
-          'Сон к ${sleepDateLabel(_wakeAt)}',
+          context.strings.sleepEnding(sleepDateLabel(_wakeAt)),
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 24),
         _rating(
-          'Как спалось',
-          '1 — плохо · 5 — хорошо',
+          context.strings.sleepQuality,
+          context.strings.label1Poor5Good,
           _sleep,
           (v) => setState(() => _sleep = v),
         ),
         const SizedBox(height: 24),
         _rating(
-          'Как дался подъём',
-          '1 — с трудом · 5 — легко',
+          context.strings.easeOfWaking,
+          context.strings.label1Difficult5Easy,
           _wake,
           (v) => setState(() => _wake = v),
         ),
         const SizedBox(height: 24),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Примерное время засыпания'),
+          title: Text(context.strings.estimatedTimeYouFellAsleep),
           subtitle: Text(
             '${clockLabel(_bed)} · ${_bedEdited
-                ? "указано вручную"
+                ? context.strings.enteredManually
                 : (_originalBedSource ?? (_session?.bedtimeCandidate == null ? "habit" : "alarm_setup")) == "habit"
-                ? "обычное время"
-                : "настройка будильника + ${widget.journal.fallingAsleepMinutes} мин"}',
+                ? context.strings.usualBedtime
+                : context.strings.alarmSetupMin(widget.journal.fallingAsleepMinutes)}',
           ),
           trailing: const Icon(Icons.edit_outlined),
           onTap: _saving
@@ -205,7 +205,7 @@ class _SleepReviewState extends State<SleepReview> {
                   final value = await editClock(
                     context,
                     _bed,
-                    title: 'Когда примерно заснул(а)',
+                    title: context.strings.whenDidYouFallAsleep,
                   );
                   if (value != null && mounted) {
                     setState(() {
@@ -218,7 +218,7 @@ class _SleepReviewState extends State<SleepReview> {
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Время подъёма'),
+          title: Text(context.strings.wakeUpTime),
           subtitle: Text(clockLabel(TimeOfDay.fromDateTime(_wakeAt))),
           trailing: const Icon(Icons.edit_outlined),
           onTap: _saving
@@ -227,7 +227,7 @@ class _SleepReviewState extends State<SleepReview> {
                   final value = await editClock(
                     context,
                     TimeOfDay.fromDateTime(_wakeAt),
-                    title: 'Когда проснулся / проснулась',
+                    title: context.strings.whenDidYouWakeUp,
                   );
                   if (value != null && mounted) {
                     setState(() {
@@ -246,10 +246,8 @@ class _SleepReviewState extends State<SleepReview> {
         if (!_confirmed && (_session?.occurrences.length ?? 0) > 1)
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Между звонками был ещё один сон'),
-            subtitle: const Text(
-              'Выключено: все эти звонки относятся к одному сну. Включено: последний подъём станет отдельной записью. Укажи, когда снова заснул(а).',
-            ),
+            title: Text(context.strings.iSleptAgainBetweenAlarms),
+            subtitle: Text(context.strings.splitSleepExplanation),
             value: _separate,
             onChanged: _saving
                 ? null
@@ -263,7 +261,7 @@ class _SleepReviewState extends State<SleepReview> {
                       TimeOfDay.fromDateTime(
                         _session?.firstStartedAt ?? _wakeAt,
                       ),
-                      title: 'Когда снова заснул(а)',
+                      title: context.strings.whenDidYouFallAsleepAgain,
                     );
                     if (!mounted || bed == null) return;
                     setState(() {
@@ -275,7 +273,7 @@ class _SleepReviewState extends State<SleepReview> {
                   },
           ),
         Text(
-          'Расчётный сон: ${remainingLabel(_wakeAt, _bedAt)}',
+          context.strings.estimatedSleep(remainingLabel(_wakeAt, _bedAt)),
           style: TextStyle(color: context.palette.morning),
         ),
         const SizedBox(height: 24),
@@ -285,16 +283,16 @@ class _SleepReviewState extends State<SleepReview> {
           minLines: 2,
           maxLines: 5,
           maxLength: 1000,
-          decoration: const InputDecoration(
-            labelText: 'Заметка о сне',
-            hintText: 'Что хочется запомнить об этой ночи',
-            helperText: 'Необязательно · хранится на этом устройстве',
+          decoration: InputDecoration(
+            labelText: context.strings.sleepNote,
+            hintText: context.strings.whatWouldYouLikeToRememberAbout,
+            helperText: context.strings.optionalSavedOnThisDevice,
             helperMaxLines: 2,
           ),
         ),
         const SizedBox(height: 16),
         Text(
-          'Время можно уточнить. Отключение будильника не подтверждает пробуждение.',
+          context.strings.wakeTimeEstimateHint,
           style: TextStyle(color: context.palette.muted, height: 1.5),
         ),
         if (_error != null)
@@ -309,7 +307,7 @@ class _SleepReviewState extends State<SleepReview> {
               : () async {
                   if (!_bedAt.isBefore(_wakeAt)) {
                     setState(
-                      () => _error = 'Время засыпания должно быть раньше подъёма. Уточни время.',
+                      () => _error = context.strings.invalidSleepInterval,
                     );
                     return;
                   }
@@ -359,13 +357,12 @@ class _SleepReviewState extends State<SleepReview> {
                     if (mounted) {
                       setState(() {
                         _saving = false;
-                        _error =
-                            'Не удалось сохранить оценку. Попробуй ещё раз.';
+                        _error = context.strings.couldntSaveTheRatingTryAgain;
                       });
                     }
                   }
                 },
-          child: const Text('Сохранить оценку'),
+          child: Text(context.strings.saveRating),
         ),
       ],
     ),

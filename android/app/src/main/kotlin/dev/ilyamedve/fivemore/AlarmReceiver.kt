@@ -7,6 +7,10 @@ import android.os.Build
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_LOCALE_CHANGED) {
+            AppLanguage.refreshNotifications(context)
+            return
+        }
         val engine = AlarmEngine(context)
         if (intent.action != AlarmEngine.ACTION_FIRE && intent.action != AlarmEngine.ACTION_SNOOZE) BedtimeReminder.restore(context)
         when (intent.action) {

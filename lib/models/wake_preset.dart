@@ -1,4 +1,5 @@
 import '../features/challenges/challenge_models.dart';
+import '../l10n/strings.dart';
 import 'alarm.dart';
 
 /// Shortcuts expand into ordinary alarm settings; no extra persisted state or
@@ -9,15 +10,15 @@ enum WakePreset {
   direct;
 
   String get label => switch (this) {
-    gentle => 'Мягко',
-    gradual => 'С разгоном',
-    direct => 'Без переносов',
+    gentle => appStrings.gentle,
+    gradual => appStrings.buildUp,
+    direct => appStrings.noSnoozes,
   };
 
   String get description => switch (this) {
-    gentle => 'Чилл · счёт · 5 минут на переносы',
-    gradual => 'Счёт · 15 минут на переносы · сложность растёт',
-    direct => 'Микс заданий · средняя сложность',
+    gentle => appStrings.relaxedMath5MinOfSnoozeTime,
+    gradual => appStrings.math15MinOfSnoozeTimeIncreasing,
+    direct => appStrings.mixedChallengesMediumDifficulty,
   };
 
   Alarm applyTo(Alarm alarm) => switch (this) {

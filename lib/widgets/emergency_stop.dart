@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app/theme.dart';
+import '../l10n/strings.dart';
 
 const emergencyHoldSeconds = 60;
 
@@ -107,7 +108,7 @@ class _EmergencyStopState extends State<_EmergencyStop>
   Widget build(BuildContext context) => AlertDialog(
     scrollable: true,
     insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-    title: const Text('Аварийная остановка'),
+    title: Text(context.strings.emergencyStop),
     content: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -115,8 +116,8 @@ class _EmergencyStopState extends State<_EmergencyStop>
         if (!_verified) ...[
           Text(
             MediaQuery.accessibleNavigationOf(context)
-                ? 'Введи код с экрана, затем запусти минутный отсчёт. Звонок продолжится.'
-                : 'Введи код с экрана, затем удерживай кнопку 60 секунд. Звонок продолжится.',
+                ? context.strings.emergencyCountdownInstructions
+                : context.strings.emergencyHoldInstructions,
           ),
           const SizedBox(height: 16),
           Text(
@@ -144,16 +145,16 @@ class _EmergencyStopState extends State<_EmergencyStop>
               LengthLimitingTextInputFormatter(12),
             ],
             decoration: InputDecoration(
-              labelText: 'Код с экрана',
-              errorText: _wrongCode ? 'Код не совпал' : null,
+              labelText: context.strings.codeOnScreen,
+              errorText: _wrongCode ? context.strings.codeDoesntMatch : null,
             ),
             onChanged: _checkCode,
           ),
         ] else ...[
           Text(
             MediaQuery.accessibleNavigationOf(context)
-                ? 'Запусти отсчёт, дождись минуты и подтверди остановку. Сворачивание приложения сбросит отсчёт.'
-                : 'Удерживай до конца. Отпустишь или свернёшь приложение — отсчёт начнётся заново.',
+                ? context.strings.accessibleEmergencyCountdownHint
+                : context.strings.emergencyHoldResetHint,
           ),
           const SizedBox(height: 16),
           if (MediaQuery.accessibleNavigationOf(context)) ...[
@@ -166,10 +167,12 @@ class _EmergencyStopState extends State<_EmergencyStop>
                   : _start,
               child: Text(
                 _accessibleReady
-                    ? 'Подтвердить остановку'
+                    ? context.strings.confirmStop
                     : _progress > 0
-                    ? 'Ещё ${(emergencyHoldSeconds * (1 - _progress)).ceil()} сек'
-                    : 'Подготовить остановку · 60 секунд',
+                    ? context.strings.secondsRemaining(
+                        (emergencyHoldSeconds * (1 - _progress)).ceil(),
+                      )
+                    : context.strings.start60SecondCountdown,
                 textAlign: TextAlign.center,
               ),
             ),
@@ -200,7 +203,7 @@ class _EmergencyStopState extends State<_EmergencyStop>
               },
               child: Semantics(
                 button: true,
-                label: 'Удерживай 60 секунд для аварийной остановки',
+                label: context.strings.holdFor60SecondsForAnEmergency,
                 child: Container(
                   key: _holdKey,
                   constraints: const BoxConstraints(minHeight: 80),
@@ -213,8 +216,10 @@ class _EmergencyStopState extends State<_EmergencyStop>
                     children: [
                       Text(
                         _progress > 0
-                            ? 'Ещё ${(emergencyHoldSeconds * (1 - _progress)).ceil()} сек'
-                            : 'Удерживай 60 секунд',
+                            ? context.strings.secondsRemaining(
+                                (emergencyHoldSeconds * (1 - _progress)).ceil(),
+                              )
+                            : context.strings.holdForOneMinute,
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 12),
@@ -226,7 +231,7 @@ class _EmergencyStopState extends State<_EmergencyStop>
             ),
           const SizedBox(height: 12),
           Text(
-            'Остановка будет отмечена как аварийная.',
+            context.strings.thisWillBeRecordedAsAnEmergency,
             style: TextStyle(color: context.palette.muted, fontSize: 12),
           ),
         ],
@@ -235,7 +240,7 @@ class _EmergencyStopState extends State<_EmergencyStop>
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context, false),
-        child: const Text('Вернуться к заданию'),
+        child: Text(context.strings.backToChallenge),
       ),
     ],
   );

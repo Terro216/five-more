@@ -3,50 +3,131 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../l10n/strings.dart';
 import 'challenge_models.dart';
 
+enum FlagCountry {
+  france,
+  italy,
+  germany,
+  netherlands,
+  russia,
+  ukraine,
+  poland,
+  indonesia,
+  japan,
+  bangladesh,
+  belgium,
+  ireland,
+  ivoryCoast,
+  romania,
+  hungary,
+  bulgaria,
+  austria,
+  lithuania,
+  estonia,
+  luxembourg,
+  nigeria,
+  guinea,
+  mali,
+  yemen,
+}
+
 class CountryFlag {
-  const CountryFlag(
-    this.country,
-    this.colors, {
-    this.vertical = false,
-    this.disc,
-  });
-  final String country;
+  const CountryFlag(this.id, this.colors, {this.vertical = false, this.disc});
+  final FlagCountry id;
+  String get country => switch (id) {
+    FlagCountry.france => appStrings.countryFrance,
+    FlagCountry.italy => appStrings.countryItaly,
+    FlagCountry.germany => appStrings.countryGermany,
+    FlagCountry.netherlands => appStrings.countryNetherlands,
+    FlagCountry.russia => appStrings.countryRussia,
+    FlagCountry.ukraine => appStrings.countryUkraine,
+    FlagCountry.poland => appStrings.countryPoland,
+    FlagCountry.indonesia => appStrings.countryIndonesia,
+    FlagCountry.japan => appStrings.countryJapan,
+    FlagCountry.bangladesh => appStrings.countryBangladesh,
+    FlagCountry.belgium => appStrings.countryBelgium,
+    FlagCountry.ireland => appStrings.countryIreland,
+    FlagCountry.ivoryCoast => appStrings.countryIvoryCoast,
+    FlagCountry.romania => appStrings.countryRomania,
+    FlagCountry.hungary => appStrings.countryHungary,
+    FlagCountry.bulgaria => appStrings.countryBulgaria,
+    FlagCountry.austria => appStrings.countryAustria,
+    FlagCountry.lithuania => appStrings.countryLithuania,
+    FlagCountry.estonia => appStrings.countryEstonia,
+    FlagCountry.luxembourg => appStrings.countryLuxembourg,
+    FlagCountry.nigeria => appStrings.countryNigeria,
+    FlagCountry.guinea => appStrings.countryGuinea,
+    FlagCountry.mali => appStrings.countryMali,
+    FlagCountry.yemen => appStrings.countryYemen,
+  };
   final List<int> colors;
   final bool vertical;
   final int? disc;
 }
 
 const countryFlags = [
-  CountryFlag('Франция', [0xFF002654, 0xFFFFFFFF, 0xFFED2939], vertical: true),
-  CountryFlag('Италия', [0xFF009246, 0xFFFFFFFF, 0xFFCE2B37], vertical: true),
-  CountryFlag('Германия', [0xFF000000, 0xFFDD0000, 0xFFFFCC00]),
-  CountryFlag('Нидерланды', [0xFFAE1C28, 0xFFFFFFFF, 0xFF21468B]),
-  CountryFlag('Россия', [0xFFFFFFFF, 0xFF0039A6, 0xFFD52B1E]),
-  CountryFlag('Украина', [0xFF0057B7, 0xFFFFD700]),
-  CountryFlag('Польша', [0xFFFFFFFF, 0xFFDC143C]),
-  CountryFlag('Индонезия', [0xFFFF0000, 0xFFFFFFFF]),
-  CountryFlag('Япония', [0xFFFFFFFF], disc: 0xFFBC002D),
-  CountryFlag('Бангладеш', [0xFF006A4E], disc: 0xFFF42A41),
-  CountryFlag('Бельгия', [0xFF000000, 0xFFFAE042, 0xFFED2939], vertical: true),
-  CountryFlag('Ирландия', [0xFF169B62, 0xFFFFFFFF, 0xFFFF883E], vertical: true),
-  CountryFlag('Кот-д’Ивуар', [
+  CountryFlag(FlagCountry.france, [
+    0xFF002654,
+    0xFFFFFFFF,
+    0xFFED2939,
+  ], vertical: true),
+  CountryFlag(FlagCountry.italy, [
+    0xFF009246,
+    0xFFFFFFFF,
+    0xFFCE2B37,
+  ], vertical: true),
+  CountryFlag(FlagCountry.germany, [0xFF000000, 0xFFDD0000, 0xFFFFCC00]),
+  CountryFlag(FlagCountry.netherlands, [0xFFAE1C28, 0xFFFFFFFF, 0xFF21468B]),
+  CountryFlag(FlagCountry.russia, [0xFFFFFFFF, 0xFF0039A6, 0xFFD52B1E]),
+  CountryFlag(FlagCountry.ukraine, [0xFF0057B7, 0xFFFFD700]),
+  CountryFlag(FlagCountry.poland, [0xFFFFFFFF, 0xFFDC143C]),
+  CountryFlag(FlagCountry.indonesia, [0xFFFF0000, 0xFFFFFFFF]),
+  CountryFlag(FlagCountry.japan, [0xFFFFFFFF], disc: 0xFFBC002D),
+  CountryFlag(FlagCountry.bangladesh, [0xFF006A4E], disc: 0xFFF42A41),
+  CountryFlag(FlagCountry.belgium, [
+    0xFF000000,
+    0xFFFAE042,
+    0xFFED2939,
+  ], vertical: true),
+  CountryFlag(FlagCountry.ireland, [
+    0xFF169B62,
+    0xFFFFFFFF,
+    0xFFFF883E,
+  ], vertical: true),
+  CountryFlag(FlagCountry.ivoryCoast, [
     0xFFF77F00,
     0xFFFFFFFF,
     0xFF009E60,
   ], vertical: true),
-  CountryFlag('Румыния', [0xFF002B7F, 0xFFFCD116, 0xFFCE1126], vertical: true),
-  CountryFlag('Венгрия', [0xFFCE2939, 0xFFFFFFFF, 0xFF477050]),
-  CountryFlag('Болгария', [0xFFFFFFFF, 0xFF00966E, 0xFFD62612]),
-  CountryFlag('Австрия', [0xFFED2939, 0xFFFFFFFF, 0xFFED2939]),
-  CountryFlag('Литва', [0xFFFDB913, 0xFF006A44, 0xFFC1272D]),
-  CountryFlag('Эстония', [0xFF4891D9, 0xFF000000, 0xFFFFFFFF]),
-  CountryFlag('Люксембург', [0xFFED2939, 0xFFFFFFFF, 0xFF00A1DE]),
-  CountryFlag('Нигерия', [0xFF008751, 0xFFFFFFFF, 0xFF008751], vertical: true),
-  CountryFlag('Гвинея', [0xFFCE1126, 0xFFFCD116, 0xFF009460], vertical: true),
-  CountryFlag('Мали', [0xFF14B53A, 0xFFFCD116, 0xFFCE1126], vertical: true),
-  CountryFlag('Йемен', [0xFFCE1126, 0xFFFFFFFF, 0xFF000000]),
+  CountryFlag(FlagCountry.romania, [
+    0xFF002B7F,
+    0xFFFCD116,
+    0xFFCE1126,
+  ], vertical: true),
+  CountryFlag(FlagCountry.hungary, [0xFFCE2939, 0xFFFFFFFF, 0xFF477050]),
+  CountryFlag(FlagCountry.bulgaria, [0xFFFFFFFF, 0xFF00966E, 0xFFD62612]),
+  CountryFlag(FlagCountry.austria, [0xFFED2939, 0xFFFFFFFF, 0xFFED2939]),
+  CountryFlag(FlagCountry.lithuania, [0xFFFDB913, 0xFF006A44, 0xFFC1272D]),
+  CountryFlag(FlagCountry.estonia, [0xFF4891D9, 0xFF000000, 0xFFFFFFFF]),
+  CountryFlag(FlagCountry.luxembourg, [0xFFED2939, 0xFFFFFFFF, 0xFF00A1DE]),
+  CountryFlag(FlagCountry.nigeria, [
+    0xFF008751,
+    0xFFFFFFFF,
+    0xFF008751,
+  ], vertical: true),
+  CountryFlag(FlagCountry.guinea, [
+    0xFFCE1126,
+    0xFFFCD116,
+    0xFF009460,
+  ], vertical: true),
+  CountryFlag(FlagCountry.mali, [
+    0xFF14B53A,
+    0xFFFCD116,
+    0xFFCE1126,
+  ], vertical: true),
+  CountryFlag(FlagCountry.yemen, [0xFFCE1126, 0xFFFFFFFF, 0xFF000000]),
 ];
 
 class FlagTask extends StatefulWidget {
@@ -81,29 +162,36 @@ class _FlagTaskState extends State<FlagTask> {
     super.dispose();
   }
 
-  bool _accepts(String text) =>
-      text
-          .trim()
-          .toLowerCase()
-          .replaceAll('ё', 'е')
-          .replaceAll(RegExp('[’\x27 -]'), '') ==
-      _flag.country
-          .toLowerCase()
-          .replaceAll('ё', 'е')
-          .replaceAll(RegExp('[’\x27 -]'), '');
+  String _countryKey(String text) => text
+      .trim()
+      .toLowerCase()
+      .replaceAll('ё', 'е')
+      .replaceAll('ô', 'o')
+      .replaceAll(RegExp("[’' -]"), '');
+
+  bool _accepts(String answer) {
+    final key = _countryKey(answer);
+    return key == _countryKey(_flag.country) ||
+        (_flag.id == FlagCountry.ivoryCoast && key == 'cotedivoire') ||
+        (_flag.id == FlagCountry.netherlands && key == 'thenetherlands');
+  }
+
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const Text(
-        'Чей это флаг?',
+      Text(
+        context.strings.flagQuestion,
         textAlign: TextAlign.center,
         style: TextStyle(fontSize: 22),
       ),
       const SizedBox(height: 20),
       Semantics(
-        label:
-            'Флаг: ${_flag.vertical ? 'вертикальные' : 'горизонтальные'} полосы. Визуальное задание.',
+        label: context.strings.flagDescription(
+          _flag.vertical
+              ? context.strings.vertical
+              : context.strings.horizontal,
+        ),
         child: AspectRatio(
           aspectRatio: 1.5,
           child: CustomPaint(
@@ -117,13 +205,13 @@ class _FlagTaskState extends State<FlagTask> {
           controller: _input,
           autocorrect: false,
           enableSuggestions: false,
-          decoration: const InputDecoration(labelText: 'Название страны'),
+          decoration: InputDecoration(labelText: context.strings.countryName),
           onSubmitted: (text) => widget.onAnswer(_accepts(text)),
         ),
         const SizedBox(height: 12),
         FilledButton(
           onPressed: () => widget.onAnswer(_accepts(_input.text)),
-          child: const Text('Проверить'),
+          child: Text(context.strings.check),
         ),
       ] else
         ..._choices.map(
@@ -167,7 +255,7 @@ class _FlagPainter extends CustomPainter {
     if (flag.disc != null) {
       canvas.drawCircle(
         Offset(
-          size.width * (flag.country == 'Бангладеш' ? .45 : .5),
+          size.width * (flag.id == FlagCountry.bangladesh ? .45 : .5),
           size.height / 2,
         ),
         size.height * .3,

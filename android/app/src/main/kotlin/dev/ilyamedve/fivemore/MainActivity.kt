@@ -59,6 +59,20 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "five_more/language").setMethodCallHandler { call, result ->
+            try {
+                when (call.method) {
+                    "get" -> result.success(AppLanguage.get(this))
+                    "set" -> {
+                        AppLanguage.set(this, call.arguments as String)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            } catch (error: Exception) {
+                result.error("language_settings", error.message, null)
+            }
+        }
         extras = ExtrasBridge(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "five_more/extras"))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "five_more/alarm").setMethodCallHandler { call, result ->
             try {
@@ -143,7 +157,7 @@ class MainActivity : FlutterActivity() {
                 false -> openSettings(
                     Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
                         .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, AlarmDeviceAdminReceiver.component(this))
-                        .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, getString(R.string.alarm_admin_explanation))
+                        .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, appText(R.string.alarm_admin_explanation))
                 )
             }
             "powerMenuGuard" -> {

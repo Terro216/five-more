@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/alarm_controller.dart';
+import '../../l10n/strings.dart';
 import '../../models/alarm.dart';
 import '../../models/sleep_entry.dart';
 import '../../models/sleep_session.dart';
@@ -20,7 +21,7 @@ class SleepReviews extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Дневник сна')),
+    appBar: AppBar(title: Text(context.strings.sleepDiary)),
     body: AnimatedBuilder(
       animation: Listenable.merge([journal, controller]),
       builder: (context, _) {
@@ -80,9 +81,7 @@ class SleepReviews extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            const Text(
-              'Выбери дату, чтобы оценить сон или уточнить сохранённую запись.',
-            ),
+            Text(context.strings.chooseADateToRateYourSleep),
             if (pending.isNotEmpty)
               TextButton(
                 onPressed: () async {
@@ -91,21 +90,19 @@ class SleepReviews extends StatelessWidget {
                   } catch (_) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Не удалось сохранить. Попробуй ещё раз.',
-                          ),
+                        SnackBar(
+                          content: Text(context.strings.couldntSaveTryAgain),
                         ),
                       );
                     }
                   }
                 },
-                child: Text('Пропустить все без оценки (${pending.length})'),
+                child: Text(context.strings.skipAllUnrated(pending.length)),
               ),
             if (rows.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
-                child: Text('Здесь появятся сны после завершённых подъёмов.'),
+                child: Text(context.strings.sleepDiaryEmpty),
               ),
             for (final row in rows)
               ListTile(
@@ -116,11 +113,16 @@ class SleepReviews extends StatelessWidget {
                 ),
                 subtitle: Text(
                   row.entry != null
-                      ? 'Сон ${row.entry!.sleepQuality}/5 · подъём ${row.entry!.wakeQuality}/5'
-                            '${journal.comments[row.entry!.occurrenceId] == null ? '' : '\n${journal.comments[row.entry!.occurrenceId]}'}'
+                      ? context.strings.sleepRatingsSummary(
+                          row.entry!.sleepQuality,
+                          row.entry!.wakeQuality,
+                          journal.comments[row.entry!.occurrenceId] == null
+                              ? ''
+                              : '\n${journal.comments[row.entry!.occurrenceId]}',
+                        )
                       : row.session.occurrences.any(journal.reported)
-                      ? 'Оценка пропущена'
-                      : 'Без оценки',
+                      ? context.strings.ratingSkipped
+                      : context.strings.unrated,
                 ),
                 trailing: Icon(
                   row.entry == null

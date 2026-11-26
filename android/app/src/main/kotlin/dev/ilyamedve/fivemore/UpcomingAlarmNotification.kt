@@ -10,13 +10,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /** SystemUI draws the countdown. No service, periodic alarm, wake lock or network. */
 object UpcomingAlarmNotification {
-    private const val CHANNEL = "upcoming_alarm"
+    internal const val CHANNEL = "upcoming_alarm"
     private const val ID = 4102
     private fun prefs(context: Context) = context.createDeviceProtectedStorageContext()
         .getSharedPreferences("upcoming_alarm_notification", Context.MODE_PRIVATE)
@@ -43,8 +40,8 @@ object UpcomingAlarmNotification {
             manager.cancel(ID)
             return
         }
-        val channel = NotificationChannel(CHANNEL, "До следующего будильника", NotificationManager.IMPORTANCE_DEFAULT)
-            .apply { description = "Обратный отсчёт. Смахни, чтобы скрыть до следующего подъёма или изменения времени."
+        val channel = NotificationChannel(CHANNEL, context.appText(R.string.upcoming_alarm), NotificationManager.IMPORTANCE_DEFAULT)
+            .apply { description = context.appText(R.string.upcoming_alarm_description)
                 setSound(null, null); enableVibration(false) }
         manager.createNotificationChannel(channel)
         if (manager.getNotificationChannel(CHANNEL)?.importance == NotificationManager.IMPORTANCE_NONE) return
@@ -57,15 +54,15 @@ object UpcomingAlarmNotification {
                 .setData(Uri.parse("fivemore://hide-countdown/${Uri.encode(next.key)}"))
                 .putExtra("key", next.key),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val time = SimpleDateFormat("EEE, HH:mm", Locale.getDefault()).format(Date(next.nextAt))
-        val text = next.title.ifBlank { "До звонка · смахни, чтобы скрыть" }
+        val time = context.upcomingClockLabel(next.nextAt)
+        val text = next.title.ifBlank { context.appText(R.string.time_until_alarm_swipe_to_hide) }
         val previous = manager.activeNotifications.firstOrNull { it.id == ID }?.notification
         if (previous != null && previous.`when` == next.nextAt &&
-            previous.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() == "Будильник · $time" &&
+            previous.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() == context.appText(R.string.upcoming_alarm_time, time) &&
             previous.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() == text) return
         val notification = Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_alarm_notification)
-            .setContentTitle("Будильник · $time")
+            .setContentTitle(context.appText(R.string.upcoming_alarm_time, time))
             .setContentText(text)
             .setWhen(next.nextAt).setUsesChronometer(true).setChronometerCountDown(true)
             .setOnlyAlertOnce(true).setOngoing(false).setAutoCancel(false)

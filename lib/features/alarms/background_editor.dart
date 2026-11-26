@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
-import '../../models/background_frame.dart';
+import '../../l10n/strings.dart';
 import '../../models/alarm.dart';
-import '../../widgets/time_composer.dart';
+import '../../models/background_frame.dart';
 import '../../widgets/alarm_background.dart';
 import '../../widgets/framed_photo.dart';
+import '../../widgets/time_composer.dart';
 
 class BackgroundEditor extends StatefulWidget {
   const BackgroundEditor({
@@ -122,24 +123,22 @@ class _BackgroundEditorState extends State<BackgroundEditor> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Кадр фона')),
+    appBar: AppBar(title: Text(context.strings.framePhoto)),
     body: SafeArea(
       child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _image == null
-          ? const Center(
+          ? Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
-                child: Text(
-                  'Не удалось открыть фото. Вернись и выбери другое.',
-                ),
+                child: Text(context.strings.photoOpenError),
               ),
             )
           : Column(
               children: [
                 SwitchListTile.adaptive(
-                  title: const Text('Силуэт экрана звонка'),
-                  subtitle: const Text('Перемещай фото под часами и кнопками.'),
+                  title: Text(context.strings.previewAlarmControls),
+                  subtitle: Text(context.strings.framePhotoHint),
                   value: _showGuide,
                   onChanged: (value) => setState(() => _showGuide = value),
                 ),
@@ -174,30 +173,33 @@ class _BackgroundEditorState extends State<BackgroundEditor> {
                               child: Focus(
                                 autofocus: true,
                                 child: Semantics(
-                                  label: 'Положение фото',
-                                  value:
-                                      'Масштаб ${_frame.zoom.toStringAsFixed(1)}',
-                                  increasedValue:
-                                      'Масштаб ${(_frame.zoom + .25).clamp(1, 4).toStringAsFixed(1)}',
-                                  decreasedValue:
-                                      'Масштаб ${(_frame.zoom - .25).clamp(1, 4).toStringAsFixed(1)}',
+                                  label: context.strings.photoPosition,
+                                  value: context.strings.zoom(
+                                    appDecimal(_frame.zoom),
+                                  ),
+                                  increasedValue: context.strings.zoom(
+                                    appDecimal((_frame.zoom + .25).clamp(1, 4)),
+                                  ),
+                                  decreasedValue: context.strings.zoom(
+                                    appDecimal((_frame.zoom - .25).clamp(1, 4)),
+                                  ),
                                   onIncrease: () => _zoom(_frame.zoom + .25),
                                   onDecrease: () => _zoom(_frame.zoom - .25),
                                   customSemanticsActions: {
-                                    const CustomSemanticsAction(
-                                      label: 'Сдвинуть влево',
+                                    CustomSemanticsAction(
+                                      label: context.strings.moveLeft,
                                     ): () =>
                                         _move(const Offset(-24, 0)),
-                                    const CustomSemanticsAction(
-                                      label: 'Сдвинуть вправо',
+                                    CustomSemanticsAction(
+                                      label: context.strings.moveRight,
                                     ): () =>
                                         _move(const Offset(24, 0)),
-                                    const CustomSemanticsAction(
-                                      label: 'Сдвинуть вверх',
+                                    CustomSemanticsAction(
+                                      label: context.strings.moveUp,
                                     ): () =>
                                         _move(const Offset(0, -24)),
-                                    const CustomSemanticsAction(
-                                      label: 'Сдвинуть вниз',
+                                    CustomSemanticsAction(
+                                      label: context.strings.moveDown,
                                     ): () =>
                                         _move(const Offset(0, 24)),
                                   },
@@ -247,7 +249,7 @@ class _BackgroundEditorState extends State<BackgroundEditor> {
                   child: Row(
                     children: [
                       IconButton(
-                        tooltip: 'Уменьшить фото',
+                        tooltip: context.strings.zoomOut,
                         onPressed: _frame.zoom > 1
                             ? () => _zoom(_frame.zoom - .25)
                             : null,
@@ -259,12 +261,12 @@ class _BackgroundEditorState extends State<BackgroundEditor> {
                           value: _frame.zoom,
                           min: 1,
                           max: 4,
-                          label: '${_frame.zoom.toStringAsFixed(1)}×',
+                          label: '${appDecimal(_frame.zoom)}×',
                           onChanged: _zoom,
                         ),
                       ),
                       IconButton(
-                        tooltip: 'Увеличить фото',
+                        tooltip: context.strings.zoomIn,
                         onPressed: _frame.zoom < 4
                             ? () => _zoom(_frame.zoom + .25)
                             : null,
@@ -287,13 +289,13 @@ class _BackgroundEditorState extends State<BackgroundEditor> {
                         ),
                       ),
                       icon: const Icon(Icons.rotate_right),
-                      label: const Text('Повернуть'),
+                      label: Text(context.strings.rotate),
                     ),
                     TextButton(
                       key: const ValueKey('background-reset'),
                       onPressed: () =>
                           setState(() => _frame = const BackgroundFrame()),
-                      child: const Text('Сбросить'),
+                      child: Text(context.strings.reset),
                     ),
                   ],
                 ),
@@ -304,7 +306,7 @@ class _BackgroundEditorState extends State<BackgroundEditor> {
                     child: FilledButton(
                       key: const ValueKey('background-apply'),
                       onPressed: () => Navigator.of(context).pop(_frame),
-                      child: const Text('Применить'),
+                      child: Text(context.strings.apply),
                     ),
                   ),
                 ),
@@ -331,9 +333,9 @@ class _PhotoGuide extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 40, 20, 20),
             child: Column(
               children: [
-                const Align(
+                Align(
                   alignment: Alignment.centerRight,
-                  child: Text('Тише · 30 с'),
+                  child: Text(context.strings.quieter30S),
                 ),
                 Expanded(
                   child: Center(
@@ -350,7 +352,7 @@ class _PhotoGuide extends StatelessWidget {
                               size: 36,
                             ),
                             const SizedBox(height: 12),
-                            const Text('Доброе утро'),
+                            Text(context.strings.goodMorning),
                             const SizedBox(height: 12),
                             Text(
                               clockLabel(
@@ -374,7 +376,7 @@ class _PhotoGuide extends StatelessWidget {
                               ),
                             const SizedBox(height: 16),
                             if (alarm?.requiresChallenge ?? true)
-                              const Text('Задание для подъёма'),
+                              Text(context.strings.wakeUpChallengeLabel),
                           ],
                         ),
                       ),
@@ -383,9 +385,10 @@ class _PhotoGuide extends StatelessWidget {
                 ),
                 for (final label in [
                   alarm?.requiresChallenge == false
-                      ? 'Выключить'
-                      : 'Пройти задание',
-                  if (alarm == null || alarm!.snoozeBudget > 0) 'Ещё пять',
+                      ? context.strings.dismiss
+                      : context.strings.startChallenge,
+                  if (alarm == null || alarm!.snoozeBudget > 0)
+                    context.strings.appName,
                 ])
                   Padding(
                     padding: const EdgeInsets.only(bottom: 10),
@@ -404,7 +407,7 @@ class _PhotoGuide extends StatelessWidget {
                     ),
                   ),
                 const SizedBox(height: 12),
-                const Text('Проблема с заданием'),
+                Text(context.strings.troubleWithTheChallenge),
               ],
             ),
           ),

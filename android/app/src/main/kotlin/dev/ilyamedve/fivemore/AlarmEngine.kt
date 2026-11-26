@@ -100,7 +100,7 @@ class AlarmEngine(private val context: Context) {
         val qr = (arguments["qrValue"] as? String ?: "").take(2048)
         if (mode == "challenge" && (challenge.kind == "qr" || (challenge.kind == "mixed" && "qr" in order)) && qr.isBlank()) return fail("invalid_challenge")
         val sound = arguments["sound"] as? String ?: "system"
-        try { ExtrasBridge.soundUri(context, sound) } catch (_: Exception) { return fail("sound_unavailable", "Мелодия недоступна. Выбери её снова.") }
+        try { ExtrasBridge.soundUri(context, sound) } catch (_: Exception) { return fail("sound_unavailable", context.appText(R.string.this_alarm_sound_is_unavailable_choose_it_again)) }
         if (enabled && !canSchedule()) return fail("exact_alarm_permission")
         val alarm = JSONObject()
             .put("id", id).put("title", (arguments["title"] as? String ?: "").take(160))
@@ -116,7 +116,7 @@ class AlarmEngine(private val context: Context) {
             .put("moveSnoozeButton", challenge.moveSnoozeButton)
             .put("oneShotAt", if (test == null) oneShotAt else 0L)
             .put("mixOrder", JSONArray(order)).put("qrValue", qr)
-            .put("sound", sound).put("soundLabel", (arguments["soundLabel"] as? String ?: "Системный будильник").take(80))
+            .put("sound", sound).put("soundLabel", (arguments["soundLabel"] as? String ?: context.appText(R.string.system_alarm_sound)).take(80))
             .put("background", (arguments["background"] as? String ?: "").takeIf(BackgroundRules::validName) ?: "")
             .put("backgroundFrame", JSONObject(BackgroundRules.frame(arguments["backgroundFrame"])))
             .put("snoozesUsed", 0).put("occurrenceId", UUID.randomUUID().toString())
@@ -290,7 +290,7 @@ class AlarmEngine(private val context: Context) {
         val args = alarm.toMap().toMutableMap()
         args["id"] = testId
         args["enabled"] = true
-        args["title"] = "Пробный подъём"
+        args["title"] = context.appText(R.string.test_alarm)
         args["weekdays"] = emptyList<Int>()
         val startedAt = System.currentTimeMillis()
         return scheduleInternal(args, TestMetadata(id, startedAt, startedAt + delaySeconds * 1_000L))

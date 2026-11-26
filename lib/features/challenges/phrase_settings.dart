@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../l10n/strings.dart';
 import '../../services/phrase_library.dart';
 
 class PhraseSettings extends StatefulWidget {
@@ -21,10 +22,7 @@ class _PhraseSettingsState extends State<PhraseSettings> {
   void initState() {
     super.initState();
     _library.load().catchError((Object _) {
-      _show(
-        'Не удалось прочитать настройки цитат. Открой экран заново.',
-        failed: true,
-      );
+      _show(appStrings.couldntReadQuoteSettingsReopenThisScreen, failed: true);
     });
   }
 
@@ -41,7 +39,7 @@ class _PhraseSettingsState extends State<PhraseSettings> {
     try {
       await save(value);
     } catch (_) {
-      _show('Не удалось сохранить настройку. Попробуй ещё раз.', failed: true);
+      _show(appStrings.couldntSaveTheSettingTryAgain, failed: true);
     }
   }
 
@@ -51,28 +49,28 @@ class _PhraseSettingsState extends State<PhraseSettings> {
       final result = await _library.refresh();
       switch (result.state) {
         case PhraseRefreshState.interrupted:
-          _show('Загрузка остановлена. Сохранённые цитаты остались в запасе.');
+          _show(appStrings.quoteDownloadStopped);
         case PhraseRefreshState.recent:
-          _show('Следующую порцию можно будет скачать позже.');
+          _show(appStrings.youCanDownloadMoreQuotesLater);
         case PhraseRefreshState.finished:
           final failures = result.incomplete
               .map((source) => source.label)
               .join(', ');
           final added = result.added > 0
-              ? 'Добавлено цитат — ${result.added}.'
+              ? appStrings.quotesAdded(result.added)
               : '';
           _show(
             failures.isEmpty
-                ? (added.isEmpty ? 'Новых цитат пока нет.' : added)
-                : '${added.isEmpty ? '' : '$added '}Не удалось полностью загрузить из $failures. Можно повторить позже.',
+                ? (added.isEmpty ? appStrings.noNewQuotesYet : added)
+                : appStrings.quoteDownloadIncomplete(
+                    added.isEmpty ? '' : '$added ',
+                    failures,
+                  ),
             failed: failures.isNotEmpty && result.added == 0,
           );
       }
     } catch (_) {
-      _show(
-        'Не удалось сохранить новые цитаты. Попробуй ещё раз.',
-        failed: true,
-      );
+      _show(appStrings.couldntSaveTheNewQuotesTryAgain, failed: true);
     }
   }
 
@@ -87,40 +85,46 @@ class _PhraseSettingsState extends State<PhraseSettings> {
         tilePadding: EdgeInsets.zero,
         childrenPadding: const EdgeInsets.only(bottom: 12),
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
-        title: const Text('Фразы для зеркального текста'),
+        title: Text(context.strings.mirrorTextPhrases),
         children: [
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Скачивать цитаты'),
+            title: Text(context.strings.downloadQuotes),
             subtitle: Text(
-              _library.supportsBanter
-                  ? 'Афоризмы, книги и кино из Викицитатника и Citaty.info'
-                  : 'Афоризмы, книги и кино из Викицитатника',
+              _library.english
+                  ? context.strings.englishQuoteSource
+                  : _library.supportsBanter
+                  ? context.strings.sayingsAndQuotesFromBooksAndFilms
+                  : context.strings.sayingsAndQuotesFromWikiquote,
             ),
             value: enabled,
             onChanged: canChange
                 ? (value) => _update(value, _library.setEnabled)
                 : null,
           ),
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Пацанские цитаты'),
-            subtitle: Text(
-              _library.supportsBanter
-                  ? 'quotes.to.digital · Возможен мат'
-                  : 'Доступны в приложении на телефоне',
+          if (!_library.english)
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: Text(context.strings.streetwiseQuotes),
+              subtitle: Text(
+                _library.supportsBanter
+                    ? context.strings.quotesToDigitalMayContainStrongLanguage
+                    : context.strings.availableInTheMobileApp,
+              ),
+              value:
+                  enabled && _library.supportsBanter && _library.banterEnabled,
+              onChanged: enabled && canChange && _library.supportsBanter
+                  ? (value) => _update(value, _library.setBanterEnabled)
+                  : null,
             ),
-            value: enabled && _library.supportsBanter && _library.banterEnabled,
-            onChanged: enabled && canChange && _library.supportsBanter
-                ? (value) => _update(value, _library.setBanterEnabled)
-                : null,
-          ),
           if (enabled) ...[
             const SizedBox(height: 8),
             Text(
               count > 0
-                  ? 'Цитат офлайн — $count'
-                  : 'Цитаты будут доступны офлайн после загрузки.',
+                  ? context.strings.offlineQuotes(count)
+                  : context
+                        .strings
+                        .quotesWillBeAvailableOfflineAfterDownloading,
               style: TextStyle(color: context.palette.muted),
             ),
             TextButton.icon(
@@ -130,7 +134,9 @@ class _PhraseSettingsState extends State<PhraseSettings> {
                   : _refresh,
               icon: const Icon(Icons.download_rounded),
               label: Text(
-                _library.refreshing ? 'Скачиваем…' : 'Пополнить запас',
+                _library.refreshing
+                    ? context.strings.downloading
+                    : context.strings.downloadMore,
               ),
             ),
           ],

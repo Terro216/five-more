@@ -6,8 +6,10 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleLocalizations</key>
+	<array><string>en</string><string>ru</string></array>
 	<key>CFBundleDisplayName</key>
-	<string>Ещё пять</string>
+	<string>Five More</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -67,12 +69,12 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Запишите короткое утреннее послание себе. Аудио остаётся на телефоне.</string>
+	<string>Record a short morning message for yourself. Audio stays on your phone unless you enable audio sync.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Камера сканирует ваш QR-код для задания будильника.</string>
+	<string>Scan your QR code to complete an alarm challenge.</string>
 	<key>NSMotionUsageDescription</key>
-	<string>Движение телефона управляет заданиями «Тряска» и «Лабиринт».</string>
+	<string>Motion controls the Shake and Maze challenges.</string>
 	<key>NSAlarmKitUsageDescription</key>
-	<string>Будильники разбудят вас в выбранное время, даже когда приложение закрыто.</string>
+	<string>Alarms wake you at the time you choose, even when the app is closed.</string>
 </dict>
 </plist>

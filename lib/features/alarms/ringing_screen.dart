@@ -4,14 +4,15 @@ import 'package:flutter/material.dart';
 
 import '../../app/alarm_controller.dart';
 import '../../app/theme.dart';
+import '../../l10n/strings.dart';
 import '../../models/alarm.dart';
 import '../../models/snooze_position.dart';
+import '../../widgets/alarm_background.dart';
+import '../../widgets/emergency_stop.dart';
+import '../../widgets/time_composer.dart';
 import '../challenges/challenge_models.dart';
 import '../challenges/challenge_screen.dart';
 import 'alarm_editor.dart';
-import '../../widgets/emergency_stop.dart';
-import '../../widgets/time_composer.dart';
-import '../../widgets/alarm_background.dart';
 
 class RingingScreen extends StatefulWidget {
   const RingingScreen({
@@ -79,9 +80,7 @@ class _RingingScreenState extends State<RingingScreen> {
         _finishing = false;
         _challenge = false;
         _emergency = false;
-        _error =
-            result.error ??
-            'Не удалось отключить будильник. Попробуйте ещё раз.';
+        _error = result.error ?? appStrings.couldntDismissTheAlarmTryAgain;
       });
     }
   }
@@ -99,7 +98,8 @@ class _RingingScreenState extends State<RingingScreen> {
           : () async {
               final result = await widget.controller.quiet(ringing);
               if (mounted && !result.ok) {
-                final message = result.error ?? 'Не удалось приглушить звук.';
+                final message =
+                    result.error ?? appStrings.couldntLowerTheVolume;
                 setState(() => _error = message);
                 ScaffoldMessenger.of(context)
                     .showSnackBar(SnackBar(content: Text(message)));
@@ -107,10 +107,10 @@ class _RingingScreenState extends State<RingingScreen> {
             },
       child: Text(
         remaining > 0
-            ? 'Тише · $remaining с'
+            ? appStrings.quieterS(remaining)
             : exhausted
-            ? 'Тише · лимит'
-            : 'Тише · 30 с',
+            ? appStrings.quietLimitReached
+            : appStrings.quieter30S,
         style: const TextStyle(fontSize: 14),
       ),
     );
@@ -176,8 +176,8 @@ class _RingingScreenState extends State<RingingScreen> {
                 child: Text(
                   _error ??
                       (active == null
-                          ? 'Этот подъём уже завершён.'
-                          : 'Подъём изменился. Вернись на главный экран и открой его заново.'),
+                          ? context.strings.thisAlarmHasAlreadyEnded
+                          : context.strings.alarmChangedReopenHint),
                 ),
               ),
             ),
@@ -229,8 +229,8 @@ class _RingingScreenState extends State<RingingScreen> {
                   onPressed: _finishing ? null : _emergencyStop,
                   child: Text(
                     ringing.alarm.requiresChallenge
-                        ? 'Проблема с заданием'
-                        : 'Аварийное отключение',
+                        ? context.strings.troubleWithTheChallenge
+                        : context.strings.emergencyDismissal,
                     style: TextStyle(color: context.palette.muted),
                     textAlign: TextAlign.center,
                   ),
@@ -326,8 +326,8 @@ class _RingingScreenState extends State<RingingScreen> {
         const SizedBox(height: 12),
         Text(
           ringing.alarm.id.startsWith('preview:')
-              ? 'Проверка будильника'
-              : 'Доброе утро',
+              ? appStrings.alarmTest
+              : appStrings.goodMorning,
           textAlign: TextAlign.center,
           style: TextStyle(color: context.palette.morning, fontSize: 16),
         ),
@@ -348,15 +348,17 @@ class _RingingScreenState extends State<RingingScreen> {
       if (ringing.isSnoozed) ...[
         const SizedBox(height: 12),
         Text(
-          'Перенесён до ${clockLabel(TimeOfDay.fromDateTime(ringing.snoozedUntil!))}',
+          appStrings.snoozedUntil(
+            clockLabel(TimeOfDay.fromDateTime(ringing.snoozedUntil!)),
+          ),
           key: const ValueKey('snoozed-until'),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
         Text(
           widget.disableAlarm
-              ? 'Заверши подъём, чтобы выключить этот будильник.'
-              : 'Можно завершить подъём сейчас.',
+              ? appStrings.finishThisWakeUpToTurnOff
+              : appStrings.youCanDismissTheAlarmNow,
           textAlign: TextAlign.center,
         ),
       ],
@@ -405,8 +407,8 @@ class _RingingScreenState extends State<RingingScreen> {
         SizedBox(height: compact ? 10 : 20),
         Text(
           ringing.minutesRemaining > 0
-              ? 'На переносы осталось ${ringing.minutesRemaining} мин'
-              : 'Запас минут закончился',
+              ? appStrings.minOfSnoozeTimeLeft(ringing.minutesRemaining)
+              : appStrings.noSnoozeTimeLeftLabel,
           textAlign: TextAlign.center,
           style: TextStyle(color: context.palette.muted, fontSize: 14),
         ),
@@ -418,7 +420,9 @@ class _RingingScreenState extends State<RingingScreen> {
               ringing.challengeDifficulty) ...[
         const SizedBox(height: 8),
         Text(
-          'После переноса сложность: ${ringing.alarm.difficultyForSnoozes(ringing.snoozesUsed + 1).label}',
+          appStrings.difficultyAfterSnooze(
+            ringing.alarm.difficultyForSnoozes(ringing.snoozesUsed + 1).label,
+          ),
           textAlign: TextAlign.center,
           style: TextStyle(color: context.palette.muted, fontSize: 14),
         ),
@@ -442,13 +446,13 @@ class _RingingScreenState extends State<RingingScreen> {
         label: Text(
           !ringing.alarm.requiresChallenge
               ? widget.disableAlarm
-                    ? 'Завершить и выключить'
+                    ? appStrings.dismissAndTurnOff
                     : ringing.isSnoozed
-                    ? 'Завершить подъём'
-                    : 'Выключить'
+                    ? appStrings.dismissAlarm
+                    : appStrings.dismiss
               : _completedOccurrenceId == ringing.occurrenceId
-              ? 'Повторить отключение'
-              : 'Пройти задание',
+              ? appStrings.tryDismissingAgain
+              : appStrings.startChallenge,
           textAlign: TextAlign.center,
         ),
       ),
@@ -472,7 +476,10 @@ class _RingingScreenState extends State<RingingScreen> {
         child: Column(
           children: [
             Text(
-              'Ещё $_chosenMinutes мин · звонок в ${clockLabel(TimeOfDay.fromDateTime(next))}',
+              appStrings.snoozeMinRingsAt(
+                _chosenMinutes,
+                clockLabel(TimeOfDay.fromDateTime(next)),
+              ),
               textAlign: TextAlign.center,
               style: TextStyle(color: context.palette.morning),
             ),
@@ -481,13 +488,15 @@ class _RingingScreenState extends State<RingingScreen> {
               min: 1,
               max: ringing.minutesRemaining.clamp(2, 30).toDouble(),
               divisions: ringing.minutesRemaining.clamp(2, 30) - 1,
-              label: '$_chosenMinutes мин',
+              label: appStrings.minutesShort(_chosenMinutes),
               onChanged: _finishing || ringing.minutesRemaining == 1
                   ? null
                   : (v) => setState(() => _chosenMinutes = v.round()),
             ),
             Text(
-              'Останется ${ringing.minutesRemaining - _chosenMinutes} мин на переносы',
+              appStrings.minOfSnoozeTimeWillRemain(
+                ringing.minutesRemaining - _chosenMinutes,
+              ),
               textAlign: TextAlign.center,
               style: TextStyle(color: context.palette.muted, fontSize: 12),
             ),
@@ -500,11 +509,11 @@ class _RingingScreenState extends State<RingingScreen> {
                   onPressed: _finishing
                       ? null
                       : () => setState(() => _snoozeEditing = false),
-                  child: const Text('Отмена'),
+                  child: Text(appStrings.cancel),
                 ),
                 FilledButton(
                   onPressed: _finishing ? null : _snooze,
-                  child: Text('Отложить на $_chosenMinutes мин'),
+                  child: Text(appStrings.snoozeForMin(_chosenMinutes)),
                 ),
               ],
             ),
@@ -523,13 +532,19 @@ class _RingingScreenState extends State<RingingScreen> {
       );
     }
     final target = snoozeTileFor(ringing.occurrenceId, ringing.snoozesUsed);
-    const labels = ['УТРО', 'ПОРА', 'СОН', 'ДЕНЬ', 'ПЯТЬ'];
+    final labels = [
+      appStrings.dawn,
+      appStrings.rise,
+      appStrings.rest,
+      appStrings.noon,
+      appStrings.five,
+    ];
     return Column(
       key: const ValueKey('moving-snooze-area'),
       children: [
         const SizedBox(height: 6),
         Text(
-          'Найди «ЕЩЁ» · удерживай для выбора минут',
+          appStrings.findMoreHoldToChooseSnoozeTime,
           textAlign: TextAlign.center,
           style: TextStyle(color: context.palette.muted, fontSize: 12),
         ),
@@ -568,12 +583,14 @@ class _RingingScreenState extends State<RingingScreen> {
                   ),
                   child: Text(
                     correct
-                        ? 'ЕЩЁ'
+                        ? context.strings.more
                         : labels[index < target ? index : index - 1],
                     maxLines: 1,
                     softWrap: false,
                     semanticsLabel: correct
-                        ? 'ЕЩЁ. Перенести на ${ringing.defaultSnoozeMinutes} мин. Удерживай для выбора минут.'
+                        ? context.strings.movingSnoozeHint(
+                            ringing.defaultSnoozeMinutes,
+                          )
                         : labels[index < target ? index : index - 1],
                   ),
                 ),
@@ -586,9 +603,9 @@ class _RingingScreenState extends State<RingingScreen> {
   }
 
   String _challengeLevel(RingingAlarm ringing) =>
-      'Сложность: ${ringing.challengeDifficulty.label}';
+      appStrings.difficulty(ringing.challengeDifficulty.label);
 
   String _snoozeLabel(RingingAlarm ringing) => ringing.alarm.requiresChallenge
-      ? 'Ещё ${ringing.defaultSnoozeMinutes} мин'
-      : 'Отложить на ${ringing.defaultSnoozeMinutes} мин';
+      ? appStrings.snoozeMin(ringing.defaultSnoozeMinutes)
+      : appStrings.snoozeForMin(ringing.defaultSnoozeMinutes);
 }

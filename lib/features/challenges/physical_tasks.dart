@@ -7,6 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../../app/theme.dart';
+import '../../l10n/strings.dart';
 import 'challenge_models.dart';
 
 class QrTask extends StatefulWidget {
@@ -47,9 +48,7 @@ class _QrTaskState extends State<QrTask> with WidgetsBindingObserver {
       await _camera.start();
     } catch (_) {
       if (mounted) {
-        setState(
-          () => _error = 'Камера недоступна. Разреши камеру в настройках телефона и попробуй снова.',
-        );
+        setState(() => _error = appStrings.cameraPermissionHint);
       }
     }
   }
@@ -78,7 +77,7 @@ class _QrTaskState extends State<QrTask> with WidgetsBindingObserver {
       await _camera.start();
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Не удалось включить камеру. Попробуй снова.');
+        setState(() => _error = appStrings.couldntStartTheCameraTryAgain);
       }
     }
   }
@@ -96,20 +95,18 @@ class _QrTaskState extends State<QrTask> with WidgetsBindingObserver {
     children: [
       Text(
         widget.expected == null
-            ? 'Выбери QR-код в месте, до которого нужно дойти утром.'
-            : 'Дойди до своего QR-кода и наведи камеру.',
+            ? context.strings.chooseAQrCodeSomewhereYoullNeed
+            : context.strings.walkToYourQrCodeAndPoint,
         style: TextStyle(color: context.palette.muted, height: 1.5),
       ),
       const SizedBox(height: 16),
       if (kIsWeb)
-        const Text(
-          'Камера и проверка зарегистрированного QR доступны в приложении на телефоне.',
-        )
+        Text(context.strings.qrMobileOnly)
       else if (!_started)
         FilledButton.icon(
           onPressed: _start,
           icon: const Icon(Icons.qr_code_scanner_rounded),
-          label: const Text('Открыть камеру'),
+          label: Text(context.strings.openCamera),
         )
       else
         SizedBox(
@@ -120,7 +117,9 @@ class _QrTaskState extends State<QrTask> with WidgetsBindingObserver {
               controller: _camera,
               errorBuilder: (context, error) => Center(
                 child: Text(
-                  'Камера недоступна. Проверь разрешение.\n${error.errorCode.name}',
+                  context.strings.cameraUnavailableCheckCameraPermission(
+                    error.errorCode.name,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -143,9 +142,7 @@ class _QrTaskState extends State<QrTask> with WidgetsBindingObserver {
                     widget.onMistake!();
                     return;
                   }
-                  setState(
-                    () => _error = 'Это другой QR-код. Найди тот, который зарегистрирован.',
-                  );
+                  setState(() => _error = context.strings.qrMismatch);
                 }
               },
             ),
@@ -162,7 +159,7 @@ class _QrTaskState extends State<QrTask> with WidgetsBindingObserver {
       if (_started && !_done)
         TextButton(
           onPressed: _resume,
-          child: const Text('Повторить запуск камеры'),
+          child: Text(context.strings.retryCamera),
         ),
     ],
   );
@@ -172,7 +169,7 @@ Future<String?> registerQr(BuildContext context) => Navigator.push<String>(
   context,
   MaterialPageRoute(
     builder: (context) => Scaffold(
-      appBar: AppBar(title: const Text('Зарегистрировать QR-код')),
+      appBar: AppBar(title: Text(context.strings.registerQrCode)),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: QrTask(onMatched: (code) => Navigator.pop(context, code)),
@@ -248,8 +245,7 @@ class _ShakeTaskState extends State<ShakeTask> with WidgetsBindingObserver {
 
   void _start() {
     if (kIsWeb) {
-      _error =
-          'Тряска доступна на телефоне. В браузере — только просмотр задания.';
+      _error = appStrings.shakeIsAvailableOnPhonesTheBrowser;
       return;
     }
     _clock.start();
@@ -275,7 +271,8 @@ class _ShakeTaskState extends State<ShakeTask> with WidgetsBindingObserver {
           onError: (_) {
             if (mounted) {
               setState(
-                () => _error = 'Датчик движения недоступен. Можно воспользоваться аварийной остановкой.',
+                () => _error =
+                    appStrings.motionSensorUnavailableYouCanUseEmergency,
               );
             }
           },
@@ -304,20 +301,25 @@ class _ShakeTaskState extends State<ShakeTask> with WidgetsBindingObserver {
     children: [
       Icon(Icons.vibration_rounded, size: 64, color: context.palette.morning),
       const SizedBox(height: 24),
-      const Text(
-        'Разбуди телефон',
+      Text(
+        context.strings.wakeUpYourPhone,
         style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
       ),
       const SizedBox(height: 12),
       Text(
-        'Держи крепко и встряхивай короткими движениями туда-обратно. Не нужно трясти сильнее.',
+        context.strings.shakeInstructions,
         style: TextStyle(color: context.palette.muted),
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 12),
       Text(
-        '${_counter.count} / ${_counter.target} движений'
-        '${_counter.minimumDuration == Duration.zero ? '' : ' · не меньше ${_counter.minimumDuration.inSeconds} с'}',
+        context.strings.shakeCount(
+          _counter.count,
+          _counter.target,
+          _counter.minimumDuration == Duration.zero
+              ? ''
+              : context.strings.atLeastS(_counter.minimumDuration.inSeconds),
+        ),
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 24),
@@ -329,7 +331,7 @@ class _ShakeTaskState extends State<ShakeTask> with WidgetsBindingObserver {
       const SizedBox(height: 12),
       LinearProgressIndicator(
         value: _counter.count / _counter.target,
-        semanticsLabel: 'Прогресс тряски',
+        semanticsLabel: context.strings.shakeProgress,
         semanticsValue: '${(_counter.count / _counter.target * 100).round()}%',
       ),
       if (_error != null)
@@ -431,25 +433,26 @@ class _MazeTaskState extends State<MazeTask> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     if (!kIsWeb) {
       _sensor =
-          accelerometerEventStream(samplingPeriod: SensorInterval.gameInterval)
-              .listen(
-                (e) {
-                  if (!_active) return;
-                  final value = Offset(-e.x, e.y);
-                  if (!_received) {
-                    _neutral = value;
-                    _received = true;
-                  }
-                  _tilt = (value - _neutral) / 4;
-                },
-                onError: (_) {
-                  if (mounted) {
-                    setState(
-                      () => _error = 'Датчик наклона недоступен. Аварийная остановка остаётся доступна.',
-                    );
-                  }
-                },
-              );
+          accelerometerEventStream(
+            samplingPeriod: SensorInterval.gameInterval,
+          ).listen(
+            (e) {
+              if (!_active) return;
+              final value = Offset(-e.x, e.y);
+              if (!_received) {
+                _neutral = value;
+                _received = true;
+              }
+              _tilt = (value - _neutral) / 4;
+            },
+            onError: (_) {
+              if (mounted) {
+                setState(
+                  () => _error = appStrings.tiltSensorUnavailableYouCanStillUse,
+                );
+              }
+            },
+          );
     }
     _timer = Timer.periodic(const Duration(milliseconds: 20), (_) {
       if (!mounted || !_active || _done) return;
@@ -483,15 +486,15 @@ class _MazeTaskState extends State<MazeTask> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      const Text(
-        'Проведи шарик к финишу',
+      Text(
+        context.strings.guideTheBallToTheFinish,
         style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
       ),
       const SizedBox(height: 8),
       Text(
         kIsWeb
-            ? 'Предпросмотр: веди пальцем по полю. На телефоне управление наклоном.'
-            : 'Наклоняй телефон. Отверстие вернёт на предыдущий этап.',
+            ? context.strings.inThisPreviewDragOnTheBoard
+            : context.strings.tiltYourPhoneFallingIntoAHole,
         style: TextStyle(color: context.palette.muted),
         textAlign: TextAlign.center,
       ),
@@ -522,18 +525,18 @@ class _MazeTaskState extends State<MazeTask> with WidgetsBindingObserver {
           _tilt = Offset.zero;
           _maze.velocity = Offset.zero;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Наклон настроен'),
+            SnackBar(
+              content: Text(context.strings.tiltCalibrated),
               duration: Duration(seconds: 2),
             ),
           );
         },
         icon: const Icon(Icons.screen_rotation_rounded),
-        label: const Text('Настроить наклон', textAlign: TextAlign.center),
+        label: Text(context.strings.calibrateTilt, textAlign: TextAlign.center),
       ),
       const SizedBox(height: 8),
       Text(
-        'Держи телефон удобно и нажми кнопку. Это положение станет исходным.',
+        context.strings.tiltCalibrationHint,
         style: TextStyle(color: context.palette.muted, fontSize: 12),
         textAlign: TextAlign.center,
       ),

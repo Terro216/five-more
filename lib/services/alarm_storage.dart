@@ -2,9 +2,10 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/strings.dart';
 import '../models/alarm.dart';
-import 'local_database.dart';
 import '../models/device_alarm_check.dart';
+import 'local_database.dart';
 
 class AlarmSnapshot {
   const AlarmSnapshot({
@@ -93,7 +94,7 @@ class LocalAlarmStorage implements AlarmStorage {
       }),
     );
     if (!saved) {
-      throw StateError('Не удалось сохранить настройки на устройстве.');
+      throw StateError(appStrings.couldntSaveSettingsOnThisDevice);
     }
   }
 }

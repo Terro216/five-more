@@ -1,8 +1,8 @@
 import 'dart:math';
 
-import 'background_frame.dart';
-
 import '../features/challenges/challenge_models.dart';
+import '../l10n/strings.dart';
+import 'background_frame.dart';
 
 String newAlarmId() {
   final random = Random.secure();
@@ -56,7 +56,7 @@ class Alarm {
     this.background = '',
     this.backgroundFrame = const BackgroundFrame(),
     this.sound = 'system',
-    this.soundLabel = 'Системный будильник',
+    this.soundLabel = '',
   });
 
   factory Alarm.fresh() => Alarm(
@@ -100,12 +100,11 @@ class Alarm {
   final String sound;
   final String soundLabel;
 
-  String get timeLabel =>
-      '${hour.toString().padLeft(2, '0')}:'
-      '${minute.toString().padLeft(2, '0')}';
-  String get displayTitle => title.trim();
+  String get timeLabel => appClock(hour, minute);
+  String get displayTitle =>
+      id.startsWith('preview:') ? appStrings.testAlarmLabel : title.trim();
   String get systemTitle =>
-      displayTitle.isEmpty ? 'Будильник на $timeLabel' : displayTitle;
+      displayTitle.isEmpty ? appStrings.alarmFor(timeLabel) : displayTitle;
   String get repeatLabel => alarmRepeatLabel(this);
 
   /// Use the native occurrence's counter, so reopening Flutter cannot lower
@@ -262,7 +261,7 @@ class Alarm {
           : '',
       backgroundFrame: BackgroundFrame.fromJson(json['backgroundFrame']),
       sound: json['sound'] as String? ?? 'system',
-      soundLabel: json['soundLabel'] as String? ?? 'Системный будильник',
+      soundLabel: json['soundLabel'] as String? ?? '',
       hour: intValue(json['hour'], 7).clamp(0, 23),
       minute: intValue(json['minute'], 30).clamp(0, 59),
       title: json['title'] as String? ?? '',
@@ -297,13 +296,23 @@ class Alarm {
   }
 }
 
-const shortWeekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+List<String> get shortWeekdays => [
+  appStrings.shortMonday,
+  appStrings.shortTuesday,
+  appStrings.shortWednesday,
+  appStrings.shortThursday,
+  appStrings.shortFriday,
+  appStrings.shortSaturday,
+  appStrings.shortSunday,
+];
 
 String alarmRepeatLabel(Alarm alarm) {
-  if (alarm.weekdays.isEmpty) return 'Один раз';
-  if (alarm.weekdays.length == 7) return 'Каждый день';
-  if (Alarm._sameDays(alarm.weekdays, const [1, 2, 3, 4, 5])) return 'Будни';
-  if (Alarm._sameDays(alarm.weekdays, const [6, 7])) return 'Выходные';
+  if (alarm.weekdays.isEmpty) return appStrings.once;
+  if (alarm.weekdays.length == 7) return appStrings.everyDay;
+  if (Alarm._sameDays(alarm.weekdays, const [1, 2, 3, 4, 5])) {
+    return appStrings.weekdays;
+  }
+  if (Alarm._sameDays(alarm.weekdays, const [6, 7])) return appStrings.weekends;
   final days = [...alarm.weekdays]..sort();
   return days.map((day) => shortWeekdays[day - 1]).join(', ');
 }
@@ -355,16 +364,16 @@ class AlarmEvent {
   };
 
   String get label => switch (type) {
-    'armed' => 'Будильник настроен',
-    'fired' || 'ringing' => 'Будильник зазвонил',
-    'snoozed' => 'Перенос №$snoozesUsed',
-    'dismissed' => 'Будильник отключён',
-    'emergency_dismissed' || 'emergency' => 'Аварийное отключение',
-    'timed_out' => 'Остановлен после 15 минут',
-    'cancelled' => 'Будильник отменён',
-    'missed' => 'Срабатывание пропущено',
-    'schedule_failed' => 'Не удалось назначить следующее срабатывание',
-    _ => 'Событие будильника',
+    'armed' => appStrings.alarmSet,
+    'fired' || 'ringing' => appStrings.alarmRang,
+    'snoozed' => appStrings.snoozeLabel(snoozesUsed),
+    'dismissed' => appStrings.alarmDismissed,
+    'emergency_dismissed' || 'emergency' => appStrings.emergencyDismissal,
+    'timed_out' => appStrings.stoppedAfter15Minutes,
+    'cancelled' => appStrings.alarmCanceled,
+    'missed' => appStrings.alarmMissed,
+    'schedule_failed' => appStrings.couldntScheduleTheNextAlarm,
+    _ => appStrings.alarmEvent,
   };
 }
 

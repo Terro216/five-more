@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/strings.dart';
 import '../../models/sleep_goals.dart';
 import '../../services/sleep_journal.dart';
 
@@ -20,12 +21,12 @@ class _SleepGoalsEditorState extends State<SleepGoalsEditor> {
   late final _bed = TextEditingController(
     text: widget.journal.goals.bedMinute == null
         ? ''
-        : SleepGoals.clock(widget.journal.goals.bedMinute!),
+        : appClockMinute(widget.journal.goals.bedMinute!),
   );
   late final _wake = TextEditingController(
     text: widget.journal.goals.wakeMinute == null
         ? ''
-        : SleepGoals.clock(widget.journal.goals.wakeMinute!),
+        : appClockMinute(widget.journal.goals.wakeMinute!),
   );
   late final _tolerance = TextEditingController(
     text: widget.journal.goals.toleranceMinutes?.toString() ?? '',
@@ -33,17 +34,24 @@ class _SleepGoalsEditorState extends State<SleepGoalsEditor> {
   bool _saving = false;
   String? _error;
   int? _time(String value) {
-    final match = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(value);
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})\s*(am|pm)?$',
+      caseSensitive: false,
+    ).firstMatch(value.trim());
     if (match == null) return null;
     final hour = int.parse(match[1]!), minute = int.parse(match[2]!);
-    return hour < 24 && minute < 60 ? hour * 60 + minute : null;
+    if (minute >= 60 || hour >= 24) return null;
+    final period = match[3]?.toLowerCase();
+    if (period == null) return hour * 60 + minute;
+    if (hour < 1 || hour > 12) return null;
+    return (hour % 12 + (period == 'pm' ? 12 : 0)) * 60 + minute;
   }
 
   String? _integer(String? raw, int min, int max) {
     final number = int.tryParse(raw ?? '');
     return number != null && number >= min && number <= max
         ? null
-        : 'Целое число от $min до $max';
+        : appStrings.wholeNumberFromTo(min, max);
   }
 
   @override
@@ -56,18 +64,16 @@ class _SleepGoalsEditorState extends State<SleepGoalsEditor> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Моя цель')),
+    appBar: AppBar(title: Text(context.strings.myGoal)),
     body: Form(
       key: _form,
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const Text(
-            'Выбери своё стремление. Оно хранится на этом телефоне и не меняет будильники.',
-          ),
+          Text(context.strings.personalGoalPrivacy),
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Длительность сна'),
+            title: Text(context.strings.sleepDuration),
             value: _duration,
             onChanged: _saving ? null : (v) => setState(() => _duration = v),
           ),
@@ -75,55 +81,63 @@ class _SleepGoalsEditorState extends State<SleepGoalsEditor> {
             TextFormField(
               controller: _minutes,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Желаемая длительность',
-                suffixText: 'мин',
+              decoration: InputDecoration(
+                labelText: context.strings.targetDuration,
+                suffixText: context.strings.min,
               ),
               validator: (v) => _integer(v, 1, 1440),
             ),
           const SizedBox(height: 24),
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Регулярный режим'),
+            title: Text(context.strings.regularSchedule),
             value: _schedule,
             onChanged: _saving ? null : (v) => setState(() => _schedule = v),
           ),
           if (_schedule) ...[
             TextFormField(
               controller: _bed,
-              keyboardType: TextInputType.datetime,
-              decoration: const InputDecoration(
-                labelText: 'Укладываться в',
-                hintText: 'ЧЧ:ММ',
+              keyboardType: localeUsesDayPeriod
+                  ? TextInputType.text
+                  : TextInputType.datetime,
+              decoration: InputDecoration(
+                labelText: context.strings.goToBedAt,
+                hintText: localeUsesDayPeriod
+                    ? appClock(19, 30)
+                    : context.strings.hhMm,
               ),
-              validator: (v) =>
-                  _time(v ?? '') == null ? 'Время от 00:00 до 23:59' : null,
+              validator: (v) => _time(v ?? '') == null
+                  ? context.strings.enterATimeFrom0000To
+                  : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _wake,
-              keyboardType: TextInputType.datetime,
-              decoration: const InputDecoration(
-                labelText: 'Вставать в',
-                hintText: 'ЧЧ:ММ',
+              keyboardType: localeUsesDayPeriod
+                  ? TextInputType.text
+                  : TextInputType.datetime,
+              decoration: InputDecoration(
+                labelText: context.strings.wakeUpAt,
+                hintText: localeUsesDayPeriod
+                    ? appClock(19, 30)
+                    : context.strings.hhMm,
               ),
-              validator: (v) =>
-                  _time(v ?? '') == null ? 'Время от 00:00 до 23:59' : null,
+              validator: (v) => _time(v ?? '') == null
+                  ? context.strings.enterATimeFrom0000To
+                  : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _tolerance,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Допустимое отклонение',
-                suffixText: 'мин',
+              decoration: InputDecoration(
+                labelText: context.strings.allowedVariation,
+                suffixText: context.strings.min,
               ),
               validator: (v) => _integer(v, 0, 720),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Сравниваем местное время. Укладывание оценивается по источнику времени сна; это не измерение.',
-            ),
+            Text(context.strings.bedtimeComparisonHint),
           ],
           if (_error != null)
             Text(
@@ -157,13 +171,12 @@ class _SleepGoalsEditorState extends State<SleepGoalsEditor> {
                       if (mounted) {
                         setState(() {
                           _saving = false;
-                          _error =
-                              'Не удалось сохранить цель. Попробуй ещё раз.';
+                          _error = context.strings.couldntSaveTheGoalTryAgain;
                         });
                       }
                     }
                   },
-            child: const Text('Сохранить цель'),
+            child: Text(context.strings.saveGoal),
           ),
         ],
       ),

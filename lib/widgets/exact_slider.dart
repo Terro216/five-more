@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/strings.dart';
+
 /// An invalid edit remains visible and blocks the owning form; it is never
 /// silently rounded or clamped into a different saved value.
 class ExactSlider extends StatefulWidget {
@@ -68,7 +70,7 @@ class _ExactSliderState extends State<ExactSlider> {
               suffixText: widget.unit,
               errorText: _valid
                   ? null
-                  : 'Целое число от ${widget.min} до ${widget.max}',
+                  : context.strings.wholeNumberFromTo(widget.min, widget.max),
             ),
             style: const TextStyle(fontSize: 24),
             onChanged: _validate,

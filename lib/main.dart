@@ -5,14 +5,18 @@ import 'package:flutter/material.dart';
 
 import 'app/alarm_controller.dart';
 import 'app/five_more_app.dart';
+import 'l10n/strings.dart';
 import 'services/alarm_gateway.dart';
 import 'services/alarm_storage.dart';
+import 'services/appearance_settings.dart';
 import 'services/phrase_library.dart';
 import 'services/sync_service.dart';
-import 'services/appearance_settings.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await AppLanguage.instance.load();
+  } catch (_) {}
   try {
     await AppearanceSettings.instance.load();
   } catch (_) {}

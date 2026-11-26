@@ -6,12 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app/theme.dart';
+import '../l10n/strings.dart';
 
-String clockLabel(TimeOfDay time) =>
-    '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+String clockLabel(TimeOfDay time) => appClock(time.hour, time.minute);
 String remainingLabel(DateTime at, DateTime now) {
   final minutes = max(0, (at.difference(now).inSeconds / 60).ceil());
-  return '${minutes ~/ 60} ч ${minutes % 60} мин';
+  return appStrings.hoursMinutes(minutes ~/ 60, minutes % 60);
 }
 
 /// Typing, wheel/vertical drag and the dial all edit the same value.
@@ -33,9 +33,30 @@ class TimeComposer extends StatefulWidget {
 
 class _TimeComposerState extends State<TimeComposer> {
   bool _minutes = false;
-  late final _hour = TextEditingController(
-    text: widget.time.hour.toString().padLeft(2, '0'),
-  );
+  bool _twelveHour = false;
+  int _displayHour(TimeOfDay time) =>
+      _twelveHour ? (time.hour + 11) % 12 + 1 : time.hour;
+  String _hourText(TimeOfDay time) =>
+      _displayHour(time).toString().padLeft(_twelveHour ? 1 : 2, '0');
+  bool _validHour(int? hour) =>
+      hour != null &&
+      (_twelveHour ? hour >= 1 && hour <= 12 : hour >= 0 && hour < 24);
+  int _wallHour(int hour) =>
+      _twelveHour ? hour % 12 + widget.time.periodOffset : hour;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    Localizations.localeOf(context);
+    final twelveHour =
+        !MediaQuery.alwaysUse24HourFormatOf(context) && localeUsesDayPeriod;
+    if (_twelveHour != twelveHour) {
+      _twelveHour = twelveHour;
+      _hour.text = _hourText(widget.time);
+    }
+  }
+
+  late final _hour = TextEditingController(text: _hourText(widget.time));
   late final _minute = TextEditingController(
     text: widget.time.minute.toString().padLeft(2, '0'),
   );
@@ -46,8 +67,8 @@ class _TimeComposerState extends State<TimeComposer> {
   void didUpdateWidget(TimeComposer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.time != widget.time) {
-      if (int.tryParse(_hour.text) != widget.time.hour) {
-        _hour.text = widget.time.hour.toString().padLeft(2, '0');
+      if (int.tryParse(_hour.text) != _displayHour(widget.time)) {
+        _hour.text = _hourText(widget.time);
       }
       if (int.tryParse(_minute.text) != widget.time.minute) {
         _minute.text = widget.time.minute.toString().padLeft(2, '0');
@@ -65,13 +86,12 @@ class _TimeComposerState extends State<TimeComposer> {
   }
 
   bool get _valid =>
-      int.tryParse(_hour.text) != null &&
-      int.parse(_hour.text) < 24 &&
+      _validHour(int.tryParse(_hour.text)) &&
       int.tryParse(_minute.text) != null &&
       int.parse(_minute.text) < 60;
   void _setTime(TimeOfDay time) {
     setState(() {
-      _hour.text = time.hour.toString().padLeft(2, '0');
+      _hour.text = _hourText(time);
       _minute.text = time.minute.toString().padLeft(2, '0');
     });
     widget.onValidityChanged?.call(true);
@@ -122,11 +142,16 @@ class _TimeComposerState extends State<TimeComposer> {
           ],
           style: TextStyle(fontSize: 36, color: context.palette.morning),
           decoration: InputDecoration(
-            labelText: minutes ? 'Минуты' : 'Часы',
+            labelText: minutes ? appStrings.minutes : appStrings.hours,
             errorText:
-                (int.tryParse((minutes ? _minute : _hour).text) ?? 99) >=
-                    (minutes ? 60 : 24)
-                ? (minutes ? '00–59' : '00–23')
+                (minutes
+                    ? (int.tryParse(_minute.text) ?? 99) >= 60
+                    : !_validHour(int.tryParse(_hour.text)))
+                ? (minutes
+                      ? '00–59'
+                      : _twelveHour
+                      ? '1–12'
+                      : '00–23')
                 : null,
           ),
           onTap: () => setState(() => _minutes = minutes),
@@ -134,11 +159,11 @@ class _TimeComposerState extends State<TimeComposer> {
             setState(() {});
             widget.onValidityChanged?.call(_valid);
             final value = int.tryParse(text);
-            if (value != null && value < (minutes ? 60 : 24)) {
+            if (value != null && (minutes ? value < 60 : _validHour(value))) {
               widget.onChanged(
                 minutes
                     ? widget.time.replacing(minute: value)
-                    : widget.time.replacing(hour: value),
+                    : widget.time.replacing(hour: _wallHour(value)),
               );
               if (!minutes && text.length == 2) {
                 setState(() => _minutes = true);
@@ -172,9 +197,43 @@ class _TimeComposerState extends State<TimeComposer> {
           _input(true),
         ],
       ),
+      if (_twelveHour)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: SegmentedButton<DayPeriod>(
+            showSelectedIcon: false,
+            segments: [
+              ButtonSegment(
+                value: DayPeriod.am,
+                label: Text(
+                  MaterialLocalizations.of(context).anteMeridiemAbbreviation,
+                ),
+              ),
+              ButtonSegment(
+                value: DayPeriod.pm,
+                label: Text(
+                  MaterialLocalizations.of(context).postMeridiemAbbreviation,
+                ),
+              ),
+            ],
+            selected: {widget.time.period},
+            onSelectionChanged: widget.enabled
+                ? (period) => _setTime(
+                    widget.time.replacing(
+                      hour:
+                          (_validHour(int.tryParse(_hour.text))
+                                  ? int.parse(_hour.text)
+                                  : widget.time.hour) %
+                              12 +
+                          (period.single == DayPeriod.pm ? 12 : 0),
+                    ),
+                  )
+                : null,
+          ),
+        ),
       const SizedBox(height: 8),
       Text(
-        'Введи время или прокрути цифры вверх / вниз',
+        context.strings.enterTheTimeOrSwipeTheDigits,
         style: TextStyle(color: context.palette.muted, fontSize: 12),
         textAlign: TextAlign.center,
       ),
@@ -183,14 +242,14 @@ class _TimeComposerState extends State<TimeComposer> {
         spacing: 8,
         children: [
           ChoiceChip(
-            label: const Text('Часы'),
+            label: Text(context.strings.hours),
             selected: !_minutes,
             onSelected: widget.enabled
                 ? (_) => setState(() => _minutes = false)
                 : null,
           ),
           ChoiceChip(
-            label: const Text('Минуты'),
+            label: Text(context.strings.minutes),
             selected: _minutes,
             onSelected: widget.enabled
                 ? (_) => setState(() => _minutes = true)
@@ -217,14 +276,20 @@ class _TimeComposerState extends State<TimeComposer> {
               final hour = (angle / (2 * pi) * 12).round() % 12;
               _setTime(
                 widget.time.replacing(
-                  hour: hour + (vector.distance < size * .31 ? 12 : 0),
+                  hour: _twelveHour
+                      ? _wallHour(hour)
+                      : hour + (vector.distance < size * .31 ? 12 : 0),
                 ),
               );
             }
           }
 
           return Semantics(
-            label: _minutes ? 'Циферблат минут' : 'Циферблат 24 часа',
+            label: _minutes
+                ? context.strings.minuteDial
+                : _twelveHour
+                ? context.strings.twelveHourDial
+                : context.strings.label24HourDial,
             child: GestureDetector(
               key: const ValueKey('time-dial'),
               onTapUp: (e) {
@@ -249,6 +314,7 @@ class _TimeComposerState extends State<TimeComposer> {
                 painter: _ClockPainter(
                   widget.time,
                   _minutes,
+                  _twelveHour,
                   MediaQuery.textScalerOf(context).scale(1).clamp(1, 1.3),
                   context.palette,
                 ),
@@ -262,17 +328,25 @@ class _TimeComposerState extends State<TimeComposer> {
 }
 
 class _ClockPainter extends CustomPainter {
-  _ClockPainter(this.time, this.minutes, this.scale, this.palette);
+  _ClockPainter(
+    this.time,
+    this.minutes,
+    this.twelveHour,
+    this.scale,
+    this.palette,
+  );
   final AppPalette palette;
   final TimeOfDay time;
   final bool minutes;
+  final bool twelveHour;
   final double scale;
   @override
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
     canvas.drawCircle(center, size.width / 2, Paint()..color = palette.panel);
     final selected = minutes ? time.minute / 5 : time.hour % 12;
-    final radius = size.width * (!minutes && time.hour >= 12 ? .24 : .40);
+    final radius =
+        size.width * (!minutes && !twelveHour && time.hour >= 12 ? .24 : .40);
     final angle = selected * pi / 6 - pi / 2;
     final tip = center + Offset(cos(angle), sin(angle)) * radius;
     canvas.drawLine(
@@ -284,17 +358,21 @@ class _ClockPainter extends CustomPainter {
     );
     canvas.drawCircle(tip, 20, Paint()..color = palette.morning);
     canvas.drawCircle(center, 4, Paint()..color = palette.morning);
-    for (var ring = 0; ring < (minutes ? 1 : 2); ring++) {
+    for (var ring = 0; ring < (minutes || twelveHour ? 1 : 2); ring++) {
       for (var i = 0; i < 12; i++) {
         final value = minutes ? i * 5 : i + ring * 12;
-        final chosen = minutes ? time.minute == value : time.hour == value;
+        final chosen = minutes
+            ? time.minute == value
+            : (twelveHour ? time.hour % 12 : time.hour) == value;
         final a = i * pi / 6 - pi / 2;
         final position =
             center +
             Offset(cos(a), sin(a)) * size.width * (ring == 0 ? .4 : .24);
         final text = TextPainter(
           text: TextSpan(
-            text: '$value'.padLeft(2, '0'),
+            text: !minutes && twelveHour
+                ? (i == 0 ? '12' : '$i')
+                : '$value'.padLeft(2, '0'),
             style: TextStyle(
               fontFamily: 'Roboto',
               fontSize: (ring == 0 ? 17 : 14) * scale,
@@ -314,13 +392,14 @@ class _ClockPainter extends CustomPainter {
       old.palette != palette ||
       old.time != time ||
       old.minutes != minutes ||
+      old.twelveHour != twelveHour ||
       old.scale != scale;
 }
 
 Future<TimeOfDay?> editClock(
   BuildContext context,
   TimeOfDay initial, {
-  String title = 'Время подъёма',
+  String? title,
   DateTime Function(TimeOfDay)? nextAt,
   DateTime Function()? now,
   ValueChanged<TimeOfDay>? onSettings,
@@ -330,7 +409,7 @@ Future<TimeOfDay?> editClock(
   useSafeArea: true,
   builder: (_) => _ClockSheet(
     initial: initial,
-    title: title,
+    title: title ?? context.strings.wakeUpTime,
     nextAt: nextAt,
     now: now ?? DateTime.now,
     onSettings: onSettings,
@@ -392,7 +471,9 @@ class _ClockSheetState extends State<_ClockSheet> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  'До звонка ${remainingLabel(widget.nextAt!(_time), widget.now())}',
+                  context.strings.ringsIn(
+                    remainingLabel(widget.nextAt!(_time), widget.now()),
+                  ),
                   key: const ValueKey('time-remaining'),
                   style: TextStyle(color: context.palette.morning),
                 ),
@@ -405,7 +486,7 @@ class _ClockSheetState extends State<_ClockSheet> {
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _valid ? () => Navigator.pop(context, _time) : null,
-              child: const Text('Готово'),
+              child: Text(context.strings.done),
             ),
             if (widget.onSettings != null)
               TextButton.icon(
@@ -417,7 +498,7 @@ class _ClockSheetState extends State<_ClockSheet> {
                       }
                     : null,
                 icon: const Icon(Icons.tune_rounded),
-                label: const Text('Все настройки будильника'),
+                label: Text(context.strings.allAlarmSettings),
               ),
           ],
         ),

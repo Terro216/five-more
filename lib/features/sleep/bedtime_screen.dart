@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/theme.dart';
+import '../../l10n/strings.dart';
 import '../../models/sleep_entry.dart';
 import '../../services/native_extras.dart';
 import '../../services/sleep_journal.dart';
@@ -65,7 +66,7 @@ class _BedtimeScreenState extends State<BedtimeScreen>
         setState(
           () => _error = e is PlatformException
               ? e.message
-              : 'Не удалось сохранить. Попробуй ещё раз.',
+              : appStrings.couldntSaveTryAgain,
         );
       }
     }
@@ -125,10 +126,13 @@ class _BedtimeScreenState extends State<BedtimeScreen>
     builder: (context, _) => ListView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       children: [
-        const Text('Голос из утра', style: AppTypography.heading),
+        Text(
+          context.strings.aMessageFromYourMorningSelf,
+          style: AppTypography.heading,
+        ),
         const SizedBox(height: 12),
         Text(
-          'Утром запиши, как тебе вставалось. Вечером послушай свой сонный голос — и вспомни, зачем сегодня лечь пораньше.',
+          context.strings.morningMessageDescription,
           style: TextStyle(color: context.palette.muted, height: 1.5),
         ),
         const SizedBox(height: 24),
@@ -142,8 +146,8 @@ class _BedtimeScreenState extends State<BedtimeScreen>
           icon: Icon(_recording ? Icons.stop_rounded : Icons.mic_rounded),
           label: Text(
             _recording
-                ? 'Сохранить · ${voiceDurationLabel(_seconds)}'
-                : 'Записать голосовое',
+                ? context.strings.save(voiceDurationLabel(_seconds))
+                : context.strings.recordVoiceMessage,
             textAlign: TextAlign.center,
           ),
         ),
@@ -156,12 +160,16 @@ class _BedtimeScreenState extends State<BedtimeScreen>
                     if (mounted) setState(() => _limitSeconds += 300);
                   }),
             child: Text(
-              'Ещё 5 минут · осталось ${voiceDurationLabel((_limitSeconds - _seconds).clamp(0, _limitSeconds))}',
+              context.strings.add5MinutesLeft(
+                voiceDurationLabel(
+                  (_limitSeconds - _seconds).clamp(0, _limitSeconds),
+                ),
+              ),
             ),
           ),
         const SizedBox(height: 8),
         Text(
-          '5 минут на запись. Можно продлить или сохранить раньше.',
+          context.strings.recordForUpTo5MinutesAdd,
           style: TextStyle(
             color: context.palette.muted,
             fontSize: 12,
@@ -171,9 +179,16 @@ class _BedtimeScreenState extends State<BedtimeScreen>
         const SizedBox(height: 24),
         DropdownButtonFormField<int>(
           initialValue: journal.fallingAsleepMinutes,
-          decoration: const InputDecoration(labelText: 'На засыпание'),
+          decoration: InputDecoration(
+            labelText: context.strings.timeToFallAsleep,
+          ),
           items: {0, 10, 20, 30, 45, 60, journal.fallingAsleepMinutes}
-              .map((v) => DropdownMenuItem(value: v, child: Text('$v мин')))
+              .map(
+                (v) => DropdownMenuItem(
+                  value: v,
+                  child: Text(context.strings.minutesShort(v)),
+                ),
+              )
               .toList(),
           onChanged: _busy
               ? null
@@ -186,8 +201,10 @@ class _BedtimeScreenState extends State<BedtimeScreen>
         const SizedBox(height: 24),
         SwitchListTile.adaptive(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Напомнить, что пора спать'),
-          subtitle: const Text('Уведомление откроет твои утренние записи'),
+          title: Text(context.strings.remindMeAtBedtime),
+          subtitle: Text(
+            context.strings.theNotificationOpensYourMorningRecordings,
+          ),
           value: journal.reminder,
           onChanged: _busy || !journal.ready
               ? null
@@ -203,7 +220,11 @@ class _BedtimeScreenState extends State<BedtimeScreen>
           contentPadding: EdgeInsets.zero,
           leading: Icon(Icons.bedtime_outlined, color: context.palette.morning),
           title: Text(
-            'Хочу ложиться в ${clockLabel(TimeOfDay(hour: journal.bedHour, minute: journal.bedMinute))}',
+            context.strings.myBedtimeIs(
+              clockLabel(
+                TimeOfDay(hour: journal.bedHour, minute: journal.bedMinute),
+              ),
+            ),
           ),
           trailing: const Icon(Icons.edit_outlined),
           onTap: _busy
@@ -212,7 +233,7 @@ class _BedtimeScreenState extends State<BedtimeScreen>
                   final picked = await editClock(
                     context,
                     TimeOfDay(hour: journal.bedHour, minute: journal.bedMinute),
-                    title: 'Время отхода ко сну',
+                    title: context.strings.bedtime,
                   );
                   if (picked != null && mounted) {
                     await _run(
@@ -235,14 +256,14 @@ class _BedtimeScreenState extends State<BedtimeScreen>
           ),
         const SizedBox(height: 24),
         Text(
-          'Утренние записи · ${journal.notes.length}',
+          context.strings.morningRecordings(journal.notes.length),
           style: Theme.of(context).textTheme.titleLarge,
         ),
         if (journal.notes.isEmpty)
           Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Text(
-              'Первое послание появится здесь после записи.',
+              context.strings.yourFirstMessageWillAppearHereAfter,
               style: TextStyle(color: context.palette.muted),
             ),
           ),
@@ -251,8 +272,8 @@ class _BedtimeScreenState extends State<BedtimeScreen>
             contentPadding: EdgeInsets.zero,
             leading: IconButton(
               tooltip: _playing == note.file
-                  ? 'Остановить запись'
-                  : 'Послушать запись',
+                  ? context.strings.stopPlayback
+                  : context.strings.playRecording,
               icon: Icon(
                 _playing == note.file
                     ? Icons.stop_rounded
@@ -287,11 +308,11 @@ class _BedtimeScreenState extends State<BedtimeScreen>
                     }),
             ),
             title: Text(
-              '${note.at.day}.${note.at.month.toString().padLeft(2, '0')} · ${clockLabel(TimeOfDay.fromDateTime(note.at))}',
+              '${appShortDate(note.at)} · ${clockLabel(TimeOfDay.fromDateTime(note.at))}',
             ),
             subtitle: Text(voiceDurationLabel(note.seconds)),
             trailing: IconButton(
-              tooltip: 'Удалить запись',
+              tooltip: context.strings.deleteRecording,
               icon: const Icon(Icons.delete_outline_rounded),
               onPressed: _busy
                   ? null
@@ -299,15 +320,15 @@ class _BedtimeScreenState extends State<BedtimeScreen>
                       final remove = await showDialog<bool>(
                         context: context,
                         builder: (context) => AlertDialog(
-                          title: const Text('Удалить запись?'),
+                          title: Text(context.strings.deleteThisRecording),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Оставить'),
+                              child: Text(context.strings.keep),
                             ),
                             TextButton(
                               onPressed: () => Navigator.pop(context, true),
-                              child: const Text('Удалить'),
+                              child: Text(context.strings.delete),
                             ),
                           ],
                         ),

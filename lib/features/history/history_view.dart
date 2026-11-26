@@ -4,13 +4,14 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../l10n/strings.dart';
 import '../../models/alarm.dart';
 import '../../models/sleep_entry.dart';
 import '../../models/sleep_goals.dart';
-import '../sleep/sleep_goals_editor.dart';
-import '../../services/sleep_journal.dart';
 import '../../services/local_database.dart';
+import '../../services/sleep_journal.dart';
 import '../../services/sync_service.dart';
+import '../sleep/sleep_goals_editor.dart';
 
 class MorningStats {
   MorningStats(List<AlarmEvent> source, {DateTime? from, DateTime? until}) {
@@ -167,10 +168,7 @@ class _HistoryViewState extends State<HistoryView> {
       }
     } catch (_) {
       if (mounted && request == _requestId) {
-        setState(
-          () => _error =
-              'Не удалось обновить историю. Сохранённые данные доступны.',
-        );
+        setState(() => _error = appStrings.historyRefreshError);
       }
     } finally {
       if (mounted && request == _requestId) setState(() => _loading = false);
@@ -219,10 +217,7 @@ class _HistoryViewState extends State<HistoryView> {
       if (mounted && request == _requestId) setState(() => _limit += 50);
     } catch (_) {
       if (mounted && request == _requestId) {
-        setState(
-          () =>
-              _error = 'Старые события пока не загрузились. Попробуй ещё раз.',
-        );
+        setState(() => _error = appStrings.olderEventsHaventLoadedYetTryAgain);
       }
     } finally {
       if (mounted) setState(() => _olderLoading = false);
@@ -244,10 +239,7 @@ class _HistoryViewState extends State<HistoryView> {
   ) => rows.map((raw) {
     final row = raw as Map;
     final day = DateTime.parse(row['day'] as String);
-    return (
-      label: '${day.day}.${day.month}',
-      value: (row[field] as num).toDouble(),
-    );
+    return (label: appShortDate(day), value: (row[field] as num).toDouble());
   }).toList();
 
   @override
@@ -313,26 +305,19 @@ class _HistoryViewState extends State<HistoryView> {
       }
       final wakePoints = summary == null
           ? stats.wakeMinutes
-                .map(
-                  (p) => (label: '${p.at.day}.${p.at.month}', value: p.value),
-                )
+                .map((p) => (label: appShortDate(p.at), value: p.value))
                 .toList()
           : _daily(summary['wakeDays'] as List, 'value');
       final sleepPoints = summary == null
           ? sleep
-                .map(
-                  (e) => (
-                    label: '${e.wokeAt.day}.${e.wokeAt.month}',
-                    value: e.hours,
-                  ),
-                )
+                .map((e) => (label: appShortDate(e.wokeAt), value: e.hours))
                 .toList()
           : _daily(summary['sleepDays'] as List, 'hours');
       final ratingPoints = summary == null
           ? sleep
                 .map(
                   (e) => (
-                    label: '${e.wokeAt.day}.${e.wokeAt.month}',
+                    label: appShortDate(e.wokeAt),
                     value: (e.sleepQuality + e.wakeQuality) / 2,
                   ),
                 )
@@ -356,14 +341,17 @@ class _HistoryViewState extends State<HistoryView> {
         children: [
           Row(
             children: [
-              const Expanded(
-                child: Text('Как прошло утро', style: AppTypography.heading),
+              Expanded(
+                child: Text(
+                  context.strings.yourMornings,
+                  style: AppTypography.heading,
+                ),
               ),
               if (widget.archive)
                 IconButton(
                   onPressed: _loading ? null : () => _refresh(force: true),
                   icon: const Icon(Icons.refresh),
-                  tooltip: 'Обновить историю',
+                  tooltip: context.strings.refreshHistory,
                 ),
             ],
           ),
@@ -374,7 +362,11 @@ class _HistoryViewState extends State<HistoryView> {
             children: [
               ...[7, 30, 90, 0].map(
                 (days) => ChoiceChip(
-                  label: Text(days == 0 ? 'Всё время' : '$days дней'),
+                  label: Text(
+                    days == 0
+                        ? context.strings.allTime
+                        : context.strings.days(days),
+                  ),
                   selected: _range == null && _days == days,
                   onSelected: (_) => _select(days),
                 ),
@@ -382,8 +374,8 @@ class _HistoryViewState extends State<HistoryView> {
               ActionChip(
                 label: Text(
                   _range == null
-                      ? 'Период…'
-                      : '${_range!.start.day}.${_range!.start.month}.${_range!.start.year} — ${_range!.end.day}.${_range!.end.month}.${_range!.end.year}',
+                      ? context.strings.dateRange
+                      : '${appDate(_range!.start)} – ${appDate(_range!.end)}',
                 ),
                 onPressed: () async {
                   final range = await showDateRangePicker(
@@ -412,76 +404,79 @@ class _HistoryViewState extends State<HistoryView> {
             ),
           Text(
             summary == null
-                ? 'История, сохранённая на этом телефоне'
+                ? context.strings.historySavedOnThisPhone
                 : _cached
-                ? 'Сохранённый расчёт с сервера · обновление недоступно'
-                : 'Графики по всем синхронизированным данным периода',
+                ? context.strings.savedSummaryFromTheServerRefreshUnavailable
+                : context.strings.syncedChartScope,
             style: TextStyle(color: context.palette.muted, fontSize: 12),
           ),
           const SizedBox(height: 24),
           if (events.isEmpty && outcomes.every((n) => n == 0) && snoozes == 0)
             Text(
-              'Пока нет утренних событий.',
+              context.strings.noMorningEventsYet,
               style: TextStyle(color: context.palette.muted),
             )
           else ...[
-            _heading('Переносы', '$snoozes за выбранный период'),
+            _heading(
+              context.strings.snooze,
+              context.strings.inTheSelectedPeriod(snoozes),
+            ),
             DataPlot(
               points: buckets.entries
-                  .map(
-                    (e) =>
-                        (label: '${e.key.day}.${e.key.month}', value: e.value),
-                  )
+                  .map((e) => (label: appShortDate(e.key), value: e.value))
                   .toList(),
-              unit: 'переносов',
+              unit: context.strings.snoozes,
               bars: true,
               color: context.palette.morning,
             ),
             if (bucketDays > 1)
               Text(
-                'Один столбик — $bucketDays ${_dayWord(bucketDays)}',
+                context.strings.daysPerBar(bucketDays),
                 style: TextStyle(color: context.palette.muted, fontSize: 12),
               ),
             const SizedBox(height: 24),
-            _heading('Чем закончился звонок', 'По отдельным подъёмам'),
+            _heading(context.strings.howAlarmsEnded, context.strings.byWakeUp),
             _outcomes(outcomes),
             const SizedBox(height: 24),
             _heading(
-              'От звонка до отключения',
+              context.strings.timeToDismiss,
               summary == null
-                  ? 'Минуты · обычное отключение'
-                  : 'Среднее за день · обычное отключение',
+                  ? context.strings.minutesStandardDismissal
+                  : context.strings.dailyAverageStandardDismissal,
             ),
             if (wakePoints.isEmpty)
               Text(
-                'Пока нет пары «звонок — обычное отключение».',
+                context.strings.noDismissalTimeSamples,
                 style: TextStyle(color: context.palette.muted),
               )
             else
               DataPlot(
                 points: wakePoints,
-                unit: 'мин',
+                unit: context.strings.min,
                 color: context.palette.green,
               ),
           ],
           const SizedBox(height: 28),
-          _heading('Сон и самочувствие', 'Расчётное время сна и твои оценки'),
+          _heading(
+            context.strings.sleepAndWellBeing,
+            context.strings.estimatedSleepAndYourRatings,
+          ),
           _goals(sleep, cutoff, until),
           if (sleepPoints.isEmpty)
             Text(
-              'Пока нет оценок сна.',
+              context.strings.noSleepRatingsYet,
               style: TextStyle(color: context.palette.muted),
             )
           else ...[
             DataPlot(
               points: sleepPoints,
-              unit: 'ч · расчётный сон',
+              unit: context.strings.hrEstimatedSleep,
               color: context.palette.blue,
             ),
             const SizedBox(height: 16),
             DataPlot(
               points: ratingPoints,
-              unit: 'средняя оценка из 5',
+              unit: context.strings.averageRatingOutOf5,
               color: context.palette.morning,
               ceiling: 5,
             ),
@@ -489,12 +484,19 @@ class _HistoryViewState extends State<HistoryView> {
           if (insight != null) ...[
             const SizedBox(height: 12),
             Text(
-              'Лучшие оценки за период — после примерно ${insight.hours.toStringAsFixed(1)} ч: ${insight.rating.toStringAsFixed(1)} из 5, наблюдений: ${insight.samples}. Это наблюдение по твоим ответам.',
+              context.strings.sleepRatingInsight(
+                appDecimal(insight.hours),
+                appDecimal(insight.rating),
+                insight.samples,
+              ),
               style: TextStyle(color: context.palette.muted, height: 1.5),
             ),
           ],
           const SizedBox(height: 28),
-          _heading('События', '${events.length} загружено за период'),
+          _heading(
+            context.strings.events,
+            context.strings.loadedForThisPeriod(events.length),
+          ),
           ...events
               .take(_limit)
               .map(
@@ -509,22 +511,22 @@ class _HistoryViewState extends State<HistoryView> {
                     color: context.palette.muted,
                   ),
                   title: Text(event.label),
-                  subtitle: Text(
-                    '${event.at.day}.${event.at.month}.${event.at.year}',
-                  ),
-                  trailing: Text(
-                    '${event.at.hour.toString().padLeft(2, '0')}:${event.at.minute.toString().padLeft(2, '0')}',
-                  ),
+                  subtitle: Text(appDate(event.at)),
+                  trailing: Text(appClock(event.at.hour, event.at.minute)),
                 ),
               ),
           if (events.length > _limit || _more)
             TextButton(
               onPressed: _olderLoading ? null : _older,
-              child: Text(_olderLoading ? 'Загружаю…' : 'Показать ещё 50'),
+              child: Text(
+                _olderLoading
+                    ? context.strings.loading
+                    : context.strings.show50More,
+              ),
             ),
           const SizedBox(height: 16),
           Text(
-            'Тренировки в историю не попадают.',
+            context.strings.practiceSessionsAreExcludedFromHistory,
             style: TextStyle(color: context.palette.muted, fontSize: 12),
           ),
         ],
@@ -628,7 +630,7 @@ class _HistoryViewState extends State<HistoryView> {
           goals.bedMinute!,
         );
         regime.add((
-          label: '${wake.day}.${wake.month}',
+          label: appShortDate(wake),
           value: max(bedDistance, wakeDistance).toDouble(),
         ));
       }
@@ -638,11 +640,11 @@ class _HistoryViewState extends State<HistoryView> {
       children: [
         ListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Моя цель'),
+          title: Text(appStrings.myGoal),
           subtitle: Text(
             goals.isEmpty
-                ? 'По желанию · только на этом телефоне'
-                : 'Личная цель · изменить',
+                ? appStrings.optionalOnlyOnThisPhone
+                : appStrings.editPersonalGoal,
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.push(
@@ -654,58 +656,67 @@ class _HistoryViewState extends State<HistoryView> {
         ),
         if (!goals.isEmpty) ...[
           Text(
-            'На телефоне: ${eligible.length} оценок сна, из них $manual с ручной правкой времени. Дат без оценки: ${max(0, days - dates.length)}. Пропуски не считаются нулём.',
+            appStrings.ratingCoverage(
+              eligible.length,
+              manual,
+              max(0, days - dates.length),
+            ),
             style: TextStyle(color: context.palette.muted, fontSize: 12),
           ),
           Text(
-            'Время засыпания: ${eligible.where((e) => e.bedSource == 'alarm_setup').length} по настройке будильника, ${eligible.where((e) => e.bedSource == 'habit').length} по обычному времени, ${eligible.where((e) => e.bedSource == 'manual').length} указано вручную.',
+            appStrings.sleepEstimateSources(
+              eligible.where((e) => e.bedSource == 'alarm_setup').length,
+              eligible.where((e) => e.bedSource == 'habit').length,
+              eligible.where((e) => e.bedSource == 'manual').length,
+            ),
             style: TextStyle(color: context.palette.muted, fontSize: 12),
           ),
           if (goals.durationMinutes != null) ...[
             const SizedBox(height: 12),
-            Text('Желаемая длительность: ${goals.durationMinutes} мин'),
+            Text(appStrings.targetDurationMin(goals.durationMinutes!)),
             if (eligible.isEmpty)
-              const Text('Пока нет оценок для сравнения.')
+              Text(appStrings.noRatingsToCompareYet)
             else
               DataPlot(
                 points: eligible
                     .map(
-                      (e) => (
-                        label: '${wakeWall(e).day}.${wakeWall(e).month}',
-                        value: e.hours,
-                      ),
+                      (e) => (label: appShortDate(wakeWall(e)), value: e.hours),
                     )
                     .toList(),
-                unit: 'ч',
+                unit: appStrings.hr,
                 color: context.palette.blue,
                 target: goals.durationMinutes! / 60,
                 connect: false,
               ),
             Text(
-              'Каждая точка — отдельный сон, включая дневной. Время не измерено устройством.',
+              appStrings.sleepDurationChartHint,
               style: TextStyle(color: context.palette.muted, fontSize: 12),
             ),
           ],
           if (goals.hasSchedule) ...[
             const SizedBox(height: 16),
             Text(
-              'Режим: ${SleepGoals.clock(goals.bedMinute!)} — ${SleepGoals.clock(goals.wakeMinute!)} · ±${goals.toleranceMinutes} мин',
+              appStrings.scheduleMin(
+                appClockMinute(goals.bedMinute!),
+                appClockMinute(goals.wakeMinute!),
+                goals.toleranceMinutes!,
+              ),
             ),
-            const Text('Отклонение укладывания или подъёма — большее из двух'),
+            Text(appStrings.scheduleDeviationDescription),
             if (regime.isNotEmpty)
               DataPlot(
                 points: regime,
-                unit: 'мин',
+                unit: appStrings.min,
                 color: context.palette.morning,
                 target: goals.toleranceMinutes!.toDouble(),
                 connect: false,
               ),
             Text(
-              'Подходящих оценок: ${regime.length}. Вне окна подъёма ±6 ч: $outside — показаны отдельно в длительности. Без исходной оценки или часового пояса: $unknownBed.',
+              appStrings.regularityCoverage(regime.length, outside, unknownBed),
               style: TextStyle(color: context.palette.muted, fontSize: 12),
             ),
             Text(
-              'Укладывание оценено как засыпание минус сохранённое время засыпания. Используем местное время при сохранении оценки, с переходом через полночь.',
+              appStrings.bedtimeEstimateMethod,
               style: TextStyle(color: context.palette.muted, fontSize: 12),
             ),
           ],
@@ -716,7 +727,11 @@ class _HistoryViewState extends State<HistoryView> {
   }
 
   Widget _outcomes(List<int> values) {
-    const names = ['Отключён', 'Аварийно', 'Пропуск / тайм-аут'];
+    final names = [
+      appStrings.dismissed,
+      appStrings.emergency,
+      appStrings.missedTimedOut,
+    ];
     final colors = [
       context.palette.green,
       context.palette.morning,
@@ -790,18 +805,18 @@ class _DataPlotState extends State<DataPlot> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${points[index].label} · ${points[index].value.toStringAsFixed(widget.bars ? 0 : 1)} ${widget.unit}',
+          '${points[index].label} · ${widget.bars ? points[index].value.toStringAsFixed(0) : appDecimal(points[index].value)} ${widget.unit}',
           style: TextStyle(color: widget.color),
         ),
         if (widget.target != null)
           Text(
-            'Линия цели: ${widget.target!.toStringAsFixed(1)} ${widget.unit}',
+            context.strings.targetLine(appDecimal(widget.target!), widget.unit),
             style: TextStyle(color: context.palette.morning, fontSize: 12),
           ),
         const SizedBox(height: 8),
         Semantics(
           label:
-              '${widget.unit}. ${points.map((p) => '${p.label}: ${p.value.toStringAsFixed(1)}').join(', ')}',
+              '${widget.unit}. ${points.map((p) => '${p.label}: ${appDecimal(p.value)}').join(', ')}',
           child: LayoutBuilder(
             builder: (context, constraints) => GestureDetector(
               onTapDown: (e) => setState(
@@ -947,14 +962,4 @@ class _PlotPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_PlotPainter old) => true;
-}
-
-String _dayWord(int count) {
-  final lastTwo = count.abs() % 100;
-  if (lastTwo >= 11 && lastTwo <= 14) return 'дней';
-  return switch (lastTwo % 10) {
-    1 => 'день',
-    2 || 3 || 4 => 'дня',
-    _ => 'дней',
-  };
 }
